@@ -505,7 +505,10 @@ public final class StorageSign {
             BannerMeta bannerMeta = StorageSignPlugin.getOminousBannerMeta();
             if (bannerMeta != null) {
                 ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-                item.setItemMeta(bannerMeta.clone());
+                if (!item.setItemMeta(bannerMeta.clone())) {
+                    LOG.warning("不吉なバナーのメタを ItemStack に適用できませんでした");
+                    return null;
+                }
                 return item;
             }
             LOG.warning("不吉なバナーのメタが null — レイドバナーを再構築できません");
@@ -680,8 +683,11 @@ public final class StorageSign {
         }
 
         // 白バナー（レイドバナー）
-        if (mat == Material.WHITE_BANNER && meta instanceof BannerMeta bm) {
-            if (bm.numberOfPatterns() == 8) {
+        if (mat == Material.WHITE_BANNER) {
+            // WHITE_BANNER でメタ自体を取得できない場合は、無地の白旗として
+            // 誤登録せず fail closed にする。
+            if (!(meta instanceof BannerMeta bm)) return null;
+            if (StorageSignPlugin.isOminousBannerMeta(bm)) {
                 StorageSignPlugin.setOminousBannerMeta((BannerMeta) bm.clone());
                 return new StorageSign(mat, (short) 8, 0, null, null, false);
             }

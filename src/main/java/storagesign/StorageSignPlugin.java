@@ -8,6 +8,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.block.banner.Pattern;
 import org.bukkit.block.banner.PatternType;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.recipe.CraftingBookCategory;
 import org.bukkit.inventory.meta.BannerMeta;
@@ -53,11 +54,14 @@ public final class StorageSignPlugin extends JavaPlugin {
     }
 
     public static void setOminousBannerMeta(BannerMeta meta) {
-        ominousBannerMeta = meta;
+        ominousBannerMeta = meta == null ? null : normalizeOminousBannerMeta(meta);
     }
 
     @Override
     public void onEnable() {
+        // /reload 等で同じクラスローダーが再利用されても、古いメタを持ち越さない。
+        setOminousBannerMeta(null);
+
         // ── 1. Config ロード ──────────────────────────────────────────────────────────────
         ConfigLoader.load(this);
 
@@ -115,7 +119,10 @@ public final class StorageSignPlugin extends JavaPlugin {
         try {
             // NBT 文字列から WHITE_BANNER アイテムをデシリアライズし、BannerMeta を取得する
             ItemStack banner = deserializeBannerFromNbt(nbt);
-            if (banner != null && banner.getItemMeta() instanceof BannerMeta bm) {
+            if (banner != null
+                && banner.getType() == Material.WHITE_BANNER
+                && banner.getItemMeta() instanceof BannerMeta bm
+                && isOminousBannerMeta(bm)) {
                 setOminousBannerMeta(bm);
                 getLogger().info("レイドバナーメタをロードしました ("
                                  + bm.numberOfPatterns() + " パターン)");
@@ -147,11 +154,75 @@ public final class StorageSignPlugin extends JavaPlugin {
                 createBannerPattern(DyeColor.LIGHT_GRAY, "CIRCLE", "CIRCLE_MIDDLE"),
                 createBannerPattern(DyeColor.BLACK, "BORDER")
             ));
-            return bm;
+            return normalizeOminousBannerMeta(bm);
         } catch (Throwable e) {
             getLogger().log(Level.WARNING, "API 経由でレイドバナー構築に失敗しました", e);
         }
         return null;
+    }
+
+    /** バニラ Java Edition の不吉な旗の 8 模様と完全に一致するか検証する。 */
+    public static boolean isOminousBannerMeta(BannerMeta meta) {
+        if (meta == null || meta.numberOfPatterns() != 8) return false;
+        java.util.List<Pattern> patterns = meta.getPatterns();
+        return isOminousBannerPatterns(
+            patterns.stream().map(Pattern::getColor).toList(),
+            patterns.stream().map(pattern -> pattern.getPattern().name()).toList()
+        );
+    }
+
+    static boolean isOminousBannerPatterns(java.util.List<DyeColor> colors,
+                                            java.util.List<String> typeNames) {
+        if (colors.size() != 8 || typeNames.size() != 8) return false;
+        return colors.equals(java.util.List.of(
+                DyeColor.CYAN, DyeColor.LIGHT_GRAY, DyeColor.GRAY, DyeColor.LIGHT_GRAY,
+                DyeColor.BLACK, DyeColor.LIGHT_GRAY, DyeColor.LIGHT_GRAY, DyeColor.BLACK
+            ))
+            && matchesType(typeNames.get(0), "RHOMBUS", "RHOMBUS_MIDDLE")
+            && matchesType(typeNames.get(1), "STRIPE_BOTTOM")
+            && matchesType(typeNames.get(2), "STRIPE_CENTER")
+            && matchesType(typeNames.get(3), "BORDER")
+            && matchesType(typeNames.get(4), "STRIPE_MIDDLE")
+            && matchesType(typeNames.get(5), "HALF_HORIZONTAL")
+            && matchesType(typeNames.get(6), "CIRCLE", "CIRCLE_MIDDLE")
+            && matchesType(typeNames.get(7), "BORDER");
+    }
+
+    private static boolean matchesType(String actual, String... candidates) {
+        return java.util.Arrays.asList(candidates).contains(actual);
+    }
+
+    /** 模様だけで構築した場合でも、通常の White Banner 名で搬出されないようにする。 */
+    private static BannerMeta normalizeOminousBannerMeta(BannerMeta source) {
+        BannerMeta normalized = (BannerMeta) source.clone();
+        if (!normalized.hasItemName() && !normalized.hasDisplayName()) {
+            if (!setTranslatableOminousBannerName(normalized)) {
+                // Spigot には Adventure Component 版 itemName API がないため、
+                // Paper API が利用できない場合のみ固定名にフォールバックする。
+                normalized.setItemName("§6Ominous Banner");
+            }
+        }
+        normalized.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+        return normalized;
+    }
+
+    /** Paper 上ではバニラと同じ翻訳キーを使い、各クライアント言語で表示する。 */
+    private static boolean setTranslatableOminousBannerName(BannerMeta meta) {
+        try {
+            Class<?> componentClass = Class.forName("net.kyori.adventure.text.Component");
+            Class<?> textColorClass = Class.forName("net.kyori.adventure.text.format.TextColor");
+            Class<?> namedTextColorClass = Class.forName("net.kyori.adventure.text.format.NamedTextColor");
+
+            Object component = componentClass.getMethod("translatable", String.class)
+                .invoke(null, "block.minecraft.ominous_banner");
+            Object gold = namedTextColorClass.getField("GOLD").get(null);
+            component = componentClass.getMethod("color", textColorClass).invoke(component, gold);
+
+            ItemMeta.class.getMethod("itemName", componentClass).invoke(meta, component);
+            return true;
+        } catch (ReflectiveOperationException | LinkageError e) {
+            return false;
+        }
     }
 
     private Pattern createBannerPattern(DyeColor color, String... candidateNames) {
