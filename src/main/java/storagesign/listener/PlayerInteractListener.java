@@ -1,6 +1,5 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.DyeColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -21,6 +20,7 @@ import org.bukkit.inventory.ItemStack;
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
 import storagesign.StorageSignPlugin;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.DyeRegistry;
 import storagesign.registry.MaterialRegistry;
 
@@ -36,7 +36,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class PlayerInteractListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(PlayerInteractListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(PlayerInteractListener.class);
 
     private static final Material INK_SAC = Material.INK_SAC;
     private static final Material GLOW_INK_SAC = Material.GLOW_INK_SAC;
@@ -49,6 +49,18 @@ public final class PlayerInteractListener implements Listener {
         Player player = event.getPlayer();
         // スペクテーターは StorageSign を操作できない
         if (player.getGameMode() == GameMode.SPECTATOR) return;
+
+        if (ConfigLoader.getBannerDebug()
+            && LOG.isTraceEnabled()
+            && event.getHand() == EquipmentSlot.HAND
+            && (event.getAction() == Action.RIGHT_CLICK_BLOCK
+                || event.getAction() == Action.RIGHT_CLICK_AIR)) {
+            ItemStack debugItem = event.getItem();
+            if (debugItem != null && debugItem.getType() != Material.AIR && debugItem.hasItemMeta()) {
+                LOG.trace("bannerDebug", () -> "item=" + debugItem.getType()
+                          + ", meta=" + debugItem.getItemMeta().getAsString());
+            }
+        }
 
         Block block = event.getClickedBlock();
         if (block == null && event.getAction() == Action.RIGHT_CLICK_AIR
@@ -127,6 +139,8 @@ public final class PlayerInteractListener implements Listener {
 
         // 元の動作: 登録はアイテム種別の設定のみ行い、手持ちアイテムは消費しない。
         applyToBlock(block, newSS);
+        LOG.debug("registerItem", () -> "registered=" + newSS.getIdentifier()
+                  + ", sign=" + block.getLocation());
     }
 
     private void processStorageSignItemInteraction(Player player, Block block, StorageSign blockSS,
@@ -143,6 +157,9 @@ public final class PlayerInteractListener implements Listener {
                         StorageSign.createStorageSignItem(handItem.getType(), StorageSign.EMPTY_MARKER, handItem.getAmount())
                     );
                     applyToBlock(block, blockSS);
+                    LOG.debug("processStorageSignItemInteraction", () -> "merged=" + add
+                              + ", sign=" + block.getLocation()
+                              + ", total=" + blockSS.getAmount());
                 }
                 return;
             }
@@ -170,6 +187,10 @@ public final class PlayerInteractListener implements Listener {
             if (added > 0) {
                 blockSS.setAmount(blockSS.getAmount() + added);
                 applyToBlock(block, blockSS);
+                int loggedAdded = added;
+                LOG.debug("processStorageSignItemInteraction", () -> "stored-signs=" + loggedAdded
+                          + ", sign=" + block.getLocation()
+                          + ", total=" + blockSS.getAmount());
             }
             return;
         }
@@ -199,12 +220,17 @@ public final class PlayerInteractListener implements Listener {
             );
             blockSS.setAmount(blockSS.getAmount() - (perSign * signsInHand));
             applyToBlock(block, blockSS);
+            LOG.debug("processStorageSignItemInteraction", () -> "divided-per-sign=" + perSign
+                      + ", signs=" + signsInHand
+                      + ", sign=" + block.getLocation()
+                      + ", remaining=" + blockSS.getAmount());
         }
     }
 
     private void importItems(Player player, Block block, StorageSign ss, ItemStack hand) {
         if (!ConfigLoader.getManualImport()) return;
 
+        int before = ss.getAmount();
         if (player.isSneaking()) {
             int add = hand.getAmount();
             ss.setAmount(ss.getAmount() + add);
@@ -234,6 +260,13 @@ public final class PlayerInteractListener implements Listener {
             applyToBlock(block, ss);
         }
         player.updateInventory();
+        int imported = ss.getAmount() - before;
+        if (imported > 0) {
+            LOG.debug("importItems", () -> "imported=" + imported
+                      + ", material=" + ss.getMaterial()
+                      + ", sign=" + block.getLocation()
+                      + ", total=" + ss.getAmount());
+        }
     }
 
     private void exportItems(Player player, Block block, StorageSign ss) {
@@ -257,6 +290,10 @@ public final class PlayerInteractListener implements Listener {
         Location dropLoc = player.getLocation().clone().add(0, 0.5, 0);
         player.getWorld().dropItem(dropLoc, out);
         applyToBlock(block, ss);
+        LOG.debug("exportItems", () -> "exported=" + out.getAmount()
+                  + ", material=" + out.getType()
+                  + ", sign=" + block.getLocation()
+                  + ", remaining=" + ss.getAmount());
     }
 
     private static boolean isSac(Material mat) {

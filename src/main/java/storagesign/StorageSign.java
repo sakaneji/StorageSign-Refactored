@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.Registry;
 import org.bukkit.block.Block;
@@ -30,6 +29,7 @@ import storagesign.item.SpecialCaseItemSupport;
 import storagesign.item.PotionHelper;
 import storagesign.registry.LegacyNameRegistry;
 import storagesign.registry.MaterialRegistry;
+import storagesign.logging.PluginLogger;
 
 /**
  * StorageSign のデータモデル（イミュータブル）。
@@ -66,7 +66,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class StorageSign {
 
-    private static final Logger LOG = Logger.getLogger(StorageSign.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(StorageSign.class);
 
     public static final String HEADER_LINE  = "StorageSign";
     public static final String EMPTY_MARKER = "Empty";
@@ -259,7 +259,9 @@ public final class StorageSign {
             Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
             short level = 0;
             try { level = Short.parseShort(parts[2]); }
-            catch (NumberFormatException e) { LOG.log(Level.WARNING, "エンチャントレベルが不正: {0}", identifier); }
+            catch (NumberFormatException e) {
+                LOG.log(Level.WARNING, "parseIdentifier", "エンチャントレベルが不正: {0}", identifier);
+            }
             return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
         }
 
@@ -302,7 +304,7 @@ public final class StorageSign {
         // config / デフォルトテーブルのエイリアスを解決してからマテリアル直接検索。
         Material mat = resolveMaterialFromIdentifierToken(matName);
         if (mat == null) {
-            LOG.log(Level.WARNING, "StorageSign 識別子に未知のマテリアル: {0}", identifier);
+            LOG.log(Level.WARNING, "parseIdentifier", "StorageSign 識別子に未知のマテリアル: {0}", identifier);
             return null;
         }
 
@@ -506,12 +508,12 @@ public final class StorageSign {
             if (bannerMeta != null) {
                 ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
                 if (!item.setItemMeta(bannerMeta.clone())) {
-                    LOG.warning("不吉なバナーのメタを ItemStack に適用できませんでした");
+                    LOG.warning("getContents", "不吉なバナーのメタを ItemStack に適用できませんでした");
                     return null;
                 }
                 return item;
             }
-            LOG.warning("不吉なバナーのメタが null — レイドバナーを再構築できません");
+            LOG.warning("getContents", "不吉なバナーのメタが null — レイドバナーを再構築できません");
             return null;
         }
 

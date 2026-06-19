@@ -1,6 +1,5 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.FallingBlock;
@@ -15,6 +14,7 @@ import org.bukkit.inventory.ItemStack;
 
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
+import storagesign.logging.PluginLogger;
 
 /**
  * StorageSign に関連するエンティティイベントを処理する:
@@ -25,7 +25,7 @@ import storagesign.StorageSign;
  */
 public final class EntityListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(EntityListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(EntityListener.class);
 
     // ── EntityPickupItemEvent ───────────────────────────────────────────────────
 
@@ -106,6 +106,6 @@ public final class EntityListener implements Listener {
 
         Block block = event.getBlock();
         BlockEventListener.dropAttachedStorageSignsByAdjacency(block);
-        LOG.fine(() -> "EntityChangeBlock: 隣接 StorageSign をドロップ " + block.getLocation());
+        LOG.debug("onEntityChangeBlock", () -> "dropped adjacent sign=" + block.getLocation());
     }
 }

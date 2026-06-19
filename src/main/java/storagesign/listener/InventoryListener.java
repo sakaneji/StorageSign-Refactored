@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -27,6 +26,7 @@ import storagesign.adjacency.SsAdjacencyMatch;
 import storagesign.adjacency.SsAdjacencyPurpose;
 import storagesign.adjacency.SsAdjacencyQuery;
 import storagesign.adjacency.SsAdjacencyResolver;
+import storagesign.logging.PluginLogger;
 import storagesign.task.ExportSignTask;
 
 /**
@@ -52,7 +52,7 @@ import storagesign.task.ExportSignTask;
  */
 public final class InventoryListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(InventoryListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(InventoryListener.class);
     private static final SsAdjacencyResolver ADJACENCY_RESOLVER = SsAdjacencyResolver.defaultResolver();
 
     private final StorageSignPlugin plugin;
@@ -90,8 +90,11 @@ public final class InventoryListener implements Listener {
                     if (absorbed > 0) {
                         match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
                         match.storageSign().applyToSign(match.signState());
-                        // Lambda form: string is only built when FINE logging is actually enabled.
-                        LOG.fine(() -> "Import: absorbed " + absorbed + " into SS at " + match.signBlock().getLocation());
+                        if (LOG.isTraceEnabled()) {
+                            LOG.trace("onItemMove", () -> "auto-import absorbed=" + absorbed
+                                      + ", material=" + item.getType()
+                                      + ", sign=" + match.signBlock().getLocation());
+                        }
                     }
                 }
             }
@@ -106,7 +109,10 @@ public final class InventoryListener implements Listener {
                 SsAdjacencyMatch match = matchOpt.get();
                 if (pendingExports.add(match.signBlock())) {
                     new ExportSignTask(match.signBlock(), source, item.clone(), pendingExports).runTask(plugin);
-                    LOG.fine(() -> "Export: scheduled refill from SS at " + match.signBlock().getLocation());
+                    if (LOG.isTraceEnabled()) {
+                        LOG.trace("onItemMove", () -> "auto-export scheduled, material=" + item.getType()
+                                  + ", sign=" + match.signBlock().getLocation());
+                    }
                 }
             }
         }
@@ -136,8 +142,11 @@ public final class InventoryListener implements Listener {
         if (absorbed > 0) {
             match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
             match.storageSign().applyToSign(match.signState());
-            LOG.fine(() -> "ツインピックアップ 吸収: " + absorbed
-                     + " 個を SS に吸収 " + match.signBlock().getLocation());
+            if (LOG.isTraceEnabled()) {
+                LOG.trace("onInventoryPickup", () -> "pickup absorbed=" + absorbed
+                          + ", material=" + item.getType()
+                          + ", sign=" + match.signBlock().getLocation());
+            }
         }
     }
 

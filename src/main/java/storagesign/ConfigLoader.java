@@ -4,8 +4,6 @@ import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -19,8 +17,6 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <p>キー {@code no-permisson} （「i」欠き）は元プラグインのタイポをそのまま維持している。
  */
 public final class ConfigLoader {
-
-    private static final Logger LOG = Logger.getLogger(ConfigLoader.class.getName());
 
     // ── 設定キー定数 ────────────────────────────────────────────────────────────
     private static final String KEY_NO_PERMISSION     = "no-permisson";  // 元プラグインのタイポ — 互換のためそのまま維持
@@ -87,18 +83,6 @@ public final class ConfigLoader {
         bannerDebug       = cfg.getBoolean(KEY_BANNER_DEBUG, false);
         identifierAliases = readStringMap(cfg.getConfigurationSection(KEY_IDENTIFIER_ALIASES));
         virtualItemIdentifiers = readStringMap(cfg.getConfigurationSection(KEY_VIRTUAL_IDENTIFIERS));
-
-        // ログレベルをプラグインのルートロガーに適用する
-        try {
-            Level level = Level.parse(logLevel.toUpperCase());
-            plugin.getLogger().setLevel(level);
-        } catch (IllegalArgumentException e) {
-            LOG.warning("config の log-level が不正です: " + logLevel + " — INFO を使用します");
-            plugin.getLogger().setLevel(Level.INFO);
-        }
-
-        LOG.fine("ConfigLoader loaded: auto-import=" + autoImport + ", auto-export=" + autoExport
-                 + ", no-bud=" + noBud);
     }
 
     // ── ゲッター ───────────────────────────────────────────────────────────────

@@ -2,7 +2,6 @@ package storagesign.task;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
@@ -12,6 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import storagesign.StorageSign;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 
 /**
@@ -36,7 +36,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class ExportSignTask extends BukkitRunnable {
 
-    private static final Logger LOG = Logger.getLogger(ExportSignTask.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(ExportSignTask.class);
 
     /** 補充元の StorageSign ブロック。 */
     private final Block ssBlock;
@@ -75,14 +75,23 @@ public final class ExportSignTask extends BukkitRunnable {
         // タスク実行時に看板の状態を再読み込む（常に最新状態を得るため重要）。
         // Sign ブロック状態を一度取得し、パースと applyToSign の両方で再利用する。
         // fromBlock() + 条件付き getState() という2 回の呼び出しコストを回避。
-        if (!(ssBlock.getState() instanceof Sign sign)) return;
+        if (!(ssBlock.getState() instanceof Sign sign)) {
+            traceSkip("sign-state-missing");
+            return;
+        }
         StorageSign ss = StorageSign.fromSign(sign);
-        if (ss == null || ss.isUnregistered() || ss.getAmount() <= 0) return;
+        if (ss == null || ss.isUnregistered() || ss.getAmount() <= 0) {
+            traceSkip("storage-sign-empty-or-invalid");
+            return;
+        }
 
         int maxStack = movedItem.getMaxStackSize();
 
         // 早期リターン: SS の兇存アイテムがホッパー 1 回分未満 — 追加する意味がない。
-        if (ss.getAmount() < movedItem.getAmount()) return;
+        if (ss.getAmount() < movedItem.getAmount()) {
+            traceSkip("stored-amount-below-moved-amount");
+            return;
+        }
 
         // インベントリ内容を一度のパスで処理:
         // - 一致スタック数と合計数量をカウントし（補充最大数を計算する）
@@ -98,17 +107,26 @@ public final class ExportSignTask extends BukkitRunnable {
                 stacks++;
                 total += slot.getAmount();
                 // total >= maxStack になった時点で containsAtLeast(満杯) と同等。
-                if (total >= maxStack) return;
+                if (total >= maxStack) {
+                    traceSkip("source-already-has-full-stack");
+                    return;
+                }
             }
         }
 
         // 一致スロットがすべて満杯で空スロットもなければ追加不要。
-        if (total == stacks * maxStack && !hasEmpty) return;
+        if (total == stacks * maxStack && !hasEmpty) {
+            traceSkip("source-has-no-capacity");
+            return;
+        }
 
         // 追加数を計算: 既存の部分スタックを満杯にする。
         int addAmount = (stacks == 0) ? maxStack : (maxStack * stacks - total);
         addAmount = Math.min(addAmount, ss.getAmount());
-        if (addAmount <= 0) return;
+        if (addAmount <= 0) {
+            traceSkip("calculated-add-amount-zero");
+            return;
+        }
 
         // movedItem はスケジュール時に isSimilar で検証済み。
         // クローンすることでメタデータを保持し、再度の isSimilar チェックを不要にする。
@@ -117,13 +135,27 @@ public final class ExportSignTask extends BukkitRunnable {
 
         int actualAdded = addToSource(refill, addAmount);
 
-        if (actualAdded <= 0) return;
+        if (actualAdded <= 0) {
+            traceSkip("inventory-rejected-refill");
+            return;
+        }
 
         ss.setAmount(ss.getAmount() - actualAdded);
         ss.applyToSign(sign);
-        // ラムダ形式: FINE ログが有効な場合のみ文字列を構築。
-        LOG.fine(() -> "ExportSignTask: " + actualAdded + " 個を SS から補充 "
-                 + ssBlock.getLocation() + ", 残り=" + ss.getAmount());
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("run", () -> "refilled=" + actualAdded
+                      + ", material=" + movedItem.getType()
+                      + ", sign=" + ssBlock.getLocation()
+                      + ", remaining=" + ss.getAmount());
+        }
+    }
+
+    private void traceSkip(String reason) {
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("run", () -> "skip=" + reason
+                      + ", material=" + movedItem.getType()
+                      + ", sign=" + ssBlock.getLocation());
+        }
     }
 
     private int addToSource(ItemStack refill, int addAmount) {

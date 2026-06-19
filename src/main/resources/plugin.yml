@@ -7,6 +7,8 @@ authors:
     - hirot
 website: https://example.com/storagesign-refactored
 license: MIT
+softdepend:
+    - Logger
 
 commands:
     storagesigngive:

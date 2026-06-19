@@ -1,10 +1,10 @@
 package storagesign.item;
 
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import storagesign.logging.PluginLogger;
 
 /**
  * 特殊ケース処理が必要なアイテムタイプのサポートメソッド群。
@@ -14,7 +14,7 @@ import org.bukkit.inventory.meta.ItemMeta;
  */
 public final class SpecialCaseItemSupport {
 
-    private static final Logger LOG = Logger.getLogger(SpecialCaseItemSupport.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(SpecialCaseItemSupport.class);
 
     private static final String OMINOUS_BOTTLE_PREFIX = "OMINOUS_BOTTLE:";
 
@@ -43,7 +43,8 @@ public final class SpecialCaseItemSupport {
         try {
             return Short.parseShort(parts[1]);
         } catch (NumberFormatException e) {
-            LOG.log(Level.WARNING, "Invalid special-case item identifier: {0}", identifier);
+            LOG.log(Level.WARNING, "parseDamageFromIdentifier",
+                    "Invalid special-case item identifier: {0}", identifier);
             return 0;
         }
     }

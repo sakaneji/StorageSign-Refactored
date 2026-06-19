@@ -1,12 +1,12 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
 import storagesign.StorageSign;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 
 /**
@@ -20,7 +20,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class PaperSignEditListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(PaperSignEditListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(PaperSignEditListener.class);
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onSignOpen(io.papermc.paper.event.player.PlayerOpenSignEvent event) {
@@ -28,7 +28,7 @@ public final class PaperSignEditListener implements Listener {
         if (!MaterialRegistry.isAnySign(block.getType())) return;
         if (StorageSign.isStorageSign(block)) {
             event.setCancelled(true);
-            LOG.finest("Paper: 看板編集をキャンセル " + block.getLocation());
+            LOG.trace("onSignOpen", () -> "cancelled sign edit=" + block.getLocation());
         }
     }
 }
