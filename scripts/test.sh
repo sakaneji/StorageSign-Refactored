@@ -74,6 +74,7 @@ run_e2e_version() {
 
   rm -rf "$runtime_dir" "$artifact_dir"
   mkdir -p "$runtime_dir/data" "$runtime_dir/plugins" "$artifact_dir"
+  cp "$ROOT_DIR/e2e/config/spigot.yml" "$runtime_dir/data/spigot.yml"
   cp "$ROOT_DIR/target/StorageSign-Refactored-3.0.0.jar" \
      "$runtime_dir/plugins/StorageSign-Refactored.jar"
   cp "$ROOT_DIR/e2e/harness/target/storagesign-e2e-harness-1.0.0.jar" \

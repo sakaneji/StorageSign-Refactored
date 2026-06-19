@@ -166,7 +166,8 @@ async function runMainSuite() {
     await reset('auto-import')
     await sleep(1800)
     const state = await inspect('auto-import')
-    assert.ok(Number(state.lines[2]) > 0, `Expected overflow absorption, got ${state.lines[2]}`)
+    assert.ok(Number(state.lines[2]) >= 128, `Expected multiple full-stack imports, got ${state.lines[2]}`)
+    assert.equal(Number(state.lines[2]) + state.chestStone + state.hopperStone, 256)
     assert.equal(state.chestStone, 64)
     assert.equal(state.hopperStone, 0)
   })
@@ -175,8 +176,9 @@ async function runMainSuite() {
     await reset('auto-export')
     await sleep(1800)
     const state = await inspect('auto-export')
-    assert.ok(Number(state.lines[2]) < 64, `Expected StorageSign refill, got ${state.lines[2]}`)
-    assert.ok(state.chestStone + state.hopperStone > 1)
+    assert.ok(Number(state.lines[2]) <= 64, `Expected multiple full-stack exports, got ${state.lines[2]}`)
+    assert.equal(Number(state.lines[2]) + state.chestStone + state.hopperStone, 256)
+    assert.ok(state.hopperStone >= 192, `Expected at least three full stacks in hopper, got ${state.hopperStone}`)
   })
 
   await runCase('hopper minecart import', async () => {

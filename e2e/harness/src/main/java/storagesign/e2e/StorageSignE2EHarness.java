@@ -211,15 +211,18 @@ public final class StorageSignE2EHarness extends JavaPlugin {
 
         Block hopperBlock = world.getBlockAt(0, BASE_Y + 1, 0);
         hopperBlock.setType(Material.HOPPER);
-        ((Hopper) hopperBlock.getState()).getInventory().setItem(0, new ItemStack(Material.STONE, 1));
+        Hopper hopper = (Hopper) hopperBlock.getState();
+        hopper.getInventory().setItem(0, new ItemStack(Material.STONE, 64));
+        hopper.getInventory().setItem(1, new ItemStack(Material.STONE, 64));
+        hopper.getInventory().setItem(2, new ItemStack(Material.STONE, 64));
     }
 
     private static void prepareAutoExport(World world) {
         Block chestBlock = world.getBlockAt(0, BASE_Y, 0);
         chestBlock.setType(Material.CHEST);
-        ((Chest) chestBlock.getState()).getInventory().setItem(0, new ItemStack(Material.STONE, 1));
+        ((Chest) chestBlock.getState()).getInventory().setItem(0, new ItemStack(Material.STONE, 64));
         createWallStorageSign(world, -1, BASE_Y, 0,
-            org.bukkit.block.BlockFace.WEST, "STONE", 64);
+            org.bukkit.block.BlockFace.WEST, "STONE", 192);
         world.getBlockAt(0, BASE_Y - 1, 0).setType(Material.HOPPER);
     }
 

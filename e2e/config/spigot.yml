@@ -1,0 +1,4 @@
+config-version: 12
+world-settings:
+  default:
+    hopper-amount: 64
