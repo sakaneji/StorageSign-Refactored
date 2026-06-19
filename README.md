@@ -54,9 +54,10 @@ Spigot/Paper 向け Minecraft プラグインです。
 ### 削除・廃止された機能
 
 - 外部プラグイン依存を任意化
-  - `Logger` は `softdepend` とし、`FarmNBT` と `WorldGuard` の未使用な依存宣言は削除。
+  - `Logger` は `softdepend` とし、`FarmNBT` と `WorldGuard` の依存宣言は削除。
   - [`teruteru128/logger`](https://github.com/teruteru128/logger) がサーバーに導入済みなら優先して使用し、未導入または初期化失敗時は Bukkit/JDK 標準ロガーへ自動的にフォールバック。
-  - `FarmNBT` および `WorldGuard` は旧版コードにも実装が存在しない宣言のみの依存であったため、削除しても機能上の影響はない。
+  - 旧版で `FarmNBT` が供給していたバージョン別 SNBT は使用せず、不吉な旗を Bukkit API から構築する。API 構築に失敗した場合も白旗へ変換せず、1 ティック後から 5 秒間隔でメタの復旧を自動的に再試行する。復旧までは搬出せず、保管数も変更しない。
+  - `WorldGuard` は未使用だったため削除。
 - 外部 Logger 連携と標準ロガーのフォールバックを共通ロギング層で統一。
 - ビルド時の `project.properties` + `maven-resources-plugin` コピー運用を廃止
   - 現行は `maven-shade-plugin` によるパッケージング中心へ移行。
@@ -205,8 +206,6 @@ src/
 │   ├── adjacency/                # 看板とコンテナの隣接判定ルール群
 │   ├── command/
 │   │   └── SsGiveCommand.java         # /storagesigngive コマンド処理
-│   ├── config/
-│   │   └── StorageSignNBTConfig.java  # NBT 永続データ管理
 │   ├── item/
 │   │   ├── EnchantHelper.java         # エンチャント本の識別子処理
 │   │   ├── OminousBottleHelper.java   # 不吉なビンの識別子処理

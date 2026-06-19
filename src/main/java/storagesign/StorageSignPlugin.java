@@ -1,6 +1,7 @@
 package storagesign;
 
 import java.util.logging.Level;
+import java.util.function.Function;
 import org.bukkit.Bukkit;
 import org.bukkit.DyeColor;
 import org.bukkit.Material;
@@ -15,8 +16,8 @@ import org.bukkit.inventory.meta.BannerMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
-import storagesign.config.StorageSignNBTConfig;
 import storagesign.listener.BlockEventListener;
 import storagesign.listener.CraftListener;
 import storagesign.listener.EntityListener;
@@ -33,8 +34,8 @@ import storagesign.command.SsGiveCommand;
  *
  * <p>要約:
  * <ol>
- *   <li>起動時に config および NBT データをロードする</li>
- *   <li>レイドバナーのメタをロードする</li>
+ *   <li>起動時に config をロードする</li>
+ *   <li>レイドバナーのメタを API で構築する</li>
  *   <li>全看板種別に対するクラフトレシピを登録する</li>
  *   <li>全イベントリスナーを登録する</li>
  * </ol>
@@ -44,10 +45,16 @@ import storagesign.command.SsGiveCommand;
 public final class StorageSignPlugin extends JavaPlugin {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignPlugin.class);
+    private static final long OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS = 1L;
+    private static final long OMINOUS_BANNER_RETRY_PERIOD_TICKS = 100L;
+
+    private BukkitTask ominousBannerRetryTask;
+    private int ominousBannerRetryAttempts;
+    private Function<Boolean, BannerMeta> ominousBannerMetaFactory = this::createOminousBannerMetaByApi;
 
     /**
      * レイドバナー（白バナー パターン 8 枚）の BannerMeta。
-     * 起動時に {@code storageSignNBT.yml} からロードする。
+     * 起動時に Bukkit API から構築する。
      * {@link StorageSign#getContents} および {@link StorageSign#isSimilar} から静的参照される。
      */
     private static BannerMeta ominousBannerMeta = null;
@@ -89,6 +96,7 @@ public final class StorageSignPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        cancelOminousBannerRetry();
         LOG.info("onDisable", "StorageSign disabled.");
         PluginLogger.shutdown();
     }
@@ -96,7 +104,7 @@ public final class StorageSignPlugin extends JavaPlugin {
     // ── レイドバナー ───────────────────────────────────────────────────────────────
 
     private void loadOminousBanner() {
-        BannerMeta apiMeta = createOminousBannerMetaByApi();
+        BannerMeta apiMeta = ominousBannerMetaFactory.apply(true);
         if (apiMeta != null) {
             setOminousBannerMeta(apiMeta);
             LOG.info("loadOminousBanner", "レイドバナーメタを API でロードしました ("
@@ -104,45 +112,51 @@ public final class StorageSignPlugin extends JavaPlugin {
             return;
         }
 
-        LOG.warning("loadOminousBanner", "API でレイドバナー構築に失敗したため、SNBT フォールバックを試行します");
+        LOG.warning("loadOminousBanner",
+            "API でレイドバナーを構築できませんでした。復旧するまで自動的に再試行します");
+        scheduleOminousBannerRetry();
+    }
 
-        StorageSignNBTConfig nbtConfig = new StorageSignNBTConfig(this);
-        if (!nbtConfig.isLoaded()) return;
+    private void scheduleOminousBannerRetry() {
+        if (ominousBannerRetryTask != null) return;
 
-        // バージョンキーは storageSignNBT.yml の記込形式に合わせる: "1.21.1"(スナップショット文字列ではなく)
-        String version = Bukkit.getBukkitVersion().split("-")[0];
-        String nbt = nbtConfig.getNbtString(version);
-        if (nbt == null) {
-            nbt = nbtConfig.getFirstNbtString();
-        }
-        if (nbt == null) {
-            LOG.warning("loadOminousBanner", "No NBT string found in storageSignNBT.yml for version: " + version);
-            return;
-        }
+        ominousBannerRetryAttempts = 0;
+        ominousBannerRetryTask = Bukkit.getScheduler().runTaskTimer(
+            this,
+            () -> {
+                // 実物の不吉な旗を未登録 SS に登録して先に復旧した場合も終了する。
+                if (getOminousBannerMeta() != null) {
+                    cancelOminousBannerRetry();
+                    return;
+                }
 
-        try {
-            // NBT 文字列から WHITE_BANNER アイテムをデシリアライズし、BannerMeta を取得する
-            ItemStack banner = deserializeBannerFromNbt(nbt);
-            if (banner != null
-                && banner.getType() == Material.WHITE_BANNER
-                && banner.getItemMeta() instanceof BannerMeta bm
-                && isOminousBannerMeta(bm)) {
-                setOminousBannerMeta(bm);
-                LOG.info("loadOminousBanner", "レイドバナーメタをロードしました ("
-                                 + bm.numberOfPatterns() + " パターン)");
-            } else {
-                LOG.warning("loadOminousBanner", "バージョン " + version + " のレイドバナー NBT のパースに失敗しました");
-            }
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "loadOminousBanner", "レイドバナーのロード中に例外が発生しました", e);
-        }
+                ominousBannerRetryAttempts++;
+                BannerMeta recovered = ominousBannerMetaFactory.apply(false);
+                if (recovered == null) return;
+
+                setOminousBannerMeta(recovered);
+                LOG.info("retryOminousBanner",
+                    "レイドバナーメタを API で復旧しました (試行回数: "
+                        + ominousBannerRetryAttempts + ")");
+                cancelOminousBannerRetry();
+            },
+            OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS,
+            OMINOUS_BANNER_RETRY_PERIOD_TICKS
+        );
+    }
+
+    private void cancelOminousBannerRetry() {
+        BukkitTask task = ominousBannerRetryTask;
+        ominousBannerRetryTask = null;
+        ominousBannerRetryAttempts = 0;
+        if (task != null) task.cancel();
     }
 
     /**
      * API で不吉なバナー（白バナー 8 パターン）を構築する。
      * 成功時は BannerMeta、失敗時は null。
      */
-    private BannerMeta createOminousBannerMetaByApi() {
+    private BannerMeta createOminousBannerMetaByApi(boolean logFailureAsWarning) {
         try {
             ItemStack banner = new ItemStack(Material.WHITE_BANNER);
             ItemMeta itemMeta = banner.getItemMeta();
@@ -160,7 +174,14 @@ public final class StorageSignPlugin extends JavaPlugin {
             ));
             return normalizeOminousBannerMeta(bm);
         } catch (Throwable e) {
-            LOG.log(Level.WARNING, "createOminousBannerMetaByApi", "API 経由でレイドバナー構築に失敗しました", e);
+            if (logFailureAsWarning) {
+                LOG.log(Level.WARNING, "createOminousBannerMetaByApi",
+                    "API 経由でレイドバナー構築に失敗しました", e);
+            } else {
+                LOG.debug("createOminousBannerMetaByApi",
+                    () -> "レイドバナー復旧の再試行に失敗しました: "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
         }
         return null;
     }
@@ -244,21 +265,6 @@ public final class StorageSignPlugin extends JavaPlugin {
         throw new IllegalStateException(
             "Unsupported banner pattern type names: " + java.util.Arrays.toString(candidateNames)
         );
-    }
-
-    /**
-     * SNBT 文字列からバナーをデシリアライズする。
-     *
-     * <p>{@code ItemFactory.createItemStack(String)} — 元プラグインと同じ API を使用。
-     * {@code storageSignNBT.yml} に保存されている SNBT テキスト形式を受け入れる。
-     */
-    private ItemStack deserializeBannerFromNbt(String nbt) {
-        try {
-            return Bukkit.getItemFactory().createItemStack(nbt);
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "deserializeBannerFromNbt", "ItemFactory 経由でバナー NBT のデシリアライズに失敗しました", e);
-        }
-        return null;
     }
 
     // ── クラフトレシピ ──────────────────────────────────────────────────────────────
