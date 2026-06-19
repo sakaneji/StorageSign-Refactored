@@ -1,6 +1,5 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.GameMode;
@@ -24,6 +23,7 @@ import storagesign.adjacency.SsAdjacencyMatch;
 import storagesign.adjacency.SsAdjacencyPurpose;
 import storagesign.adjacency.SsAdjacencyQuery;
 import storagesign.adjacency.SsAdjacencyResolver;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 
 /**
@@ -36,7 +36,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class BlockEventListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(BlockEventListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(BlockEventListener.class);
     private static final SsAdjacencyResolver ADJACENCY_RESOLVER = SsAdjacencyResolver.defaultResolver();
 
     public BlockEventListener(StorageSignPlugin plugin) {
@@ -89,7 +89,7 @@ public final class BlockEventListener implements Listener {
         }
         // インベントリから設置するときの UI タイミング不具合を防ぐ（元プラグインと同じ動作）
         player.closeInventory();
-        LOG.fine(() -> "Restored StorageSign block at " + placed.getLocation());
+        LOG.debug("onBlockPlace", () -> "restored sign=" + placed.getLocation());
     }
 
     // ── SignChangeEvent ─────────────────────────────────────────────────────────
@@ -175,8 +175,7 @@ public final class BlockEventListener implements Listener {
         Location dropLocation = signBlock.getLocation().clone().add(0.5, 0.5, 0.5);
         signBlock.getWorld().dropItem(dropLocation, drop);
         signBlock.setType(Material.AIR);
-        LOG.fine(() -> "Dropped StorageSign item at " + signBlock.getLocation());
+        LOG.debug("dropStorageSign", () -> "dropped sign=" + signBlock.getLocation());
     }
 
 }
-

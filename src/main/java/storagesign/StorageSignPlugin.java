@@ -24,6 +24,7 @@ import storagesign.listener.InventoryListener;
 import storagesign.listener.PlayerInteractListener;
 import storagesign.listener.SignEditListenerFactory;
 import storagesign.listener.SignPhysicsListener;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 import storagesign.command.SsGiveCommand;
 
@@ -41,6 +42,8 @@ import storagesign.command.SsGiveCommand;
  * <p>イベント処理ロジックはすべて {@code listener.*} パッケージに割り当ててあり、このクラスはシンプルに保つ。
  */
 public final class StorageSignPlugin extends JavaPlugin {
+
+    private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignPlugin.class);
 
     /**
      * レイドバナー（白バナー パターン 8 枚）の BannerMeta。
@@ -64,13 +67,13 @@ public final class StorageSignPlugin extends JavaPlugin {
 
         // ── 1. Config ロード ──────────────────────────────────────────────────────────────
         ConfigLoader.load(this);
+        PluginLogger.initialize(this, ConfigLoader.getLogLevel());
+        LOG.debug("onEnable", () -> "ConfigLoader loaded: auto-import=" + ConfigLoader.getAutoImport()
+                  + ", auto-export=" + ConfigLoader.getAutoExport()
+                  + ", no-bud=" + ConfigLoader.getNoBud());
 
         // ── 2. レイドバナー ───────────────────────────────────────────────────────────
-        if (!ConfigLoader.getBannerDebug()) {
-            loadOminousBanner();
-        } else {
-            getLogger().info("banner-debug=true: レイドバナーのロードをスキップしました");
-        }
+        loadOminousBanner();
 
         // ── 3. クラフトレシピ ─────────────────────────────────────────────────────────
         registerRecipes();
@@ -80,13 +83,14 @@ public final class StorageSignPlugin extends JavaPlugin {
 
         getCommand("storagesigngive").setExecutor(new SsGiveCommand());
 
-        getLogger().info("StorageSign enabled. Sign types: " + MaterialRegistry.SIGN_MATERIALS.size()
-                         + ", Shulker types: " + MaterialRegistry.SHULKER_BOX_MATERIALS.size());
+        LOG.info("onEnable", "StorageSign enabled. Sign types: " + MaterialRegistry.SIGN_MATERIALS.size()
+                 + ", Shulker types: " + MaterialRegistry.SHULKER_BOX_MATERIALS.size());
     }
 
     @Override
     public void onDisable() {
-        getLogger().info("StorageSign disabled.");
+        LOG.info("onDisable", "StorageSign disabled.");
+        PluginLogger.shutdown();
     }
 
     // ── レイドバナー ───────────────────────────────────────────────────────────────
@@ -95,12 +99,12 @@ public final class StorageSignPlugin extends JavaPlugin {
         BannerMeta apiMeta = createOminousBannerMetaByApi();
         if (apiMeta != null) {
             setOminousBannerMeta(apiMeta);
-            getLogger().info("レイドバナーメタを API でロードしました ("
+            LOG.info("loadOminousBanner", "レイドバナーメタを API でロードしました ("
                              + apiMeta.numberOfPatterns() + " パターン)");
             return;
         }
 
-        getLogger().warning("API でレイドバナー構築に失敗したため、SNBT フォールバックを試行します");
+        LOG.warning("loadOminousBanner", "API でレイドバナー構築に失敗したため、SNBT フォールバックを試行します");
 
         StorageSignNBTConfig nbtConfig = new StorageSignNBTConfig(this);
         if (!nbtConfig.isLoaded()) return;
@@ -112,7 +116,7 @@ public final class StorageSignPlugin extends JavaPlugin {
             nbt = nbtConfig.getFirstNbtString();
         }
         if (nbt == null) {
-            getLogger().warning("No NBT string found in storageSignNBT.yml for version: " + version);
+            LOG.warning("loadOminousBanner", "No NBT string found in storageSignNBT.yml for version: " + version);
             return;
         }
 
@@ -124,13 +128,13 @@ public final class StorageSignPlugin extends JavaPlugin {
                 && banner.getItemMeta() instanceof BannerMeta bm
                 && isOminousBannerMeta(bm)) {
                 setOminousBannerMeta(bm);
-                getLogger().info("レイドバナーメタをロードしました ("
+                LOG.info("loadOminousBanner", "レイドバナーメタをロードしました ("
                                  + bm.numberOfPatterns() + " パターン)");
             } else {
-                getLogger().warning("バージョン " + version + " のレイドバナー NBT のパースに失敗しました");
+                LOG.warning("loadOminousBanner", "バージョン " + version + " のレイドバナー NBT のパースに失敗しました");
             }
         } catch (Exception e) {
-            getLogger().log(Level.WARNING, "レイドバナーのロード中に例外が発生しました", e);
+            LOG.log(Level.WARNING, "loadOminousBanner", "レイドバナーのロード中に例外が発生しました", e);
         }
     }
 
@@ -156,7 +160,7 @@ public final class StorageSignPlugin extends JavaPlugin {
             ));
             return normalizeOminousBannerMeta(bm);
         } catch (Throwable e) {
-            getLogger().log(Level.WARNING, "API 経由でレイドバナー構築に失敗しました", e);
+            LOG.log(Level.WARNING, "createOminousBannerMetaByApi", "API 経由でレイドバナー構築に失敗しました", e);
         }
         return null;
     }
@@ -252,7 +256,7 @@ public final class StorageSignPlugin extends JavaPlugin {
         try {
             return Bukkit.getItemFactory().createItemStack(nbt);
         } catch (Exception e) {
-            getLogger().log(Level.WARNING, "ItemFactory 経由でバナー NBT のデシリアライズに失敗しました", e);
+            LOG.log(Level.WARNING, "deserializeBannerFromNbt", "ItemFactory 経由でバナー NBT のデシリアライズに失敗しました", e);
         }
         return null;
     }
@@ -287,7 +291,7 @@ public final class StorageSignPlugin extends JavaPlugin {
             recipe.setGroup("StorageSign");
             Bukkit.addRecipe(recipe);
         }
-        getLogger().info(MaterialRegistry.SIGN_MATERIALS.size() + " 種類の StorageSign レシピを登録しました。");
+        LOG.info("registerRecipes", MaterialRegistry.SIGN_MATERIALS.size() + " 種類の StorageSign レシピを登録しました。");
     }
 
     // ── イベントリスナー ────────────────────────────────────────────────────────────
@@ -304,7 +308,7 @@ public final class StorageSignPlugin extends JavaPlugin {
 
         if (ConfigLoader.getNoBud()) {
             pm.registerEvents(new SignPhysicsListener(), this);
-            getLogger().info("no-bud: BUD 防止を有効化しました。");
+            LOG.info("registerListeners", "no-bud: BUD 防止を有効化しました。");
         }
     }
 }

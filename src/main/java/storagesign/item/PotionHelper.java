@@ -5,9 +5,9 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.potion.PotionType;
+import storagesign.logging.PluginLogger;
 
 import static org.bukkit.potion.PotionType.*;
 
@@ -36,7 +36,7 @@ import static org.bukkit.potion.PotionType.*;
  */
 public final class PotionHelper {
 
-    private static final Logger LOG = Logger.getLogger(PotionHelper.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(PotionHelper.class);
 
     // ── Prefix characters for splash / lingering in sign text ────────────────
     static final String PREFIX_SPLASH   = "S";
@@ -225,11 +225,13 @@ public final class PotionHelper {
         if (codeMap != null) {
             PotionType type = codeMap.get(code);
             if (type != null) return type;
-            LOG.log(Level.WARNING, "No potion type for {0}:{1}", new Object[]{shortName, code});
+            LOG.log(Level.WARNING, "resolvePotionType", "No potion type for {0}:{1}",
+                    new Object[]{shortName, code});
             return null;
         }
-        LOG.log(Level.WARNING, "Could not resolve potion type: shortName={0}, code={1}",
-            new Object[]{shortName, code});
+        LOG.log(Level.WARNING, "resolvePotionType",
+                "Could not resolve potion type: shortName={0}, code={1}",
+                new Object[]{shortName, code});
         return null;
     }
 

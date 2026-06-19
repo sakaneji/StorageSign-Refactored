@@ -4,10 +4,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.Material;
 import org.bukkit.Registry;
 import org.bukkit.enchantments.Enchantment;
+import storagesign.logging.PluginLogger;
 
 /**
  * {@link Material#ENCHANTED_BOOK} のシリアライズユーティリティ。
@@ -17,7 +17,7 @@ import org.bukkit.enchantments.Enchantment;
  */
 public final class EnchantHelper {
 
-    private static final Logger LOG = Logger.getLogger(EnchantHelper.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(EnchantHelper.class);
 
     /**
      * {@link #fromPrefix} で O(1) 検索を実現するための事前計算マップ。
@@ -73,7 +73,7 @@ public final class EnchantHelper {
      */
     public static Enchantment fromPrefix(String prefix) {
         if (prefix == null || prefix.isBlank()) {
-            LOG.warning("Empty enchantment prefix");
+            LOG.warning("fromPrefix", "Empty enchantment prefix");
             return null;
         }
 
@@ -101,11 +101,12 @@ public final class EnchantHelper {
 
         if (prefixMatch != null) {
             if (ambiguous) {
-                LOG.log(Level.WARNING, "Ambiguous enchantment prefix: {0}; using first registry match", prefix);
+                LOG.log(Level.WARNING, "fromPrefix",
+                        "Ambiguous enchantment prefix: {0}; using first registry match", prefix);
             }
             return prefixMatch;
         }
-        LOG.log(Level.WARNING, "No enchantment found for prefix: {0}", prefix);
+        LOG.log(Level.WARNING, "fromPrefix", "No enchantment found for prefix: {0}", prefix);
         return null;
     }
 

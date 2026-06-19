@@ -1,6 +1,5 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -8,6 +7,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPhysicsEvent;
 
 import storagesign.StorageSign;
+import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 
 /**
@@ -19,7 +19,7 @@ import storagesign.registry.MaterialRegistry;
  */
 public final class SignPhysicsListener implements Listener {
 
-    private static final Logger LOG = Logger.getLogger(SignPhysicsListener.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(SignPhysicsListener.class);
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockPhysics(BlockPhysicsEvent event) {

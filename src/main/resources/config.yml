@@ -1,7 +1,8 @@
 # StorageSign Configuration
 no-permisson: You don't have permission
 
-# Log level: OFF / SEVERE / WARNING / INFO / CONFIG / FINE / FINER / FINEST / ALL
+# Log level: OFF / ERROR / WARN / INFO / DEBUG / TRACE / ALL
+# Legacy JUL names (SEVERE/WARNING/CONFIG/FINE/FINER/FINEST) are also accepted.
 log-level: INFO
 
 # Allow players to manually push/pull items by right-clicking with the matching item
@@ -35,7 +36,7 @@ no-bud: false
 # Drop adjacent StorageSigns when a falling block lands on their support block
 falling-block-itemSS: false
 
-# Debug: log the raw ItemMeta string for every right-clicked item (very verbose)
+# Debug: at TRACE level, log raw ItemMeta for main-hand right-clicked items (very verbose)
 banner-debug: false
 
 # Compatibility alias table for identifier parsing.

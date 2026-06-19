@@ -3,9 +3,9 @@ package storagesign.config;
 import java.io.File;
 import java.io.IOException;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import storagesign.logging.PluginLogger;
 
 /**
  * プラグインデータフォルダから {@code storageSignNBT.yml} を読み込む。
@@ -19,7 +19,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class StorageSignNBTConfig {
 
-    private static final Logger LOG = Logger.getLogger(StorageSignNBTConfig.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignNBTConfig.class);
 
     private final YamlConfiguration config;
     private final boolean loaded;
@@ -32,12 +32,12 @@ public final class StorageSignNBTConfig {
             try {
                 cfg = YamlConfiguration.loadConfiguration(file);
                 ok = true;
-                LOG.fine("Loaded storageSignNBT.yml from " + file.getAbsolutePath());
+                LOG.debug("load", () -> "loaded=" + file.getAbsolutePath());
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Failed to load storageSignNBT.yml", e);
+                LOG.log(Level.WARNING, "load", "Failed to load storageSignNBT.yml", e);
             }
         } else {
-            LOG.info("storageSignNBT.yml not found — ominous banner will not be loaded");
+            LOG.info("load", "storageSignNBT.yml not found — ominous banner will not be loaded");
         }
         this.config = cfg;
         this.loaded = ok;

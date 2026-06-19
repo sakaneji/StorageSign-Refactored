@@ -53,12 +53,11 @@ Spigot/Paper 向け Minecraft プラグインです。
 
 ### 削除・廃止された機能
 
-- `plugin.yml` の外部プラグイン依存宣言を廃止
-  - 旧版の `depend: [Logger, FarmNBT]` と `softdepend: [WorldGuard]` を削除。
-  - `Logger` は外部プラグイン `com.github.teruteru128.logger.Logger` への依存であり、本リファクタリング版では標準 JDK ログ API へ移行したため不要。
+- 外部プラグイン依存を任意化
+  - `Logger` は `softdepend` とし、`FarmNBT` と `WorldGuard` の未使用な依存宣言は削除。
+  - [`teruteru128/logger`](https://github.com/teruteru128/logger) がサーバーに導入済みなら優先して使用し、未導入または初期化失敗時は Bukkit/JDK 標準ロガーへ自動的にフォールバック。
   - `FarmNBT` および `WorldGuard` は旧版コードにも実装が存在しない宣言のみの依存であったため、削除しても機能上の影響はない。
-- 外部 Logger ライブラリ連携を廃止
-  - 旧版の `com.github.teruteru128.logger.Logger` 前提から、`java.util.logging.Logger`（JDK 標準）ベースへ移行。
+- 外部 Logger 連携と標準ロガーのフォールバックを共通ロギング層で統一。
 - ビルド時の `project.properties` + `maven-resources-plugin` コピー運用を廃止
   - 現行は `maven-shade-plugin` によるパッケージング中心へ移行。
 
@@ -81,6 +80,8 @@ Spigot/Paper 向け Minecraft プラグインです。
 1. [Releases](../../releases) から最新の `.jar` ファイルをダウンロードします。
 2. サーバーの `plugins/` フォルダに配置します。
 3. サーバーを起動すると `plugins/StorageSign-Refactored/config.yml` が生成されます。
+
+外部 Logger 連携を使う場合は、[`teruteru128/logger`](https://github.com/teruteru128/logger) の Logger プラグインも `plugins/` に配置してください。Logger がなくても StorageSign は起動し、標準ロガーを使用します。
 
 ### StorageSign の作り方
 
@@ -170,6 +171,7 @@ Spigot/Paper 向け Minecraft プラグインです。
 
 | キー | デフォルト | 説明 |
 |---|---|---|
+| `log-level` | `INFO` | ログレベル（`OFF / ERROR / WARN / INFO / DEBUG / TRACE / ALL`、旧JUL名にも対応） |
 | `manual-import` | `true` | 手動インポートの有効化 |
 | `manual-export` | `true` | 手動エクスポートの有効化 |
 | `auto-import` | `true` | 自動インポート（搬送ブロック対応）の有効化 |
@@ -182,6 +184,11 @@ Spigot/Paper 向け Minecraft プラグインです。
 | `unregister-on-empty` | `false` | 残数が 0 になったときに登録を解除するか |
 | `no-bud` | `false` | BUD パルスによる看板破壊を防止する |
 | `falling-block-itemSS` | `false` | 落下ブロック着地時に隣接する StorageSign をアイテム化してドロップするか |
+| `banner-debug` | `false` | TRACE時にメインハンドで右クリックしたアイテムの生ItemMetaを出力する |
+
+ログメッセージには `[Class#operation]` 形式で発生箇所が付きます。通常運用では `INFO`、
+問題調査ではまず `DEBUG` を使用してください。`TRACE` は自動搬送の詳細や
+`banner-debug` の生ItemMetaを出力するため、必要な期間だけ有効にしてください。
 
 ---
 

@@ -1,9 +1,9 @@
 package storagesign.listener;
 
-import java.util.logging.Logger;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import storagesign.logging.PluginLogger;
 
 /**
  * サーバーが Paper かどうかを検出し、適切な看板編集リスナーを登録する。
@@ -13,7 +13,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class SignEditListenerFactory {
 
-    private static final Logger LOG = Logger.getLogger(SignEditListenerFactory.class.getName());
+    private static final PluginLogger LOG = PluginLogger.getLogger(SignEditListenerFactory.class);
 
     /** {@link PaperSignEditListener} または {@link SpigotSignEditListener} のどちらかを登録する。 */
     public static void register(JavaPlugin plugin) {
@@ -22,10 +22,10 @@ public final class SignEditListenerFactory {
         try {
             Class.forName("io.papermc.paper.event.player.PlayerOpenSignEvent");
             listener = new PaperSignEditListener();
-            LOG.info("Paper 用看板編集リスナーを登録しました");
+            LOG.info("register", "Paper 用看板編集リスナーを登録しました");
         } catch (ClassNotFoundException e) {
             listener = new SpigotSignEditListener();
-            LOG.info("Spigot 用看板編集リスナーを登録しました");
+            LOG.info("register", "Spigot 用看板編集リスナーを登録しました");
         }
         pm.registerEvents(listener, plugin);
     }
