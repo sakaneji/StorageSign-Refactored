@@ -42,7 +42,7 @@ import storagesign.command.SsGiveCommand;
  *
  * <p>イベント処理ロジックはすべて {@code listener.*} パッケージに割り当ててあり、このクラスはシンプルに保つ。
  */
-public final class StorageSignPlugin extends JavaPlugin {
+public class StorageSignPlugin extends JavaPlugin {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignPlugin.class);
     private static final long OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS = 1L;

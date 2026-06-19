@@ -238,11 +238,37 @@ target/StorageSign-Refactored-<version>.jar
 
 ### テスト
 
+ホストに Java、Maven、Node.js を導入せず、Docker だけで実行できます。
+
 ```bash
-mvn test
+# サーバー API に依存しない単体テスト
+./scripts/test.sh unit
+
+# MockBukkit でプラグイン全体をロードする統合テスト
+./scripts/test.sh integration
+
+# Paper 1.21.4 / 1.21.8 / 1.21.11 の実クライアント E2E
+./scripts/test.sh e2e
+
+# 指定した 1 バージョンだけ E2E を実行
+./scripts/test.sh e2e 1.21.8
+
+# 上記をすべて実行
+./scripts/test.sh all
 ```
 
-テストは `src/test/java/storagesign/` にあります。サーバー API に依存しないユニットテストのみ含まれており、Spigot/Paper のモックは不要です。
+E2E は Paper と Mineflayer クライアントを Docker Compose で起動し、右クリック、
+スニーク、ホッパー搬送、ホッパー付きトロッコ、自動収集、特殊アイテム、
+サーバー再起動後の永続性を実際のゲーム tick とパケット経路で検証します。
+StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看板の設置応答を扱えない場合、
+テストハーネスから実際の `BlockPlaceEvent` を発火して設置リスナーを検証します。
+テストサーバーは localhost 限定のオフラインモードで、実 Minecraft アカウントは不要です。
+
+失敗時の Paper ログとボットログは `e2e/artifacts/<version>/` に保存されます。
+テスト用ハーネスは別 JAR であり、本番の StorageSign JAR には含まれません。
+
+Spigot は自動 E2E の対象外です。リリース前には 1.21.4 と最新対応版で、起動、
+StorageSign の設置、通常・スニーク入出庫、ホッパー搬送を手動確認してください。
 
 ### データモデル
 
