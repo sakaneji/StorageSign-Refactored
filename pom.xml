@@ -81,14 +81,7 @@
   </dependencyManagement>
 
   <dependencies>
-    <!-- Spigot API — provided at runtime by the server -->
-    <dependency>
-      <groupId>org.spigotmc</groupId>
-      <artifactId>spigot-api</artifactId>
-      <version>1.21.4-R0.1-SNAPSHOT</version>
-      <scope>provided</scope>
-    </dependency>
-    <!-- Paper API — provided at runtime when running on Paper -->
+    <!-- Paper API includes the Bukkit/Spigot API and is provided by the server. -->
     <dependency>
       <groupId>io.papermc.paper</groupId>
       <artifactId>paper-api</artifactId>
@@ -106,6 +99,12 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockbukkit.mockbukkit</groupId>
+      <artifactId>mockbukkit-v1.21</artifactId>
+      <version>4.29.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>

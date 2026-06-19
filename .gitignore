@@ -1,5 +1,9 @@
 # Maven build output
 /target/
+/e2e/harness/target/
+/e2e/runtime/
+/e2e/artifacts/
+/e2e/bot/node_modules/
 
 # Maven helper files
 dependency-reduced-pom.xml

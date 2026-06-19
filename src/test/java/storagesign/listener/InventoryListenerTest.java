@@ -5,7 +5,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
-import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -31,7 +30,7 @@ class InventoryListenerTest {
         InventoryListener listener = new InventoryListener(null);
         InventoryMoveItemEvent event = new InventoryMoveItemEvent(
             mock(Inventory.class),
-            new ItemStack(Material.STONE, 1),
+            mock(ItemStack.class),
             mock(Inventory.class),
             true
         );

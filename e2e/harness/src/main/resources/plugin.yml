@@ -1,0 +1,13 @@
+name: StorageSignE2EHarness
+main: storagesign.e2e.StorageSignE2EHarness
+version: 1.0.0
+api-version: '1.21.4'
+depend: [StorageSign-Refactored]
+commands:
+  sstest:
+    description: Prepare and inspect StorageSign E2E scenarios.
+    usage: /sstest <reset|inspect|drop|place|sneak> [scenario|value]
+    permission: sstest.admin
+permissions:
+  sstest.admin:
+    default: true
