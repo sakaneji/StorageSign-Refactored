@@ -13,6 +13,7 @@ usage() {
 Usage:
   ./scripts/test.sh unit
   ./scripts/test.sh integration
+  ./scripts/test.sh coverage
   ./scripts/test.sh e2e [1.21.4|1.21.8|1.21.11] [both|with-logger|without-logger]
   ./scripts/test.sh banner-compat
   ./scripts/test.sh all
@@ -99,6 +100,31 @@ run_integration() {
   run_logged integration "$TEST_LOG_DIR/integration.log" \
     maven_root -Dgroups=integration test || return 1
   summarize_surefire integration
+}
+
+summarize_coverage() {
+  local csv="$ROOT_DIR/target/site/jacoco/jacoco.csv"
+  [ -s "$csv" ] || { echo "FAIL coverage; report=$csv was not created" >&2; return 1; }
+  awk -F, '
+    NR > 1 {
+      lineMissed += $8; lineCovered += $9;
+      branchMissed += $6; branchCovered += $7
+    }
+    END {
+      lineTotal = lineMissed + lineCovered;
+      branchTotal = branchMissed + branchCovered;
+      linePct = lineTotal ? (100 * lineCovered / lineTotal) : 0;
+      branchPct = branchTotal ? (100 * branchCovered / branchTotal) : 0;
+      printf "PASS coverage lines=%.1f%% branches=%.1f%% report=target/site/jacoco/index.html\n", linePct, branchPct
+    }
+  ' "$csv"
+}
+
+run_coverage() {
+  rm -rf "$ROOT_DIR/target/surefire-reports" "$ROOT_DIR/target/site/jacoco" "$ROOT_DIR/target/jacoco.exec"
+  run_logged coverage "$TEST_LOG_DIR/coverage.log" maven_root -Pcoverage test || return 1
+  summarize_surefire coverage || return 1
+  summarize_coverage
 }
 
 paper_build() {
@@ -319,10 +345,11 @@ main() {
   case "${1:-}" in
     unit) run_unit ;;
     integration) run_integration ;;
+    coverage) run_coverage ;;
     e2e) run_e2e "${2:-}" "${3:-both}" ;;
     banner-compat) run_banner_compat ;;
     all)
-      run_unit && run_integration && run_e2e "" both && run_banner_compat
+      run_unit && run_integration && run_coverage && run_e2e "" both && run_banner_compat
       ;;
     *) usage ;;
   esac

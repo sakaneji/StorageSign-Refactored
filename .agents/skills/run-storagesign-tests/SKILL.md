@@ -19,6 +19,7 @@ Honor an explicitly requested scope. Otherwise:
 
 - Run `./scripts/test.sh unit` for fast, server-independent logic checks.
 - Run `./scripts/test.sh integration` for plugin startup, command registration, configuration, recipes, or Bukkit/Paper API integration changes.
+- Run `./scripts/test.sh coverage` to execute all JUnit tests and generate the JaCoCo HTML/XML/CSV report without enforcing a numeric threshold.
 - Run `./scripts/test.sh e2e <version> <logger-mode>` when one supported Minecraft version or Logger configuration is named. Use `with-logger`, `without-logger`, or `both`.
 - Run `./scripts/test.sh e2e` for gameplay behavior, listeners, inventory transport, persistence, Logger integration, or independent multi-version compatibility changes. This runs both Logger modes by default.
 - Run `./scripts/test.sh banner-compat` for ominous-banner persistence across the 1.21.4 to 1.21.8 to 1.21.11 shared-world upgrade path.
@@ -30,7 +31,7 @@ Supported E2E versions are `1.21.4`, `1.21.8`, and `1.21.11`. Treat `scripts/tes
 
 Run the selected command to completion. The E2E suite starts real Paper servers and a Mineflayer client, so allow several minutes.
 
-The runner is quiet by default. A successful run prints only structured `PASS` summaries; do not read the saved Maven, runner, bot, or Paper logs after success. Set `STORAGESIGN_TEST_VERBOSE=1` only when the user explicitly asks for live detailed output.
+The runner is quiet by default. A successful run prints only structured `PASS` summaries; do not read the saved Maven, runner, bot, Paper, or coverage detail files after success. Set `STORAGESIGN_TEST_VERBOSE=1` only when the user explicitly asks for live detailed output.
 
 On failure, start with the failed scope/version/mode named by the runner. Do not read logs for successful cases. Maven logs are under `target/test-artifacts/`; each E2E artifact directory also contains `runner.log` for Docker lifecycle failures.
 
@@ -44,7 +45,7 @@ For an E2E failure:
 6. Separate a product failure from a harness, Docker, server-download, or client-protocol failure before proposing a fix.
 7. Do not delete failure artifacts before reporting the relevant evidence.
 
-The E2E suite covers external Logger presence and registration, placement listener behavior, normal and sneak transfers, permission denial, hoppers, hopper minecarts, automatic collection, potion and ominous-banner round trips, and restart persistence. Fresh ominous-banner exports must include all eight patterns, name metadata, and tooltip hiding. During shared-world upgrades, Minecraft's data fixer may remove the old tooltip-hiding flag; require the eight-pattern identity and name to survive, require import to succeed, and require the current-version re-export to restore the flag. Mineflayer custom-Lore sign placement or an unacknowledged upgraded-sign interaction may use the harness to emit a real Bukkit event; distinguish that fallback from a fully acknowledged client packet.
+The E2E suite covers external Logger presence and registration, placement listener behavior, normal and sneak transfers, use and break permission denial, StorageSign break drops, sign-edit protection, StorageSign-item export/reimport, hoppers, hopper minecarts, automatic collection, potion and ominous-banner round trips, and restart persistence. Fresh ominous-banner exports must include all eight patterns, name metadata, and tooltip hiding. During shared-world upgrades, Minecraft's data fixer may remove the old tooltip-hiding flag; require the eight-pattern identity and name to survive, require import to succeed, and require the current-version re-export to restore the flag. Mineflayer custom-Lore sign placement or an unacknowledged upgraded-sign interaction may use the harness to emit a real Bukkit event; distinguish that fallback from a fully acknowledged client packet.
 
 Spigot is not automated. When Spigot validation is requested, follow the manual smoke-test checklist in `README.md` and state that it was not covered by the Paper E2E result.
 

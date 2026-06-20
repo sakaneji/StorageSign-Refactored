@@ -369,23 +369,25 @@ class StorageSignTest {
     }
 
     @Test
-    void setAmount_zeroTransitionsToEmpty() {
+    void setAmount_zeroKeepsRegistrationWhenConfigured() throws Exception {
+        setUnregisterOnEmpty(false);
         StorageSign ss = StorageSign.fromSignLines(
             new String[]{"StorageSign", "STONE", "100", "0LC 1s 36"});
         assertNotNull(ss);
         ss.setAmount(0);
         assertEquals(0, ss.getAmount());
-        assertTrue(ss.isUnregistered());
+        assertFalse(ss.isUnregistered());
     }
 
     @Test
-    void setAmount_negativeTransitionsToEmptyWithZeroAmount() {
+    void setAmount_negativeClampsToZeroAndKeepsRegistrationWhenConfigured() throws Exception {
+        setUnregisterOnEmpty(false);
         StorageSign ss = StorageSign.fromSignLines(
             new String[]{"StorageSign", "STONE", "100", "0LC 1s 36"});
         assertNotNull(ss);
         ss.setAmount(-10);
         assertEquals(0, ss.getAmount());
-        assertTrue(ss.isUnregistered());
+        assertFalse(ss.isUnregistered());
     }
 
     @Test
@@ -396,6 +398,26 @@ class StorageSignTest {
         ss.setAmount(1);
         assertEquals(1, ss.getAmount());
         assertFalse(ss.isUnregistered());
+    }
+
+    @Test
+    void setAmount_zeroUnregistersWhenConfigured() throws Exception {
+        setUnregisterOnEmpty(true);
+        StorageSign ss = StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE", "100", "0LC 1s 36"});
+        assertNotNull(ss);
+
+        ss.setAmount(0);
+
+        assertEquals(0, ss.getAmount());
+        assertTrue(ss.isUnregistered());
+        setUnregisterOnEmpty(false);
+    }
+
+    private static void setUnregisterOnEmpty(boolean value) throws Exception {
+        var field = ConfigLoader.class.getDeclaredField("unregisterOnEmpty");
+        field.setAccessible(true);
+        field.setBoolean(null, value);
     }
 
     // ── getSignLines format ───────────────────────────────────────────────────
