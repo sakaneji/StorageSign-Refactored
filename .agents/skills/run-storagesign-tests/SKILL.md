@@ -31,7 +31,16 @@ Supported E2E versions are `1.21.4`, `1.21.8`, and `1.21.11`. Treat `scripts/tes
 
 Run the selected command to completion. The E2E suite starts real Paper servers and a Mineflayer client, so allow several minutes.
 
+### Minimize context use
+
+- Start long-running test commands with the longest practical initial yield. If the command continues, wait up to five minutes per poll. Never poll a quiet E2E run every few seconds.
+- During implementation, run only the narrowest affected scope. After it passes, run the requested final scope once; do not rerun already successful scopes separately when `all` will immediately repeat them.
+- If a final `all` run is planned, do not run a separate `coverage` pass unless coverage itself is being debugged.
+- Preserve the structured `PASS` lines for the final report, but do not open successful artifacts or request verbose output.
+- On failure, use the runner's bounded failure excerpt first. Open only the single artifact indicated by the diagnosis order below and expand further only when that evidence is insufficient.
+
 The runner is quiet by default. A successful run prints only structured `PASS` summaries; do not read the saved Maven, runner, bot, Paper, or coverage detail files after success. Set `STORAGESIGN_TEST_VERBOSE=1` only when the user explicitly asks for live detailed output.
+Failure excerpts default to 40 lines. Increase `STORAGESIGN_FAILURE_TAIL_LINES` only when those lines do not contain the first actionable cause.
 
 On failure, start with the failed scope/version/mode named by the runner. Do not read logs for successful cases. Maven logs are under `target/test-artifacts/`; each E2E artifact directory also contains `runner.log` for Docker lifecycle failures.
 

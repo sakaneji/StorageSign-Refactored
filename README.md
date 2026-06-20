@@ -281,6 +281,8 @@ StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看
 Maven の詳細は `target/test-artifacts/`、Docker の起動・停止ログは各成果物ディレクトリの
 `runner.log` に保存され、失敗したケースだけ診断に使用します。詳細を端末にも表示する場合は
 `STORAGESIGN_TEST_VERBOSE=1 ./scripts/test.sh <scope>` を実行してください。
+失敗時に端末へ出すログは既定で末尾40行に制限されます。追加情報が必要な場合のみ
+`STORAGESIGN_FAILURE_TAIL_LINES=80 ./scripts/test.sh <scope>` のように拡張できます。
 JaCoCoのHTMLレポートは `target/site/jacoco/index.html` に生成されます。これはUnit/Integrationで
 実行される製品コードを可視化するもので、別プロセスのPaper E2Eはシナリオ単位で管理します。
 E2Eには破壊権限とドロップ、看板編集保護、StorageSignアイテムの搬出・再取込も含まれます。
