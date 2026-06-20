@@ -7,6 +7,7 @@ M2_VOLUME="storagesign-m2"
 COMPOSE_FILE="$ROOT_DIR/e2e/compose.yml"
 TEST_LOG_DIR="$ROOT_DIR/target/test-artifacts"
 TEST_VERBOSE="${STORAGESIGN_TEST_VERBOSE:-0}"
+FAILURE_TAIL_LINES="${STORAGESIGN_FAILURE_TAIL_LINES:-40}"
 
 usage() {
   cat >&2 <<'EOF'
@@ -52,8 +53,8 @@ run_logged() {
     return 0
   fi
   echo "FAIL $label; log=$log_file" >&2
-  echo "--- last 80 lines ---" >&2
-  tail -n 80 "$log_file" >&2 || true
+  echo "--- last $FAILURE_TAIL_LINES lines ---" >&2
+  tail -n "$FAILURE_TAIL_LINES" "$log_file" >&2 || true
   return "$status"
 }
 
@@ -248,8 +249,8 @@ run_e2e_version() {
 
   if [ "$result" -ne 0 ]; then
     echo "FAIL e2e version=$version logger=$logger_mode; artifacts=$artifact_dir" >&2
-    echo "--- runner log, last 80 lines ---" >&2
-    tail -n 80 "$runner_log" >&2 || true
+    echo "--- runner log, last $FAILURE_TAIL_LINES lines ---" >&2
+    tail -n "$FAILURE_TAIL_LINES" "$runner_log" >&2 || true
     echo "diagnose: $artifact_dir/bot-main.log $artifact_dir/bot-restart.log $artifact_dir/paper.log" >&2
   else
     local logger_state="absent"
@@ -328,8 +329,8 @@ run_banner_compat() {
 
     if [ "$result" -ne 0 ]; then
       echo "FAIL banner-compat version=$version; artifacts=$artifact_dir" >&2
-      echo "--- runner log, last 80 lines ---" >&2
-      tail -n 80 "$runner_log" >&2 || true
+      echo "--- runner log, last $FAILURE_TAIL_LINES lines ---" >&2
+      tail -n "$FAILURE_TAIL_LINES" "$runner_log" >&2 || true
       echo "diagnose: $artifact_dir/bot.log $artifact_dir/paper.log" >&2
       return 1
     fi
