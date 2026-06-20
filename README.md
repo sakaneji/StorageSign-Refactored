@@ -247,6 +247,9 @@ target/StorageSign-Refactored-<version>.jar
 # MockBukkit でプラグイン全体をロードする統合テスト
 ./scripts/test.sh integration
 
+# 全JUnitテストとJaCoCo行・分岐カバレッジ（数値ゲートなし）
+./scripts/test.sh coverage
+
 # Paper 1.21.4 / 1.21.8 / 1.21.11 を Logger なし・ありで E2E
 ./scripts/test.sh e2e
 
@@ -278,6 +281,9 @@ StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看
 Maven の詳細は `target/test-artifacts/`、Docker の起動・停止ログは各成果物ディレクトリの
 `runner.log` に保存され、失敗したケースだけ診断に使用します。詳細を端末にも表示する場合は
 `STORAGESIGN_TEST_VERBOSE=1 ./scripts/test.sh <scope>` を実行してください。
+JaCoCoのHTMLレポートは `target/site/jacoco/index.html` に生成されます。これはUnit/Integrationで
+実行される製品コードを可視化するもので、別プロセスのPaper E2Eはシナリオ単位で管理します。
+E2Eには破壊権限とドロップ、看板編集保護、StorageSignアイテムの搬出・再取込も含まれます。
 アップグレード時にMinecraftのデータ更新が旧旗のツールチップ非表示フラグを削除する場合は、
 8模様と名前による互換性、StorageSignへの再取込、現行版で再搬出した旗へのフラグ再付与を検証します。
 テスト用ハーネスは別 JAR であり、本番の StorageSign JAR には含まれません。

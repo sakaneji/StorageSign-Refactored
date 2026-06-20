@@ -1,6 +1,7 @@
 package storagesign;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -82,6 +83,46 @@ class OminousBannerRetryTest {
             assertSame(recovered, getCachedMeta());
             verify(factory).apply(false);
             verify(task, times(0)).cancel();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void failedRetryLeavesBannerUnavailableWithoutSchedulingALoop() throws Exception {
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        BukkitTask task = mock(BukkitTask.class);
+        ArgumentCaptor<Runnable> runnable = ArgumentCaptor.forClass(Runnable.class);
+        StorageSignPlugin plugin = mock(StorageSignPlugin.class, CALLS_REAL_METHODS);
+        Function<Boolean, BannerMeta> factory = mock(Function.class);
+        when(scheduler.runTaskLater(any(Plugin.class), runnable.capture(), eq(1L))).thenReturn(task);
+        when(factory.apply(false)).thenReturn(null);
+        setFactory(plugin, factory);
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            invoke(plugin, "scheduleOminousBannerRetry");
+            runnable.getValue().run();
+
+            assertNull(getCachedMeta());
+            verify(factory).apply(false);
+            verify(scheduler, times(1)).runTaskLater(any(Plugin.class), any(Runnable.class), eq(1L));
+        }
+    }
+
+    @Test
+    void disablingPluginCancelsPendingRetry() throws Exception {
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        BukkitTask task = mock(BukkitTask.class);
+        StorageSignPlugin plugin = mock(StorageSignPlugin.class, CALLS_REAL_METHODS);
+        when(scheduler.runTaskLater(any(Plugin.class), any(Runnable.class), eq(1L))).thenReturn(task);
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            invoke(plugin, "scheduleOminousBannerRetry");
+
+            plugin.onDisable();
+
+            verify(task).cancel();
         }
     }
 

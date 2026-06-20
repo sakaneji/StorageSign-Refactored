@@ -26,6 +26,8 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.minecart.HopperMinecart;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -42,6 +44,9 @@ public final class StorageSignE2EHarness extends JavaPlugin {
     private static final int BASE_Y = 65;
     private PermissionAttachment deniedUse;
     private UUID deniedPlayer;
+    private boolean lastBreakCancelled;
+    private boolean lastBreakDrops;
+    private List<String> lastEditLines = List.of();
 
     @Override
     public void onEnable() {
@@ -87,6 +92,14 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                     interactWithStorageSign(player);
                     player.sendMessage("SSTEST INTERACTED " + scenario);
                 }
+                case "break" -> {
+                    breakStorageSign(player);
+                    player.sendMessage("SSTEST BROKEN " + scenario);
+                }
+                case "edit" -> {
+                    editStorageSign(player);
+                    player.sendMessage("SSTEST EDITED " + scenario);
+                }
                 default -> { return false; }
             }
         } catch (RuntimeException e) {
@@ -105,6 +118,9 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         player.setFlying(false);
         player.setVelocity(new Vector());
         player.teleport(new Location(world, 0.5, BASE_Y, 2.5, 180f, 0f));
+        lastBreakCancelled = false;
+        lastBreakDrops = true;
+        lastEditLines = List.of();
 
         switch (scenario) {
             case "client", "special-potion", "special-banner", "banner-upgrade-seed" ->
@@ -128,6 +144,15 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 deniedUse = player.addAttachment(this, "storagesign.use", false);
                 deniedPlayer = player.getUniqueId();
             }
+            case "break-denied" -> {
+                createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
+                deniedUse = player.addAttachment(this, "storagesign.break", false);
+                deniedPlayer = player.getUniqueId();
+            }
+            case "break-allowed", "edit-protected" ->
+                createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
+            case "storage-sign-items" ->
+                createStorageSign(world, 0, BASE_Y, 0, "OakStorageSign", 2);
             case "auto-import" -> prepareAutoImport(world);
             case "auto-export" -> prepareAutoExport(world);
             case "minecart-import" -> prepareMinecartImport(world);
@@ -259,7 +284,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         dropped.setPickupDelay(0);
     }
 
-    private static String snapshot(Player player, String scenario) {
+    private String snapshot(Player player, String scenario) {
         World world = player.getWorld();
         List<String> lines = signLines(world);
         int playerStone = count(player.getInventory().getContents(), Material.STONE);
@@ -284,6 +309,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"playerStone\":" + playerStone + ","
             + "\"playerSigns\":" + playerSigns + ","
             + "\"droppedStone\":" + droppedStone + ","
+            + "\"droppedStorageSigns\":" + droppedStorageSigns(world) + ","
             + "\"chestStone\":" + chestStone + ","
             + "\"hopperStone\":" + hopperStone + ","
             + "\"minecartStone\":" + minecartStone + ","
@@ -298,6 +324,9 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"heldType\":\"" + player.getInventory().getItemInMainHand().getType().name() + "\","
             + "\"storageSignAcceptsHeld\":" + storageSignAcceptsHeld(player) + ","
             + "\"canPlace\":" + player.hasPermission("storagesign.place") + ","
+            + "\"breakCancelled\":" + lastBreakCancelled + ","
+            + "\"breakDrops\":" + lastBreakDrops + ","
+            + "\"editLines\":" + jsonArray(lastEditLines) + ","
             + "\"heldLore\":\"" + escape(heldLore) + "\"}";
     }
 
@@ -353,6 +382,24 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             EquipmentSlot.HAND
         );
         Bukkit.getPluginManager().callEvent(event);
+    }
+
+    private void breakStorageSign(Player player) {
+        Block block = player.getWorld().getBlockAt(0, BASE_Y, 0);
+        BlockBreakEvent event = new BlockBreakEvent(block, player);
+        Bukkit.getPluginManager().callEvent(event);
+        lastBreakCancelled = event.isCancelled();
+        lastBreakDrops = event.isDropItems();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void editStorageSign(Player player) {
+        Block block = player.getWorld().getBlockAt(0, BASE_Y, 0);
+        SignChangeEvent event = new SignChangeEvent(
+            block, player, new String[] {"destroyed", "DIAMOND", "999", "tampered"}
+        );
+        Bukkit.getPluginManager().callEvent(event);
+        lastEditLines = List.of(event.getLines());
     }
 
     private static ItemStack bannerChestItem(World world) {
@@ -479,6 +526,16 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             if (item != null && item.getType() == material) total += item.getAmount();
         }
         return total;
+    }
+
+    @SuppressWarnings("deprecation")
+    private static int droppedStorageSigns(World world) {
+        return world.getEntitiesByClass(Item.class).stream()
+            .map(Item::getItemStack)
+            .filter(item -> item.getType() == Material.OAK_SIGN && item.hasItemMeta())
+            .filter(item -> "StorageSign".equals(item.getItemMeta().getDisplayName()))
+            .mapToInt(ItemStack::getAmount)
+            .sum();
     }
 
     @SuppressWarnings("deprecation")

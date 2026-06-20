@@ -200,6 +200,48 @@ async function runMainSuite() {
     assert.equal(state.lines[2], '64')
   })
 
+  await runCase('break permission denied', async () => {
+    await reset('break-denied')
+    await command('/sstest break break-denied', 'SSTEST BROKEN break-denied')
+    const state = await inspect('break-denied')
+    assert.equal(state.breakCancelled, true)
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '64'])
+    assert.equal(state.droppedStorageSigns, 0)
+  })
+
+  await runCase('break drops one StorageSign item', async () => {
+    await reset('break-allowed')
+    await command('/sstest break break-allowed', 'SSTEST BROKEN break-allowed')
+    const state = await inspect('break-allowed')
+    assert.equal(state.breakCancelled, false)
+    assert.equal(state.breakDrops, false)
+    assert.equal(state.lines.length, 0)
+    assert.equal(state.droppedStorageSigns, 1)
+  })
+
+  await runCase('sign edit preserves StorageSign data', async () => {
+    await reset('edit-protected')
+    await command('/sstest edit edit-protected', 'SSTEST EDITED edit-protected')
+    const state = await inspect('edit-protected')
+    assert.deepEqual(state.editLines.slice(0, 3), ['StorageSign', 'STONE', '64'])
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '64'])
+  })
+
+  await runCase('StorageSign item export and reimport', async () => {
+    await reset('storage-sign-items')
+    await emptyHand()
+    await activateSign()
+    let state = await inspect('storage-sign-items')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerSigns, 2)
+
+    await equip('oak_sign')
+    await activateSign({ sneak: true })
+    state = await inspect('storage-sign-items')
+    assert.equal(state.lines[2], '2')
+    assert.equal(state.playerSigns, 0)
+  })
+
   await runCase('hopper auto import', async () => {
     await reset('auto-import')
     await sleep(1800)
