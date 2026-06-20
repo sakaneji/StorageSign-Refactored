@@ -15,7 +15,7 @@ Usage:
   ./scripts/test.sh unit
   ./scripts/test.sh integration
   ./scripts/test.sh coverage
-  ./scripts/test.sh e2e [1.21.4|1.21.8|1.21.11] [both|with-logger|without-logger]
+  ./scripts/test.sh e2e [1.21.4|1.21.8|1.21.11|26.1.2|26.2] [both|with-logger|without-logger]
   ./scripts/test.sh banner-compat
   ./scripts/test.sh all
 EOF
@@ -133,7 +133,16 @@ paper_build() {
     1.21.4) echo 232 ;;
     1.21.8) echo 60 ;;
     1.21.11) echo 69 ;;
+    26.1.2) echo 72 ;;
+    26.2) echo 24 ;;
     *) return 1 ;;
+  esac
+}
+
+minecraft_server_image() {
+  case "$1" in
+    26.*) echo "itzg/minecraft-server:java25" ;;
+    *) echo "itzg/minecraft-server:java21" ;;
   esac
 }
 
@@ -207,6 +216,7 @@ run_e2e_version() {
 
   export MC_VERSION="$version"
   export PAPER_BUILD="$build"
+  export MC_SERVER_IMAGE="$(minecraft_server_image "$version")"
   export E2E_DATA_DIR="$runtime_dir/data"
   export E2E_PLUGIN_DIR="$runtime_dir/plugins"
   export E2E_PORT="${E2E_PORT:-25565}"
@@ -263,7 +273,7 @@ run_e2e_version() {
 run_e2e() {
   local requested="${1:-}"
   local requested_mode="${2:-both}"
-  local versions=(1.21.4 1.21.8 1.21.11)
+  local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
   local modes=()
   local failed=0
 
@@ -287,7 +297,7 @@ run_e2e() {
 }
 
 run_banner_compat() {
-  local versions=(1.21.4 1.21.8 1.21.11)
+  local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
   local runtime_dir="$ROOT_DIR/e2e/runtime/banner-upgrade"
   local artifact_root="$ROOT_DIR/e2e/artifacts/banner-upgrade"
   local project="storagesign-banner-upgrade"
@@ -314,6 +324,7 @@ run_banner_compat() {
     : >"$runner_log"
     export MC_VERSION="$version"
     export PAPER_BUILD="$(paper_build "$version")"
+    export MC_SERVER_IMAGE="$(minecraft_server_image "$version")"
 
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" build bot || result=1
     if [ "$result" -eq 0 ]; then

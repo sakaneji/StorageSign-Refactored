@@ -250,14 +250,14 @@ target/StorageSign-Refactored-<version>.jar
 # 全JUnitテストとJaCoCo行・分岐カバレッジ（数値ゲートなし）
 ./scripts/test.sh coverage
 
-# Paper 1.21.4 / 1.21.8 / 1.21.11 を Logger なし・ありで E2E
+# Paper 1.21.4 / 1.21.8 / 1.21.11 / 26.1.2 / 26.2 を Logger なし・ありで E2E
 ./scripts/test.sh e2e
 
 # 指定したバージョン・Logger 構成だけ E2E を実行
 ./scripts/test.sh e2e 1.21.8 with-logger
 ./scripts/test.sh e2e 1.21.8 without-logger
 
-# 同一ワールドを 1.21.4 → 1.21.8 → 1.21.11 と更新して不吉な旗を検証
+# 同一ワールドを 1.21.4 → 1.21.8 → 1.21.11 → 26.1.2 → 26.2 と更新して不吉な旗を検証
 ./scripts/test.sh banner-compat
 
 # 上記をすべて実行
@@ -274,6 +274,8 @@ E2E は Paper と Mineflayer クライアントを Docker Compose で起動し�
 StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看板の設置応答を扱えない場合、
 テストハーネスから実際の `BlockPlaceEvent` を発火して設置リスナーを検証します。
 テストサーバーは localhost 限定のオフラインモードで、実 Minecraft アカウントは不要です。
+26.1以降はJava 25、それ以前はJava 21のサーバーコンテナを使います。26.2は正式版Minecraftに
+対するPaperのexperimental buildを固定して検証します。
 
 通常E2Eのログは `e2e/artifacts/<version>/<logger-mode>/`、アップグレードテストは
 `e2e/artifacts/banner-upgrade/<version>/` に保存されます。

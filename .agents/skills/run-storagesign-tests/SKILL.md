@@ -22,10 +22,10 @@ Honor an explicitly requested scope. Otherwise:
 - Run `./scripts/test.sh coverage` to execute all JUnit tests and generate the JaCoCo HTML/XML/CSV report without enforcing a numeric threshold.
 - Run `./scripts/test.sh e2e <version> <logger-mode>` when one supported Minecraft version or Logger configuration is named. Use `with-logger`, `without-logger`, or `both`.
 - Run `./scripts/test.sh e2e` for gameplay behavior, listeners, inventory transport, persistence, Logger integration, or independent multi-version compatibility changes. This runs both Logger modes by default.
-- Run `./scripts/test.sh banner-compat` for ominous-banner persistence across the 1.21.4 to 1.21.8 to 1.21.11 shared-world upgrade path.
+- Run `./scripts/test.sh banner-compat` for ominous-banner persistence across the 1.21.4 to 1.21.8 to 1.21.11 to 26.1.2 to 26.2 shared-world upgrade path.
 - Run `./scripts/test.sh all` when asked to run all tests, perform a release check, or verify the project without a narrower scope.
 
-Supported E2E versions are `1.21.4`, `1.21.8`, and `1.21.11`. Treat `scripts/test.sh` as authoritative if this list later changes.
+Supported E2E versions are `1.21.4`, `1.21.8`, `1.21.11`, `26.1.2`, and `26.2`. Paper 26.2 is pinned to an experimental build until Paper publishes a stable channel build. Treat `scripts/test.sh` as authoritative if this list later changes.
 
 ## Execute and diagnose
 
