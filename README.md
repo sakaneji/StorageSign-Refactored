@@ -279,7 +279,12 @@ StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看
 
 通常E2Eのログは `e2e/artifacts/<version>/<logger-mode>/`、アップグレードテストは
 `e2e/artifacts/banner-upgrade/<version>/` に保存されます。
-テストランナーは成功時のトークン消費を抑えるため、既定では件数と各構成の `PASS` だけを表示します。
+テストランナーは成功時のトークン消費を抑えるため、既定では件数、各構成の `PASS`、待機用の
+`WAIT_HINT` だけを表示します。成功したE2Eの所要時間は `target/test-artifacts/e2e-timings.tsv` に
+構成別の移動平均として保存されます。開始時は保存済み推定時間に30秒を加えて待機し、未完了なら
+残件の推定時間だけ待機します。履歴のない構成が含まれる場合、未知部分全体を180秒と見積もります。
+Minecraftサーバーの初回起動に入った後だけは1分間隔で確認します。短間隔の空ポーリング結果は
+コンテキストへ追加しません。キャッシュを削除すると初回推定へ戻ります。
 Maven の詳細は `target/test-artifacts/`、Docker の起動・停止ログは各成果物ディレクトリの
 `runner.log` に保存され、失敗したケースだけ診断に使用します。詳細を端末にも表示する場合は
 `STORAGESIGN_TEST_VERBOSE=1 ./scripts/test.sh <scope>` を実行してください。
