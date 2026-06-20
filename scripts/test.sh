@@ -8,6 +8,9 @@ COMPOSE_FILE="$ROOT_DIR/e2e/compose.yml"
 TEST_LOG_DIR="$ROOT_DIR/target/test-artifacts"
 TEST_VERBOSE="${STORAGESIGN_TEST_VERBOSE:-0}"
 FAILURE_TAIL_LINES="${STORAGESIGN_FAILURE_TAIL_LINES:-40}"
+TIMING_FILE="${STORAGESIGN_TIMING_FILE:-$TEST_LOG_DIR/e2e-timings.tsv}"
+TIMING_UNKNOWN_POOL_SECONDS=180
+TIMING_INITIAL_BUFFER_SECONDS=30
 
 usage() {
   cat >&2 <<'EOF'
@@ -20,6 +23,77 @@ Usage:
   ./scripts/test.sh all
 EOF
   exit 2
+}
+
+initialize_timing_cache() {
+  mkdir -p "$(dirname "$TIMING_FILE")"
+  if [ -f "$TIMING_FILE" ] && ! awk -F '\t' '
+    NF != 3 || $1 == "" || $2 !~ /^[0-9]+$/ || $2 < 1 \
+      || $3 !~ /^[0-9]+$/ || $3 < 1 { exit 1 }
+  ' "$TIMING_FILE"; then
+    local invalid_file="$TIMING_FILE.invalid.$(date +%s)"
+    mv "$TIMING_FILE" "$invalid_file"
+    echo "WARN timing-cache invalid=$invalid_file fallback_seconds=$TIMING_UNKNOWN_POOL_SECONDS" >&2
+  fi
+  [ -f "$TIMING_FILE" ] || : >"$TIMING_FILE"
+}
+
+timing_lookup() {
+  local key="$1"
+  awk -F '\t' -v key="$key" '$1 == key { print $2; found=1; exit } END { if (!found) exit 1 }' \
+    "$TIMING_FILE"
+}
+
+timing_record() {
+  local key="$1"
+  local actual_seconds="$2"
+  [ "$actual_seconds" -ge 1 ] || actual_seconds=1
+  local temp_file
+  temp_file="$(mktemp "$TIMING_FILE.tmp.XXXXXX")" || return 1
+  awk -F '\t' -v OFS='\t' -v key="$key" -v actual="$actual_seconds" '
+    $1 == key {
+      samples = $3 + 1
+      average = int((($2 * $3) + actual) / samples + 0.5)
+      print key, average, samples
+      found = 1
+      next
+    }
+    { print }
+    END { if (!found) print key, actual, 1 }
+  ' "$TIMING_FILE" >"$temp_file" && mv "$temp_file" "$TIMING_FILE"
+}
+
+timing_estimate() {
+  local total=0
+  local unknown=0
+  local key seconds
+  for key in "$@"; do
+    if seconds="$(timing_lookup "$key" 2>/dev/null)"; then
+      total=$((total + seconds))
+    else
+      unknown=1
+    fi
+  done
+  if [ "$unknown" -eq 1 ]; then
+    total=$((total + TIMING_UNKNOWN_POOL_SECONDS))
+    echo "$total fallback"
+  else
+    echo "$total saved"
+  fi
+}
+
+emit_wait_hint() {
+  local scope="$1"
+  local stage="$2"
+  local completed="$3"
+  local total="$4"
+  local buffer_seconds="$5"
+  shift 5
+  local remaining="$#"
+  [ "$remaining" -gt 0 ] || return 0
+  local estimate source
+  read -r estimate source <<<"$(timing_estimate "$@")"
+  echo "WAIT_HINT scope=$scope stage=$stage completed=$completed total=$total remaining=$remaining estimate_seconds=$estimate wait_seconds=$((estimate + buffer_seconds)) source=$source"
 }
 
 maven_root() {
@@ -227,6 +301,7 @@ run_e2e_version() {
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" build bot || result=1
   fi
   if [ "$result" -eq 0 ]; then
+    echo "WAIT_HINT scope=e2e stage=minecraft-startup version=$version logger=$logger_mode estimate_seconds=60 wait_seconds=60 source=fixed"
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build server || result=1
   fi
   if [ "$result" -eq 0 ] && ! wait_for_server; then
@@ -275,6 +350,8 @@ run_e2e() {
   local requested_mode="${2:-both}"
   local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
   local modes=()
+  local timing_keys=("prepare:e2e")
+  local completed=0
   local failed=0
 
   if [ -n "$requested" ]; then
@@ -287,10 +364,38 @@ run_e2e() {
     *) usage ;;
   esac
 
-  prepare_e2e_jars || return 1
+  local version logger_mode
   for version in "${versions[@]}"; do
     for logger_mode in "${modes[@]}"; do
-      run_e2e_version "$version" "$(paper_build "$version")" "$logger_mode" || failed=1
+      timing_keys+=("e2e:$version:$logger_mode")
+    done
+  done
+
+  initialize_timing_cache
+  local total="${#timing_keys[@]}"
+  emit_wait_hint e2e initial 0 "$total" "$TIMING_INITIAL_BUFFER_SECONDS" "${timing_keys[@]}"
+
+  local started actual result
+  started="$(date +%s)"
+  prepare_e2e_jars || return 1
+  actual=$(($(date +%s) - started))
+  timing_record "${timing_keys[0]}" "$actual"
+  completed=1
+  emit_wait_hint e2e remaining "$completed" "$total" 0 "${timing_keys[@]:$completed}"
+
+  for version in "${versions[@]}"; do
+    for logger_mode in "${modes[@]}"; do
+      started="$(date +%s)"
+      result=0
+      run_e2e_version "$version" "$(paper_build "$version")" "$logger_mode" || result=$?
+      actual=$(($(date +%s) - started))
+      if [ "$result" -eq 0 ]; then
+        timing_record "e2e:$version:$logger_mode" "$actual"
+      else
+        failed=1
+      fi
+      completed=$((completed + 1))
+      emit_wait_hint e2e remaining "$completed" "$total" 0 "${timing_keys[@]:$completed}"
     done
   done
   return "$failed"
@@ -298,12 +403,29 @@ run_e2e() {
 
 run_banner_compat() {
   local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
+  local timing_keys=("prepare:e2e")
   local runtime_dir="$ROOT_DIR/e2e/runtime/banner-upgrade"
   local artifact_root="$ROOT_DIR/e2e/artifacts/banner-upgrade"
   local project="storagesign-banner-upgrade"
+  local completed=0
   local result=0
 
+  local version
+  for version in "${versions[@]}"; do
+    timing_keys+=("banner:$version")
+  done
+  initialize_timing_cache
+  local total="${#timing_keys[@]}"
+  emit_wait_hint banner-compat initial 0 "$total" "$TIMING_INITIAL_BUFFER_SECONDS" "${timing_keys[@]}"
+
+  local started actual
+  started="$(date +%s)"
   prepare_e2e_jars || return 1
+  actual=$(($(date +%s) - started))
+  timing_record "${timing_keys[0]}" "$actual"
+  completed=1
+  emit_wait_hint banner-compat remaining "$completed" "$total" 0 "${timing_keys[@]:$completed}"
+
   rm -rf "$runtime_dir" "$artifact_root"
   mkdir -p "$runtime_dir/data" "$runtime_dir/plugins" "$artifact_root"
   cp "$ROOT_DIR/e2e/config/spigot.yml" "$runtime_dir/data/spigot.yml"
@@ -316,6 +438,7 @@ run_banner_compat() {
   export COMPOSE_PROJECT_NAME="$project"
 
   for version in "${versions[@]}"; do
+    started="$(date +%s)"
     local artifact_dir="$artifact_root/$version"
     local runner_log="$artifact_dir/runner.log"
     local phase="banner-upgrade"
@@ -328,6 +451,7 @@ run_banner_compat() {
 
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" build bot || result=1
     if [ "$result" -eq 0 ]; then
+      echo "WAIT_HINT scope=banner-compat stage=minecraft-startup version=$version estimate_seconds=60 wait_seconds=60 source=fixed"
       run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build server || result=1
     fi
     if [ "$result" -eq 0 ] && ! wait_for_server; then result=1; fi
@@ -345,11 +469,15 @@ run_banner_compat() {
       echo "diagnose: $artifact_dir/bot.log $artifact_dir/paper.log" >&2
       return 1
     fi
+    actual=$(($(date +%s) - started))
+    timing_record "banner:$version" "$actual"
+    completed=$((completed + 1))
     if [ "$phase" = "banner-seed" ]; then
       echo "PASS banner-compat version=$version phase=$phase persisted=passed"
     else
       echo "PASS banner-compat version=$version phase=$phase import=passed reexport=passed"
     fi
+    emit_wait_hint banner-compat remaining "$completed" "$total" 0 "${timing_keys[@]:$completed}"
   done
 }
 

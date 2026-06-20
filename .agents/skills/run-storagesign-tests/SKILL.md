@@ -33,7 +33,11 @@ Run the selected command to completion. The E2E suite starts real Paper servers 
 
 ### Minimize context use
 
-- Start long-running test commands with the longest practical initial yield. If the command continues, wait up to five minutes per poll. Never poll a quiet E2E run every few seconds.
+- For E2E and banner compatibility, read the runner's latest `WAIT_HINT`. On `stage=initial`, wait exactly `wait_seconds`, which already includes the saved total estimate plus a 30-second buffer.
+- When the latest hint is `stage=minecraft-startup`, wait exactly one minute. This fixed startup interval overrides the broader initial or remaining estimate until the server either starts or reports failure.
+- If the command is still running after the initial wait, use the newest `stage=remaining` hint and wait exactly its `wait_seconds`. Repeat from the newest remaining hint until the command exits or fails.
+- Keep repeated process waits inside one orchestration call whenever possible. Do not emit empty intermediate polls into model context. If no `WAIT_HINT` is available, use one three-minute fallback wait.
+- If one tool wait is capped below `wait_seconds`, consume the requested duration through consecutive capped waits inside that same orchestration call rather than returning each empty wait to the model.
 - During implementation, run only the narrowest affected scope. After it passes, run the requested final scope once; do not rerun already successful scopes separately when `all` will immediately repeat them.
 - If a final `all` run is planned, do not run a separate `coverage` pass unless coverage itself is being debugged.
 - Preserve the structured `PASS` lines for the final report, but do not open successful artifacts or request verbose output.
@@ -41,6 +45,7 @@ Run the selected command to completion. The E2E suite starts real Paper servers 
 
 The runner is quiet by default. A successful run prints only structured `PASS` summaries; do not read the saved Maven, runner, bot, Paper, or coverage detail files after success. Set `STORAGESIGN_TEST_VERBOSE=1` only when the user explicitly asks for live detailed output.
 Failure excerpts default to 40 lines. Increase `STORAGESIGN_FAILURE_TAIL_LINES` only when those lines do not contain the first actionable cause.
+Successful E2E durations are averaged in `target/test-artifacts/e2e-timings.tsv`. Do not read or report that cache unless timing behavior itself is under diagnosis.
 
 On failure, start with the failed scope/version/mode named by the runner. Do not read logs for successful cases. Maven logs are under `target/test-artifacts/`; each E2E artifact directory also contains `runner.log` for Docker lifecycle failures.
 
