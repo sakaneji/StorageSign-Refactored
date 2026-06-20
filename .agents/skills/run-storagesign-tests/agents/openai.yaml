@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run StorageSign Tests"
+  short_description: "Run Logger-matrix and multi-version StorageSign tests"
+  default_prompt: "Use $run-storagesign-tests to run and report the appropriate StorageSign tests, including Logger and ominous-banner compatibility checks."

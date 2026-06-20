@@ -37,7 +37,7 @@ class OminousBannerRetryTest {
         ArgumentCaptor<Runnable> runnable = ArgumentCaptor.forClass(Runnable.class);
         StorageSignPlugin plugin = mock(StorageSignPlugin.class, CALLS_REAL_METHODS);
 
-        when(scheduler.runTaskTimer(any(Plugin.class), runnable.capture(), eq(1L), eq(100L)))
+        when(scheduler.runTaskLater(any(Plugin.class), runnable.capture(), eq(1L)))
             .thenReturn(task);
 
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
@@ -47,12 +47,12 @@ class OminousBannerRetryTest {
             invoke(plugin, "scheduleOminousBannerRetry");
 
             verify(scheduler, times(1))
-                .runTaskTimer(any(Plugin.class), any(Runnable.class), eq(1L), eq(100L));
+                .runTaskLater(any(Plugin.class), any(Runnable.class), eq(1L));
 
             setCachedMeta(mock(BannerMeta.class));
             runnable.getValue().run();
 
-            verify(task).cancel();
+            verify(task, times(0)).cancel();
         }
     }
 
@@ -66,7 +66,7 @@ class OminousBannerRetryTest {
         Function<Boolean, BannerMeta> factory = mock(Function.class);
         BannerMeta recovered = mock(BannerMeta.class);
 
-        when(scheduler.runTaskTimer(any(Plugin.class), runnable.capture(), eq(1L), eq(100L)))
+        when(scheduler.runTaskLater(any(Plugin.class), runnable.capture(), eq(1L)))
             .thenReturn(task);
         when(factory.apply(false)).thenReturn(recovered);
         when(recovered.clone()).thenReturn(recovered);
@@ -81,7 +81,7 @@ class OminousBannerRetryTest {
 
             assertSame(recovered, getCachedMeta());
             verify(factory).apply(false);
-            verify(task).cancel();
+            verify(task, times(0)).cancel();
         }
     }
 

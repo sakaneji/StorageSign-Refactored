@@ -513,14 +513,13 @@ public final class StorageSign {
                 }
                 return item;
             }
-            LOG.warning("getContents", "不吉なバナーのメタが null — レイドバナーを再構築できません");
             return null;
         }
 
         // ── 打ち上げ花火（power を damage に保管; power=1 → damage=0）────────────
         if (material == Material.FIREWORK_ROCKET) {
             ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-            // damage フィールドに花火 power を保管; 21.4 互換のため power=1 は damage=0 のまま保持。
+            // damage フィールドに花火 power を保管し、既存データ互換のため power=1 は 0 のまま保持。
             if (damage > 1 && item.getItemMeta() instanceof FireworkMeta fireworkMeta) {
                 fireworkMeta.setPower(damage);
                 item.setItemMeta(fireworkMeta);
@@ -605,11 +604,9 @@ public final class StorageSign {
         if (material == Material.WHITE_BANNER && damage == 8) {
             if (!(meta instanceof BannerMeta bm)) return false;
             BannerMeta ominous = StorageSignPlugin.getOminousBannerMeta();
-            if (ominous == null) return false;
-            if (bm.equals(ominous)) return true;
-            // バージョン差分でコンポーネント表現が変わっても、実パターン一致なら互換として許容する。
-            return bm.numberOfPatterns() == ominous.numberOfPatterns()
-                && bm.getPatterns().equals(ominous.getPatterns());
+            if (ominous != null && bm.equals(ominous)) return true;
+            // テンプレート生成が縮退中でも、標準レジストリキーの8模様なら受け入れる。
+            return StorageSignPlugin.isOminousBannerMeta(bm);
         }
 
         // 看板アイテム: damage=1 のときは看板マテリアルのみ対象とし、ダメージ値が偶然

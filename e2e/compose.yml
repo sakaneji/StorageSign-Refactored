@@ -38,6 +38,7 @@ services:
       MC_PORT: "25565"
       MC_VERSION: ${MC_VERSION:-1.21.4}
       E2E_PHASE: ${E2E_PHASE:-main}
+      LOGGER_MODE: ${LOGGER_MODE:-without-logger}
       E2E_TIMEOUT_MS: "45000"
     depends_on:
       server:

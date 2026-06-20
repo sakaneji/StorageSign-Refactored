@@ -1,29 +1,25 @@
 package storagesign;
 
-import java.util.logging.Level;
 import java.util.function.Function;
 import org.bukkit.Bukkit;
-import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.block.banner.Pattern;
-import org.bukkit.block.banner.PatternType;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.recipe.CraftingBookCategory;
 import org.bukkit.inventory.meta.BannerMeta;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import storagesign.compat.ItemMetaDecorationAdapter;
+import storagesign.compat.OminousBannerCodec;
+import storagesign.compat.SignEditGuard;
 import storagesign.listener.BlockEventListener;
 import storagesign.listener.CraftListener;
 import storagesign.listener.EntityListener;
 import storagesign.listener.InventoryListener;
 import storagesign.listener.PlayerInteractListener;
-import storagesign.listener.SignEditListenerFactory;
 import storagesign.listener.SignPhysicsListener;
 import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
@@ -46,10 +42,12 @@ public class StorageSignPlugin extends JavaPlugin {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignPlugin.class);
     private static final long OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS = 1L;
-    private static final long OMINOUS_BANNER_RETRY_PERIOD_TICKS = 100L;
+    private static final OminousBannerCodec OMINOUS_BANNER_CODEC = new OminousBannerCodec();
+    private static final ItemMetaDecorationAdapter ITEM_META_DECORATOR = new ItemMetaDecorationAdapter();
 
     private BukkitTask ominousBannerRetryTask;
-    private int ominousBannerRetryAttempts;
+    private boolean ominousBannerNameAvailable = true;
+    private boolean ominousBannerTooltipAvailable = true;
     private Function<Boolean, BannerMeta> ominousBannerMetaFactory = this::createOminousBannerMetaByApi;
 
     /**
@@ -109,46 +107,42 @@ public class StorageSignPlugin extends JavaPlugin {
             setOminousBannerMeta(apiMeta);
             LOG.info("loadOminousBanner", "レイドバナーメタを API でロードしました ("
                              + apiMeta.numberOfPatterns() + " パターン)");
+            logDegradedBannerDecorations();
             return;
         }
 
-        LOG.warning("loadOminousBanner",
-            "API でレイドバナーを構築できませんでした。復旧するまで自動的に再試行します");
         scheduleOminousBannerRetry();
     }
 
     private void scheduleOminousBannerRetry() {
         if (ominousBannerRetryTask != null) return;
 
-        ominousBannerRetryAttempts = 0;
-        ominousBannerRetryTask = Bukkit.getScheduler().runTaskTimer(
+        ominousBannerRetryTask = Bukkit.getScheduler().runTaskLater(
             this,
             () -> {
+                ominousBannerRetryTask = null;
                 // 実物の不吉な旗を未登録 SS に登録して先に復旧した場合も終了する。
-                if (getOminousBannerMeta() != null) {
-                    cancelOminousBannerRetry();
+                if (getOminousBannerMeta() != null) return;
+
+                BannerMeta recovered = ominousBannerMetaFactory.apply(false);
+                if (recovered == null) {
+                    LOG.warning("retryOminousBanner",
+                        "不吉な旗の生成APIが利用できないため、旗の搬出だけを無効化しました");
                     return;
                 }
 
-                ominousBannerRetryAttempts++;
-                BannerMeta recovered = ominousBannerMetaFactory.apply(false);
-                if (recovered == null) return;
-
                 setOminousBannerMeta(recovered);
                 LOG.info("retryOminousBanner",
-                    "レイドバナーメタを API で復旧しました (試行回数: "
-                        + ominousBannerRetryAttempts + ")");
-                cancelOminousBannerRetry();
+                    "レイドバナーメタを API で次tickに復旧しました");
+                logDegradedBannerDecorations();
             },
-            OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS,
-            OMINOUS_BANNER_RETRY_PERIOD_TICKS
+            OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS
         );
     }
 
     private void cancelOminousBannerRetry() {
         BukkitTask task = ominousBannerRetryTask;
         ominousBannerRetryTask = null;
-        ominousBannerRetryAttempts = 0;
         if (task != null) task.cancel();
     }
 
@@ -158,113 +152,47 @@ public class StorageSignPlugin extends JavaPlugin {
      */
     private BannerMeta createOminousBannerMetaByApi(boolean logFailureAsWarning) {
         try {
-            ItemStack banner = new ItemStack(Material.WHITE_BANNER);
-            ItemMeta itemMeta = banner.getItemMeta();
-            if (!(itemMeta instanceof BannerMeta bm)) return null;
-
-            bm.setPatterns(java.util.List.of(
-                createBannerPattern(DyeColor.CYAN, "RHOMBUS", "RHOMBUS_MIDDLE"),
-                createBannerPattern(DyeColor.LIGHT_GRAY, "STRIPE_BOTTOM"),
-                createBannerPattern(DyeColor.GRAY, "STRIPE_CENTER"),
-                createBannerPattern(DyeColor.LIGHT_GRAY, "BORDER"),
-                createBannerPattern(DyeColor.BLACK, "STRIPE_MIDDLE"),
-                createBannerPattern(DyeColor.LIGHT_GRAY, "HALF_HORIZONTAL"),
-                createBannerPattern(DyeColor.LIGHT_GRAY, "CIRCLE", "CIRCLE_MIDDLE"),
-                createBannerPattern(DyeColor.BLACK, "BORDER")
-            ));
-            return normalizeOminousBannerMeta(bm);
+            BannerMeta meta = OMINOUS_BANNER_CODEC.create();
+            if (meta == null) return null;
+            BannerMeta normalized = (BannerMeta) meta.clone();
+            ItemMetaDecorationAdapter.DecorationResult result =
+                ITEM_META_DECORATOR.decorateOminousBanner(normalized);
+            ominousBannerNameAvailable = result.nameAvailable();
+            ominousBannerTooltipAvailable = result.tooltipAvailable();
+            return normalized;
         } catch (Throwable e) {
-            if (logFailureAsWarning) {
-                LOG.log(Level.WARNING, "createOminousBannerMetaByApi",
-                    "API 経由でレイドバナー構築に失敗しました", e);
-            } else {
-                LOG.debug("createOminousBannerMetaByApi",
-                    () -> "レイドバナー復旧の再試行に失敗しました: "
-                        + e.getClass().getSimpleName() + ": " + e.getMessage());
-            }
+            LOG.debug("createOminousBannerMetaByApi",
+                () -> "レイドバナー構築に失敗しました: "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
         return null;
     }
 
+    private void logDegradedBannerDecorations() {
+        if (!ominousBannerNameAvailable) {
+            LOG.warning("loadOminousBanner",
+                "不吉な旗の名前APIが利用できないため、名前装飾だけを無効化しました");
+        }
+        if (!ominousBannerTooltipAvailable) {
+            LOG.warning("loadOminousBanner",
+                "不吉な旗のツールチップAPIが利用できないため、非表示装飾だけを無効化しました");
+        }
+    }
+
     /** バニラ Java Edition の不吉な旗の 8 模様と完全に一致するか検証する。 */
     public static boolean isOminousBannerMeta(BannerMeta meta) {
-        if (meta == null || meta.numberOfPatterns() != 8) return false;
-        java.util.List<Pattern> patterns = meta.getPatterns();
-        return isOminousBannerPatterns(
-            patterns.stream().map(Pattern::getColor).toList(),
-            patterns.stream().map(pattern -> pattern.getPattern().name()).toList()
-        );
-    }
-
-    static boolean isOminousBannerPatterns(java.util.List<DyeColor> colors,
-                                            java.util.List<String> typeNames) {
-        if (colors.size() != 8 || typeNames.size() != 8) return false;
-        return colors.equals(java.util.List.of(
-                DyeColor.CYAN, DyeColor.LIGHT_GRAY, DyeColor.GRAY, DyeColor.LIGHT_GRAY,
-                DyeColor.BLACK, DyeColor.LIGHT_GRAY, DyeColor.LIGHT_GRAY, DyeColor.BLACK
-            ))
-            && matchesType(typeNames.get(0), "RHOMBUS", "RHOMBUS_MIDDLE")
-            && matchesType(typeNames.get(1), "STRIPE_BOTTOM")
-            && matchesType(typeNames.get(2), "STRIPE_CENTER")
-            && matchesType(typeNames.get(3), "BORDER")
-            && matchesType(typeNames.get(4), "STRIPE_MIDDLE")
-            && matchesType(typeNames.get(5), "HALF_HORIZONTAL")
-            && matchesType(typeNames.get(6), "CIRCLE", "CIRCLE_MIDDLE")
-            && matchesType(typeNames.get(7), "BORDER");
-    }
-
-    private static boolean matchesType(String actual, String... candidates) {
-        return java.util.Arrays.asList(candidates).contains(actual);
+        try {
+            return OMINOUS_BANNER_CODEC.matches(meta);
+        } catch (LinkageError | RuntimeException e) {
+            return false;
+        }
     }
 
     /** 模様だけで構築した場合でも、通常の White Banner 名で搬出されないようにする。 */
     private static BannerMeta normalizeOminousBannerMeta(BannerMeta source) {
         BannerMeta normalized = (BannerMeta) source.clone();
-        if (!normalized.hasItemName() && !normalized.hasDisplayName()) {
-            if (!setTranslatableOminousBannerName(normalized)) {
-                // Spigot には Adventure Component 版 itemName API がないため、
-                // Paper API が利用できない場合のみ固定名にフォールバックする。
-                normalized.setItemName("§6Ominous Banner");
-            }
-        }
-        normalized.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+        ITEM_META_DECORATOR.decorateOminousBanner(normalized);
         return normalized;
-    }
-
-    /** Paper 上ではバニラと同じ翻訳キーを使い、各クライアント言語で表示する。 */
-    private static boolean setTranslatableOminousBannerName(BannerMeta meta) {
-        try {
-            Class<?> componentClass = Class.forName("net.kyori.adventure.text.Component");
-            Class<?> textColorClass = Class.forName("net.kyori.adventure.text.format.TextColor");
-            Class<?> namedTextColorClass = Class.forName("net.kyori.adventure.text.format.NamedTextColor");
-
-            Object component = componentClass.getMethod("translatable", String.class)
-                .invoke(null, "block.minecraft.ominous_banner");
-            Object gold = namedTextColorClass.getField("GOLD").get(null);
-            component = componentClass.getMethod("color", textColorClass).invoke(component, gold);
-
-            ItemMeta.class.getMethod("itemName", componentClass).invoke(meta, component);
-            return true;
-        } catch (ReflectiveOperationException | LinkageError e) {
-            return false;
-        }
-    }
-
-    private Pattern createBannerPattern(DyeColor color, String... candidateNames) {
-        return new Pattern(color, resolvePatternType(candidateNames));
-    }
-
-    private PatternType resolvePatternType(String... candidateNames) {
-        for (String candidateName : candidateNames) {
-            try {
-                return PatternType.valueOf(candidateName);
-            } catch (IllegalArgumentException ignored) {
-                // バージョン差分で enum 名が変わるため、候補を順に試す。
-            }
-        }
-        throw new IllegalStateException(
-            "Unsupported banner pattern type names: " + java.util.Arrays.toString(candidateNames)
-        );
     }
 
     // ── クラフトレシピ ──────────────────────────────────────────────────────────────
@@ -310,7 +238,7 @@ public class StorageSignPlugin extends JavaPlugin {
         pm.registerEvents(new InventoryListener(this), this);
         pm.registerEvents(new EntityListener(), this);
         pm.registerEvents(new CraftListener(), this);
-        SignEditListenerFactory.register(this);
+        new SignEditGuard().register(this);
 
         if (ConfigLoader.getNoBud()) {
             pm.registerEvents(new SignPhysicsListener(), this);

@@ -6,7 +6,7 @@ depend: [StorageSign-Refactored]
 commands:
   sstest:
     description: Prepare and inspect StorageSign E2E scenarios.
-    usage: /sstest <reset|inspect|drop|place|sneak> [scenario|value]
+    usage: /sstest <reset|inspect|drop|place|sneak|stash|unstash|interact> [scenario|value]
     permission: sstest.admin
 permissions:
   sstest.admin:

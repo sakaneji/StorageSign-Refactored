@@ -1,4 +1,8 @@
 config-version: 12
+commands:
+  spam-exclusions:
+    - /sstest
+    - /ssgive
 world-settings:
   default:
     hopper-amount: 64

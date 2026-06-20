@@ -4,6 +4,7 @@ import { Vec3 } from 'vec3'
 
 const version = process.env.MC_VERSION ?? '1.21.4'
 const phase = process.env.E2E_PHASE ?? 'main'
+const loggerMode = process.env.LOGGER_MODE ?? 'without-logger'
 const host = process.env.MC_HOST ?? 'server'
 const port = Number(process.env.MC_PORT ?? 25565)
 const timeoutMs = Number(process.env.E2E_TIMEOUT_MS ?? 30000)
@@ -69,6 +70,11 @@ async function equip(name) {
   await sleep(150)
 }
 
+async function emptyHand() {
+  await bot.unequip('hand')
+  await sleep(150)
+}
+
 async function placeStorageSign(scenario, identifier, amount) {
   await reset(scenario)
   bot.chat(`/ssgive ${identifier} ${amount} OAK_SIGN`)
@@ -115,7 +121,39 @@ async function runCase(name, body) {
   process.stdout.write(`PASS ${name}\n`)
 }
 
+function assertBannerCoreMetadata(state) {
+  const patterns = state.bannerPatterns.split('|').map(pattern => pattern.split(':'))
+  assert.deepEqual(patterns.map(([color]) => color), [
+    'CYAN', 'LIGHT_GRAY', 'GRAY', 'LIGHT_GRAY',
+    'BLACK', 'LIGHT_GRAY', 'LIGHT_GRAY', 'BLACK'
+  ])
+  const types = patterns.map(([, type]) => type)
+  assert.ok(['RHOMBUS', 'RHOMBUS_MIDDLE'].includes(types[0]), `Unexpected rhombus type: ${types[0]}`)
+  assert.deepEqual(types.slice(1, 6), [
+    'STRIPE_BOTTOM', 'STRIPE_CENTER', 'BORDER', 'STRIPE_MIDDLE', 'HALF_HORIZONTAL'
+  ])
+  assert.ok(['CIRCLE', 'CIRCLE_MIDDLE'].includes(types[6]), `Unexpected circle type: ${types[6]}`)
+  assert.equal(types[7], 'BORDER')
+  assert.equal(state.bannerNamePresent, true)
+}
+
+function assertBannerMetadata(state) {
+  assertBannerCoreMetadata(state)
+  assert.equal(state.bannerTooltipHidden, true)
+}
+
+async function assertLoggerEnvironment() {
+  const state = await inspect('environment')
+  const expected = loggerMode === 'with-logger'
+  assert.equal(state.loggerPluginEnabled, expected,
+    `Logger plugin state did not match ${loggerMode}`)
+  assert.equal(state.externalLoggerRegistered, expected,
+    `StorageSign external Logger registration did not match ${loggerMode}`)
+}
+
 async function runMainSuite() {
+  await runCase(`logger environment ${loggerMode}`, assertLoggerEnvironment)
+
   await runCase('client placement', async () => {
     const state = await placeStorageSign('client', 'STONE', 128)
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '128'])
@@ -209,9 +247,22 @@ async function runMainSuite() {
     assert.ok(state.lines[1].startsWith('POTION:'))
   })
 
-  await runCase('ominous banner placement', async () => {
-    const state = await placeStorageSign('special-banner', 'WHITE_BANNER:8', 2)
+  await runCase('ominous banner round trip', async () => {
+    let state = await placeStorageSign('special-banner', 'WHITE_BANNER:8', 2)
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'WHITE_BANNER:8', '2'])
+
+    await emptyHand()
+    await activateSign()
+    state = await inspect('special-banner')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerOminousBanners, 2)
+    assertBannerMetadata(state)
+
+    await equip('white_banner')
+    await activateSign({ sneak: true })
+    state = await inspect('special-banner')
+    assert.equal(state.lines[2], '2')
+    assert.equal(state.playerOminousBanners, 0)
   })
 
   await runCase('prepare restart persistence', async () => {
@@ -222,9 +273,81 @@ async function runMainSuite() {
 }
 
 async function runRestartCheck() {
+  await runCase(`logger environment after restart ${loggerMode}`, assertLoggerEnvironment)
   await runCase('restart persistence', async () => {
     const state = await inspect('restart')
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
+  })
+}
+
+async function runBannerSeed() {
+  await runCase('banner upgrade seed', async () => {
+    await assertLoggerEnvironment()
+    let state = await placeStorageSign('banner-upgrade-seed', 'WHITE_BANNER:8', 2)
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'WHITE_BANNER:8', '2'])
+
+    await emptyHand()
+    await activateSign()
+    state = await inspect('banner-upgrade')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerOminousBanners, 2)
+    assertBannerMetadata(state)
+
+    await command('/sstest stash banner-upgrade', 'SSTEST STASHED banner-upgrade')
+    await equip('white_banner')
+    await activateSign({ sneak: true })
+    state = await inspect('banner-upgrade')
+    assert.equal(state.lines[2], '1')
+    assert.equal(state.playerOminousBanners, 0)
+    assert.equal(state.chestOminousBanners, 1)
+    assertBannerMetadata(state)
+  })
+}
+
+async function runBannerUpgrade() {
+  await runCase(`banner upgrade from persisted world to ${version}`, async () => {
+    await assertLoggerEnvironment()
+    let state = await inspect('banner-upgrade')
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'WHITE_BANNER:8', '1'])
+    assert.equal(state.chestOminousBanners, 1)
+    // Minecraft's data fixer may drop legacy tooltip-hiding flags while upgrading
+    // an ItemStack. Pattern identity and the ominous name are the compatibility
+    // contract; a fresh export below must restore the current-version flag.
+    assertBannerCoreMetadata(state)
+
+    await command('/sstest unstash banner-upgrade', 'SSTEST UNSTASHED banner-upgrade')
+    await sleep(300)
+    await equip('white_banner')
+    state = await inspect('banner-upgrade')
+    assert.equal(state.heldType, 'WHITE_BANNER')
+    assert.equal(state.storageSignAcceptsHeld, true)
+    await activateSign({ sneak: true })
+    state = await inspect('banner-upgrade')
+    if (state.lines[2] === '1') {
+      process.stdout.write('Mineflayer upgrade interaction was not acknowledged; exercising PlayerInteractEvent fallback\n')
+      await command('/sstest sneak true', 'SSTEST SNEAK true')
+      await command('/sstest interact banner-upgrade', 'SSTEST INTERACTED banner-upgrade')
+      await command('/sstest sneak false', 'SSTEST SNEAK false')
+      state = await inspect('banner-upgrade')
+    }
+    assert.equal(state.lines[2], '2')
+    assert.equal(state.chestOminousBanners, 0)
+
+    await emptyHand()
+    await activateSign()
+    state = await inspect('banner-upgrade')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerOminousBanners, 2)
+    assertBannerMetadata(state)
+
+    await command('/sstest stash banner-upgrade', 'SSTEST STASHED banner-upgrade')
+    await equip('white_banner')
+    await activateSign({ sneak: true })
+    state = await inspect('banner-upgrade')
+    assert.equal(state.lines[2], '1')
+    assert.equal(state.playerOminousBanners, 0)
+    assert.equal(state.chestOminousBanners, 1)
+    assertBannerMetadata(state)
   })
 }
 
@@ -238,15 +361,17 @@ async function main() {
   })
   await sleep(750)
   if (phase === 'restart') await runRestartCheck()
+  else if (phase === 'banner-seed') await runBannerSeed()
+  else if (phase === 'banner-upgrade') await runBannerUpgrade()
   else await runMainSuite()
   bot.quit('E2E complete')
 }
 
 main().then(() => {
-  process.stdout.write(`E2E PASS minecraft=${version} phase=${phase}\n`)
+  process.stdout.write(`E2E PASS minecraft=${version} phase=${phase} logger=${loggerMode}\n`)
   process.exitCode = 0
 }).catch(error => {
-  process.stderr.write(`E2E FAIL minecraft=${version} phase=${phase}\n${error.stack ?? error}\n`)
+  process.stderr.write(`E2E FAIL minecraft=${version} phase=${phase} logger=${loggerMode}\n${error.stack ?? error}\n`)
   try { bot.quit('E2E failed') } catch {}
   process.exitCode = 1
 })

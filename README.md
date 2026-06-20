@@ -247,24 +247,39 @@ target/StorageSign-Refactored-<version>.jar
 # MockBukkit でプラグイン全体をロードする統合テスト
 ./scripts/test.sh integration
 
-# Paper 1.21.4 / 1.21.8 / 1.21.11 の実クライアント E2E
+# Paper 1.21.4 / 1.21.8 / 1.21.11 を Logger なし・ありで E2E
 ./scripts/test.sh e2e
 
-# 指定した 1 バージョンだけ E2E を実行
-./scripts/test.sh e2e 1.21.8
+# 指定したバージョン・Logger 構成だけ E2E を実行
+./scripts/test.sh e2e 1.21.8 with-logger
+./scripts/test.sh e2e 1.21.8 without-logger
+
+# 同一ワールドを 1.21.4 → 1.21.8 → 1.21.11 と更新して不吉な旗を検証
+./scripts/test.sh banner-compat
 
 # 上記をすべて実行
 ./scripts/test.sh all
 ```
 
-E2E は Paper と Mineflayer クライアントを Docker Compose で起動し、右クリック、
+E2E は Paper と Mineflayer クライアントを Docker Compose で起動し、外部 Logger の
+未導入時フォールバックと導入時の登録状態、右クリック、
 スニーク、ホッパー搬送、ホッパー付きトロッコ、自動収集、特殊アイテム、
 サーバー再起動後の永続性を実際のゲーム tick とパケット経路で検証します。
+不吉な旗は実物の BannerMeta を搬出・再取込し、8 模様の色と種類、名前、ツールチップ
+フラグを各バージョンで検証します。`banner-compat` は旧版で保存した旗と StorageSign を
+同一ワールドの次バージョンで読み込み、再取込・再搬出できることを確認します。
 StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看板の設置応答を扱えない場合、
 テストハーネスから実際の `BlockPlaceEvent` を発火して設置リスナーを検証します。
 テストサーバーは localhost 限定のオフラインモードで、実 Minecraft アカウントは不要です。
 
-失敗時の Paper ログとボットログは `e2e/artifacts/<version>/` に保存されます。
+通常E2Eのログは `e2e/artifacts/<version>/<logger-mode>/`、アップグレードテストは
+`e2e/artifacts/banner-upgrade/<version>/` に保存されます。
+テストランナーは成功時のトークン消費を抑えるため、既定では件数と各構成の `PASS` だけを表示します。
+Maven の詳細は `target/test-artifacts/`、Docker の起動・停止ログは各成果物ディレクトリの
+`runner.log` に保存され、失敗したケースだけ診断に使用します。詳細を端末にも表示する場合は
+`STORAGESIGN_TEST_VERBOSE=1 ./scripts/test.sh <scope>` を実行してください。
+アップグレード時にMinecraftのデータ更新が旧旗のツールチップ非表示フラグを削除する場合は、
+8模様と名前による互換性、StorageSignへの再取込、現行版で再搬出した旗へのフラグ再付与を検証します。
 テスト用ハーネスは別 JAR であり、本番の StorageSign JAR には含まれません。
 
 Spigot は自動 E2E の対象外です。リリース前には 1.21.4 と最新対応版で、起動、

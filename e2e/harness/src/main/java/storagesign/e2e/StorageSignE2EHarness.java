@@ -5,11 +5,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.bukkit.Bukkit;
+import org.bukkit.DyeColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.banner.Pattern;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Container;
 import org.bukkit.block.Hopper;
@@ -23,9 +26,14 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.minecart.HopperMinecart;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BannerMeta;
 import org.bukkit.permissions.PermissionAttachment;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
@@ -67,6 +75,18 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                     player.setSneaking(Boolean.parseBoolean(scenario));
                     player.sendMessage("SSTEST SNEAK " + scenario);
                 }
+                case "stash" -> {
+                    stashOminousBanner(player);
+                    player.sendMessage("SSTEST STASHED " + scenario);
+                }
+                case "unstash" -> {
+                    unstashOminousBanner(player);
+                    player.sendMessage("SSTEST UNSTASHED " + scenario);
+                }
+                case "interact" -> {
+                    interactWithStorageSign(player);
+                    player.sendMessage("SSTEST INTERACTED " + scenario);
+                }
                 default -> { return false; }
             }
         } catch (RuntimeException e) {
@@ -87,7 +107,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         player.teleport(new Location(world, 0.5, BASE_Y, 2.5, 180f, 0f));
 
         switch (scenario) {
-            case "client", "special-potion", "special-banner" ->
+            case "client", "special-potion", "special-banner", "banner-upgrade-seed" ->
                 world.getBlockAt(0, BASE_Y - 1, 0).setType(Material.STONE);
             case "manual-export" -> createStorageSign(world, 0, BASE_Y, 0, "STONE", 128);
             case "manual-import" -> {
@@ -255,6 +275,9 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         int minecartStone = world.getEntitiesByClass(HopperMinecart.class).stream()
             .mapToInt(cart -> count(cart.getInventory().getContents(), Material.STONE))
             .sum();
+        ItemStack playerBanner = findOminousBanner(player.getInventory().getContents());
+        ItemStack chestBanner = bannerChestItem(world);
+        ItemStack inspectedBanner = playerBanner != null ? playerBanner : chestBanner;
         String heldLore = heldLore(player);
         return "{\"scenario\":\"" + escape(scenario) + "\","
             + "\"lines\":" + jsonArray(lines) + ","
@@ -264,8 +287,173 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"chestStone\":" + chestStone + ","
             + "\"hopperStone\":" + hopperStone + ","
             + "\"minecartStone\":" + minecartStone + ","
+            + "\"playerOminousBanners\":"
+            + countOminousBanners(player.getInventory().getContents()) + ","
+            + "\"chestOminousBanners\":" + ominousBannerAmount(chestBanner) + ","
+            + "\"bannerPatterns\":\"" + escape(bannerPatternSignature(inspectedBanner)) + "\","
+            + "\"bannerNamePresent\":" + bannerNamePresent(inspectedBanner) + ","
+            + "\"bannerTooltipHidden\":" + bannerTooltipHidden(inspectedBanner) + ","
+            + "\"loggerPluginEnabled\":" + loggerPluginEnabled() + ","
+            + "\"externalLoggerRegistered\":" + externalLoggerRegistered() + ","
+            + "\"heldType\":\"" + player.getInventory().getItemInMainHand().getType().name() + "\","
+            + "\"storageSignAcceptsHeld\":" + storageSignAcceptsHeld(player) + ","
             + "\"canPlace\":" + player.hasPermission("storagesign.place") + ","
             + "\"heldLore\":\"" + escape(heldLore) + "\"}";
+    }
+
+    private static void stashOminousBanner(Player player) {
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack item = contents[slot];
+            if (!isOminousBanner(item)) continue;
+
+            ItemStack single = item.clone();
+            single.setAmount(1);
+            if (item.getAmount() == 1) {
+                player.getInventory().setItem(slot, null);
+            } else {
+                item.setAmount(item.getAmount() - 1);
+                player.getInventory().setItem(slot, item);
+            }
+
+            Block chestBlock = player.getWorld().getBlockAt(2, BASE_Y, 0);
+            chestBlock.setType(Material.CHEST);
+            ((Chest) chestBlock.getState()).getInventory().setItem(0, single);
+            return;
+        }
+        throw new IllegalStateException("Player has no compatible ominous banner");
+    }
+
+    private static void unstashOminousBanner(Player player) {
+        Block chestBlock = player.getWorld().getBlockAt(2, BASE_Y, 0);
+        if (!(chestBlock.getState() instanceof Chest chest)) {
+            throw new IllegalStateException("Upgrade banner chest is missing");
+        }
+        ItemStack banner = findOminousBanner(chest.getInventory().getContents());
+        if (banner == null) throw new IllegalStateException("Upgrade chest has no ominous banner");
+
+        ItemStack single = banner.clone();
+        single.setAmount(1);
+        chest.getInventory().removeItem(single);
+        int hotbarSlot = 0;
+        while (hotbarSlot < 9 && player.getInventory().getItem(hotbarSlot) != null) hotbarSlot++;
+        if (hotbarSlot == 9) throw new IllegalStateException("Player hotbar is full");
+        player.getInventory().setItem(hotbarSlot, single);
+        player.getInventory().setHeldItemSlot(hotbarSlot);
+    }
+
+    private static void interactWithStorageSign(Player player) {
+        Block sign = player.getWorld().getBlockAt(0, BASE_Y, 0);
+        PlayerInteractEvent event = new PlayerInteractEvent(
+            player,
+            Action.RIGHT_CLICK_BLOCK,
+            player.getInventory().getItemInMainHand(),
+            sign,
+            BlockFace.SOUTH,
+            EquipmentSlot.HAND
+        );
+        Bukkit.getPluginManager().callEvent(event);
+    }
+
+    private static ItemStack bannerChestItem(World world) {
+        Block block = world.getBlockAt(2, BASE_Y, 0);
+        if (!(block.getState() instanceof Chest chest)) return null;
+        return findOminousBanner(chest.getInventory().getContents());
+    }
+
+    private static ItemStack findOminousBanner(ItemStack[] items) {
+        for (ItemStack item : items) {
+            if (isOminousBanner(item)) return item;
+        }
+        return null;
+    }
+
+    private static int countOminousBanners(ItemStack[] items) {
+        int total = 0;
+        for (ItemStack item : items) total += ominousBannerAmount(item);
+        return total;
+    }
+
+    private static int ominousBannerAmount(ItemStack item) {
+        return isOminousBanner(item) ? item.getAmount() : 0;
+    }
+
+    private static boolean isOminousBanner(ItemStack item) {
+        if (item == null || item.getType() != Material.WHITE_BANNER
+            || !(item.getItemMeta() instanceof BannerMeta meta)
+            || meta.numberOfPatterns() != 8) return false;
+        List<Pattern> patterns = meta.getPatterns();
+        List<DyeColor> colors = patterns.stream().map(Pattern::getColor).toList();
+        List<String> types = patterns.stream().map(pattern -> pattern.getPattern().name()).toList();
+        return colors.equals(List.of(
+                DyeColor.CYAN, DyeColor.LIGHT_GRAY, DyeColor.GRAY, DyeColor.LIGHT_GRAY,
+                DyeColor.BLACK, DyeColor.LIGHT_GRAY, DyeColor.LIGHT_GRAY, DyeColor.BLACK
+            ))
+            && matches(types.get(0), "RHOMBUS", "RHOMBUS_MIDDLE")
+            && matches(types.get(1), "STRIPE_BOTTOM")
+            && matches(types.get(2), "STRIPE_CENTER")
+            && matches(types.get(3), "BORDER")
+            && matches(types.get(4), "STRIPE_MIDDLE")
+            && matches(types.get(5), "HALF_HORIZONTAL")
+            && matches(types.get(6), "CIRCLE", "CIRCLE_MIDDLE")
+            && matches(types.get(7), "BORDER");
+    }
+
+    private static boolean matches(String actual, String... expected) {
+        return java.util.Arrays.asList(expected).contains(actual);
+    }
+
+    private static String bannerPatternSignature(ItemStack item) {
+        if (!isOminousBanner(item) || !(item.getItemMeta() instanceof BannerMeta meta)) return "";
+        return meta.getPatterns().stream()
+            .map(pattern -> pattern.getColor().name() + ":" + pattern.getPattern().name())
+            .reduce((left, right) -> left + "|" + right)
+            .orElse("");
+    }
+
+    private static boolean bannerNamePresent(ItemStack item) {
+        return isOminousBanner(item) && item.getItemMeta() != null
+            && (item.getItemMeta().hasItemName() || item.getItemMeta().hasDisplayName());
+    }
+
+    private static boolean bannerTooltipHidden(ItemStack item) {
+        return isOminousBanner(item) && item.getItemMeta() != null
+            && item.getItemMeta().hasItemFlag(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+    }
+
+    private static boolean loggerPluginEnabled() {
+        Plugin logger = Bukkit.getPluginManager().getPlugin("Logger");
+        return logger != null && logger.isEnabled();
+    }
+
+    private static boolean externalLoggerRegistered() {
+        Plugin logger = Bukkit.getPluginManager().getPlugin("Logger");
+        Plugin storageSign = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (logger == null || !logger.isEnabled() || storageSign == null) return false;
+        try {
+            Class<?> api = logger.getClass().getClassLoader()
+                .loadClass("com.github.teruteru128.logger.Logger");
+            return api.getMethod("getInstance", Plugin.class).invoke(null, storageSign) != null;
+        } catch (ReflectiveOperationException | LinkageError e) {
+            return false;
+        }
+    }
+
+    private static boolean storageSignAcceptsHeld(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (held.getType() == Material.AIR) return false;
+        Plugin storageSign = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (storageSign == null) return false;
+        try {
+            ClassLoader loader = storageSign.getClass().getClassLoader();
+            Class<?> type = loader.loadClass("storagesign.StorageSign");
+            Object instance = type.getMethod("fromBlock", Block.class)
+                .invoke(null, player.getWorld().getBlockAt(0, BASE_Y, 0));
+            return instance != null && (boolean) type.getMethod("isSimilar", ItemStack.class)
+                .invoke(instance, held);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            return false;
+        }
     }
 
     private static List<String> signLines(World world) {

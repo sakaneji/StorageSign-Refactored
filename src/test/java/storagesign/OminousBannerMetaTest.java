@@ -4,27 +4,27 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import org.bukkit.DyeColor;
+import org.bukkit.NamespacedKey;
 import org.junit.jupiter.api.Test;
+import storagesign.compat.OminousBannerCodec;
 
 class OminousBannerMetaTest {
 
     @Test
     void acceptsExactVanillaOminousBannerPatterns() {
-        assertTrue(StorageSignPlugin.isOminousBannerPatterns(
-            standardColors(), standardTypes()
-        ));
+        assertTrue(OminousBannerCodec.matches(standardColors(), standardKeys()));
     }
 
     @Test
     void rejectsArbitraryEightPatternWhiteBanner() {
         List<DyeColor> colors = new java.util.ArrayList<>(standardColors());
         colors.set(0, DyeColor.RED);
-        assertFalse(StorageSignPlugin.isOminousBannerPatterns(colors, standardTypes()));
+        assertFalse(OminousBannerCodec.matches(colors, standardKeys()));
     }
 
     @Test
     void rejectsBannerWithoutEightPatterns() {
-        assertFalse(StorageSignPlugin.isOminousBannerPatterns(List.of(), List.of()));
+        assertFalse(OminousBannerCodec.matches(List.of(), List.of()));
     }
 
     private static List<DyeColor> standardColors() {
@@ -34,10 +34,14 @@ class OminousBannerMetaTest {
         );
     }
 
-    private static List<String> standardTypes() {
+    private static List<NamespacedKey> standardKeys() {
         return List.of(
-            "RHOMBUS", "STRIPE_BOTTOM", "STRIPE_CENTER", "BORDER",
-            "STRIPE_MIDDLE", "HALF_HORIZONTAL", "CIRCLE", "BORDER"
+            key("rhombus"), key("stripe_bottom"), key("stripe_center"), key("border"),
+            key("stripe_middle"), key("half_horizontal"), key("circle"), key("border")
         );
+    }
+
+    private static NamespacedKey key(String value) {
+        return NamespacedKey.minecraft(value);
     }
 }

@@ -113,6 +113,33 @@ class PluginLoggerTest {
     }
 
     @Test
+    void initializesJulFallbackWhenExternalLoggerInitializationFails() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        PluginManager pluginManager = mock(PluginManager.class);
+        java.util.logging.Logger fallback = java.util.logging.Logger.getLogger(
+            "PluginLoggerTest.failed-external"
+        );
+        CapturingHandler handler = new CapturingHandler();
+        fallback.setUseParentHandlers(false);
+        fallback.addHandler(handler);
+
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(pluginManager);
+        when(pluginManager.getPlugin("Logger"))
+            .thenThrow(new IllegalStateException("broken Logger plugin"));
+        when(plugin.getLogger()).thenReturn(fallback);
+
+        PluginLogger.initialize(plugin, "INFO");
+        PluginLogger.getLogger(PluginLoggerTest.class).info("fallback", "still-running");
+
+        assertTrue(handler.records.stream().anyMatch(record ->
+            record.getMessage().contains("外部 Logger の初期化に失敗")));
+        assertTrue(handler.records.stream().anyMatch(record ->
+            record.getMessage().equals("[PluginLoggerTest#fallback] still-running")));
+    }
+
+    @Test
     void disabledDebugDoesNotEvaluateMessageSupplier() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         Server server = mock(Server.class);
