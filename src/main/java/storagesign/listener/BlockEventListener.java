@@ -25,6 +25,7 @@ import storagesign.adjacency.SsAdjacencyQuery;
 import storagesign.adjacency.SsAdjacencyResolver;
 import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
+import storagesign.index.StorageSignIndex;
 
 /**
  * StorageSign のブロックレベルイベントを処理する:
@@ -38,8 +39,10 @@ public final class BlockEventListener implements Listener {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(BlockEventListener.class);
     private static final SsAdjacencyResolver ADJACENCY_RESOLVER = SsAdjacencyResolver.defaultResolver();
+    private final StorageSignIndex index;
 
     public BlockEventListener(StorageSignPlugin plugin) {
+        this.index = plugin == null ? null : plugin.getStorageSignIndex();
     }
 
     // ── BlockBreakEvent ────────────────────────────────────────────────────────
@@ -60,7 +63,7 @@ public final class BlockEventListener implements Listener {
             event.setDropItems(false);
         }
 
-        dropRelativeSigns(block);
+        dropRelativeSigns(block, index);
     }
 
     // ── BlockPlaceEvent ────────────────────────────────────────────────────────
@@ -134,10 +137,14 @@ public final class BlockEventListener implements Listener {
      * 対象ブロックおよび隣接する取り付け StorageSign のデータをドロップする。
      */
     public static void dropRelativeSigns(Block block) {
-        // ベースブロック自身が StorageSign の場合のみ処理する。
-        tryDropStorageSign(block);
+        dropRelativeSigns(block, null);
+    }
 
-        dropAttachedStorageSignsByAdjacency(block);
+    private static void dropRelativeSigns(Block block, StorageSignIndex index) {
+        // ベースブロック自身が StorageSign の場合のみ処理する。
+        tryDropStorageSign(block, index);
+
+        dropAttachedStorageSignsByAdjacency(block, index);
     }
 
     /**
@@ -145,14 +152,18 @@ public final class BlockEventListener implements Listener {
      * FallingBlock によるブロック変化では、ベースブロック自身は看板になり得ないためこちらを使う。
      */
     public static void dropAttachedStorageSignsByAdjacency(Block block) {
+        dropAttachedStorageSignsByAdjacency(block, null);
+    }
+
+    public static void dropAttachedStorageSignsByAdjacency(Block block, StorageSignIndex index) {
         for (SsAdjacencyMatch match : ADJACENCY_RESOLVER.findAll(
             new SsAdjacencyQuery(block, null, SsAdjacencyPurpose.ATTACHED_SIGN_DROP)
         )) {
-            dropSingleStorageSign(match.signBlock(), match.signBlock().getType(), match.storageSign());
+            dropSingleStorageSign(match.signBlock(), match.signBlock().getType(), match.storageSign(), index);
         }
     }
 
-    private static void tryDropStorageSign(Block block) {
+    private static void tryDropStorageSign(Block block, StorageSignIndex index) {
         Material type = block.getType();
         if (!MaterialRegistry.SIGN_MATERIALS.contains(type)
             && !MaterialRegistry.WALL_SIGN_MATERIALS.contains(type)) {
@@ -163,10 +174,11 @@ public final class BlockEventListener implements Listener {
 
         StorageSign ss = StorageSign.fromSign(sign);
         if (ss == null) return;
-        dropSingleStorageSign(block, type, ss);
+        dropSingleStorageSign(block, type, ss, index);
     }
 
-    private static void dropSingleStorageSign(Block signBlock, Material signType, StorageSign ss) {
+    private static void dropSingleStorageSign(Block signBlock, Material signType, StorageSign ss,
+                                              StorageSignIndex index) {
         Material itemMat = MaterialRegistry.WALL_TO_SIGN.getOrDefault(signType, signType);
         // アイテム化する際は数量0なら設定に関わらず必ず登録解除する
         ItemStack drop = ss.getAmount() <= 0
@@ -175,8 +187,14 @@ public final class BlockEventListener implements Listener {
 
         Location dropLocation = signBlock.getLocation().clone().add(0.5, 0.5, 0.5);
         signBlock.getWorld().dropItem(dropLocation, drop);
+        if (index != null) index.unregister(signBlock);
         signBlock.setType(Material.AIR);
         LOG.debug("dropStorageSign", () -> "dropped sign=" + signBlock.getLocation());
+    }
+
+    /** Kept for test and binary compatibility with the original helper signature. */
+    private static void dropSingleStorageSign(Block signBlock, Material signType, StorageSign ss) {
+        dropSingleStorageSign(signBlock, signType, ss, null);
     }
 
 }

@@ -16,6 +16,7 @@ import storagesign.ConfigLoader;
 import storagesign.AmountTransfer;
 import storagesign.StorageSign;
 import storagesign.logging.PluginLogger;
+import storagesign.index.StorageSignIndex;
 
 /**
  * StorageSign に関連するエンティティイベントを処理する:
@@ -27,6 +28,15 @@ import storagesign.logging.PluginLogger;
 public final class EntityListener implements Listener {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(EntityListener.class);
+    private final StorageSignIndex index;
+
+    public EntityListener() {
+        this(null);
+    }
+
+    public EntityListener(StorageSignIndex index) {
+        this.index = index;
+    }
 
     // ── EntityPickupItemEvent ───────────────────────────────────────────────────
 
@@ -116,7 +126,11 @@ public final class EntityListener implements Listener {
         if (!(event.getEntity() instanceof FallingBlock)) return;
 
         Block block = event.getBlock();
-        BlockEventListener.dropAttachedStorageSignsByAdjacency(block);
+        if (index == null) {
+            BlockEventListener.dropAttachedStorageSignsByAdjacency(block);
+        } else {
+            BlockEventListener.dropAttachedStorageSignsByAdjacency(block, index);
+        }
         LOG.debug("onEntityChangeBlock", () -> "dropped adjacent sign=" + block.getLocation());
     }
 }

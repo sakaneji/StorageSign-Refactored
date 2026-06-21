@@ -24,6 +24,11 @@ import storagesign.listener.SignPhysicsListener;
 import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
 import storagesign.command.SsGiveCommand;
+import storagesign.command.StorageSignIndexCommand;
+import storagesign.command.StorageSignSearchCommand;
+import storagesign.display.NearbyStorageSignDisplay;
+import storagesign.index.StorageSignIndex;
+import storagesign.search.StorageSignQueryService;
 
 /**
  * StorageSign プラグインのメインクラス。
@@ -49,6 +54,9 @@ public class StorageSignPlugin extends JavaPlugin {
     private boolean ominousBannerNameAvailable = true;
     private boolean ominousBannerTooltipAvailable = true;
     private Function<Boolean, BannerMeta> ominousBannerMetaFactory = this::createOminousBannerMetaByApi;
+    private StorageSignIndex storageSignIndex;
+    private NearbyStorageSignDisplay nearbyStorageSignDisplay;
+    private StorageSignQueryService storageSignQueries;
 
     /**
      * レイドバナー（白バナー パターン 8 枚）の BannerMeta。
@@ -77,6 +85,9 @@ public class StorageSignPlugin extends JavaPlugin {
                   + ", auto-export=" + ConfigLoader.getAutoExport()
                   + ", no-bud=" + ConfigLoader.getNoBud());
 
+        storageSignIndex = new StorageSignIndex(this, ConfigLoader.getStorageIndexEnabled());
+        storageSignIndex.load();
+
         // ── 2. レイドバナー ───────────────────────────────────────────────────────────
         loadOminousBanner();
 
@@ -87,6 +98,24 @@ public class StorageSignPlugin extends JavaPlugin {
         registerListeners();
 
         getCommand("storagesigngive").setExecutor(new SsGiveCommand());
+        getCommand("storagesignindex").setExecutor(new StorageSignIndexCommand(storageSignIndex));
+        storageSignQueries = new StorageSignQueryService(this, storageSignIndex);
+        getCommand("storagesignsearch").setExecutor(
+            new StorageSignSearchCommand(storageSignIndex, storageSignQueries));
+
+        nearbyStorageSignDisplay = new NearbyStorageSignDisplay(this, storageSignIndex);
+        if (storageSignIndex.isEnabled()) {
+            storageSignIndex.rebuild(Bukkit.getWorlds(), result -> {
+                LOG.info("storageSignIndex", "StorageSign index ready: chunks=" + result.chunksScanned()
+                    + ", signs=" + result.countAfter());
+                nearbyStorageSignDisplay.start();
+            });
+        }
+        if (ConfigLoader.getNearbyDisplayEnabled() && !storageSignIndex.isEnabled()) {
+            LOG.warning("nearbyDisplay",
+                "nearby-display is disabled because storage-index.enabled is false");
+        }
+        if (!storageSignIndex.isEnabled()) nearbyStorageSignDisplay.start();
 
         LOG.info("onEnable", "StorageSign enabled. Sign types: " + MaterialRegistry.SIGN_MATERIALS.size()
                  + ", Shulker types: " + MaterialRegistry.SHULKER_BOX_MATERIALS.size());
@@ -94,9 +123,22 @@ public class StorageSignPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (nearbyStorageSignDisplay != null) nearbyStorageSignDisplay.shutdown();
+        nearbyStorageSignDisplay = null;
+        if (storageSignIndex != null) {
+            storageSignIndex.saveSync();
+            storageSignIndex.shutdown();
+        }
+        storageSignIndex = null;
+        storageSignQueries = null;
         cancelOminousBannerRetry();
         LOG.info("onDisable", "StorageSign disabled.");
         PluginLogger.shutdown();
+    }
+
+    /** Public loaded-chunk position index for other StorageSign features. */
+    public StorageSignIndex getStorageSignIndex() {
+        return storageSignIndex;
     }
 
     // ── レイドバナー ───────────────────────────────────────────────────────────────
@@ -236,9 +278,13 @@ public class StorageSignPlugin extends JavaPlugin {
         pm.registerEvents(new PlayerInteractListener(this), this);
         pm.registerEvents(new BlockEventListener(this), this);
         pm.registerEvents(new InventoryListener(this), this);
-        pm.registerEvents(new EntityListener(), this);
+        pm.registerEvents(new EntityListener(storageSignIndex), this);
         pm.registerEvents(new CraftListener(), this);
         new SignEditGuard().register(this);
+
+        if (storageSignIndex.isEnabled()) {
+            pm.registerEvents(storageSignIndex, this);
+        }
 
         if (ConfigLoader.getNoBud()) {
             pm.registerEvents(new SignPhysicsListener(), this);

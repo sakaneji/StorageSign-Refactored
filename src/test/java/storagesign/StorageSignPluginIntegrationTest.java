@@ -42,6 +42,9 @@ class StorageSignPluginIntegrationTest {
     void pluginLoadsAndRegistersPublicCommand() {
         assertTrue(plugin.isEnabled());
         assertNotNull(server.getPluginCommand("storagesigngive"));
+        assertNotNull(server.getPluginCommand("storagesignindex"));
+        assertNotNull(server.getPluginCommand("storagesignsearch"));
+        assertNotNull(plugin.getStorageSignIndex());
         assertNotNull(plugin.getConfig().getDefaults());
     }
 
