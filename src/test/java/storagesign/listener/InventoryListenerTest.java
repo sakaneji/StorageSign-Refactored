@@ -14,6 +14,8 @@ import java.util.HashMap;
 import org.bukkit.Material;
 import org.bukkit.block.Sign;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.inventory.InventoryPickupItemEvent;
+import org.bukkit.entity.Item;
 import org.bukkit.block.Block;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -62,6 +64,48 @@ class InventoryListenerTest {
         verify(event, never()).getItem();
         verify(event, never()).getSource();
         verify(event, never()).getDestination();
+    }
+
+    @Test
+    void cancelledInventoryPickupIsIgnored() {
+        InventoryPickupItemEvent event = mock(InventoryPickupItemEvent.class);
+        when(event.isCancelled()).thenReturn(true);
+
+        new InventoryListener(null).onInventoryPickup(event);
+
+        verify(event, never()).getInventory();
+        verify(event, never()).getItem();
+    }
+
+    @Test
+    void disabledAutoImportIgnoresInventoryPickup() throws Exception {
+        setConfigFlag("autoImport", false);
+        InventoryPickupItemEvent event = mock(InventoryPickupItemEvent.class);
+
+        new InventoryListener(null).onInventoryPickup(event);
+
+        verify(event, never()).getInventory();
+        verify(event, never()).getItem();
+    }
+
+    @Test
+    void inventoryPickupWithoutFullStackDoesNotResolveAdjacentSigns() {
+        InventoryPickupItemEvent event = mock(InventoryPickupItemEvent.class);
+        Inventory inventory = mock(Inventory.class);
+        Item entity = mock(Item.class);
+        ItemStack item = mock(ItemStack.class);
+        when(event.getInventory()).thenReturn(inventory);
+        when(event.getItem()).thenReturn(entity);
+        when(entity.getItemStack()).thenReturn(item);
+        when(item.getAmount()).thenReturn(8);
+        when(item.getMaxStackSize()).thenReturn(64);
+        when(inventory.containsAtLeast(item, 64)).thenReturn(false);
+
+        new InventoryListener(null).onInventoryPickup(event);
+
+        verify(inventory).containsAtLeast(item, 64);
+        verify(inventory, never()).getHolder();
+        verify(inventory, never()).removeItem(any(ItemStack.class));
     }
 
     @Test
