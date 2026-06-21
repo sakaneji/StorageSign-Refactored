@@ -200,4 +200,50 @@ class StorageSignItemMetaIntegrationTest {
         assertEquals(Material.LINGERING_POTION, restored.getMaterial());
         assertEquals(PotionType.STRONG_SWIFTNESS, restored.getPotionType());
     }
+
+    @Test
+    void physicalSignUsesCanonicalPdcWhenDisplayIdentifierIsShortened() {
+        var world = MockBukkit.getMock().addSimpleWorld("display-pdc");
+        var block = world.getBlockAt(0, 64, 0);
+        block.setType(Material.OAK_SIGN);
+        var signState = (org.bukkit.block.Sign) block.getState();
+        StorageSign stored = StorageSign.fromSignLines(new String[] {
+            "StorageSign", "WAXED_WEATHERED_CUT_COPPER_STAIRS", "9"});
+        assertNotNull(stored);
+
+        stored.applyToSign(signState);
+
+        assertFalse(signState.getSide(org.bukkit.block.sign.Side.FRONT).getLine(1)
+            .equals(stored.getIdentifier()));
+        assertEquals("WAXED_WEATHERED_CUT_COPPER_STAIRS",
+            signState.getPersistentDataContainer().get(
+                new NamespacedKey("storagesign", "storage_identifier"),
+                PersistentDataType.STRING));
+        StorageSign restored = StorageSign.fromSign(signState);
+        assertNotNull(restored);
+        assertEquals(Material.WAXED_WEATHERED_CUT_COPPER_STAIRS, restored.getMaterial());
+        assertEquals(9, restored.getAmount());
+    }
+
+    @Test
+    void physicalSignFallsBackWithoutCanonicalPdcAndRejectsCorruptCanonicalPdc() {
+        var world = MockBukkit.getMock().addSimpleWorld("display-pdc-fallback");
+        var block = world.getBlockAt(0, 64, 0);
+        block.setType(Material.OAK_SIGN);
+        var signState = (org.bukkit.block.Sign) block.getState();
+        var front = signState.getSide(org.bukkit.block.sign.Side.FRONT);
+        front.setLine(0, "StorageSign");
+        front.setLine(1, "STONE");
+        front.setLine(2, "4");
+        signState.update();
+
+        StorageSign legacy = StorageSign.fromSign(signState);
+        assertNotNull(legacy);
+        assertEquals(Material.STONE, legacy.getMaterial());
+
+        signState.getPersistentDataContainer().set(
+            new NamespacedKey("storagesign", "storage_identifier"),
+            PersistentDataType.STRING, "UNKNOWN_CORRUPT_IDENTIFIER");
+        assertNull(StorageSign.fromSign(signState));
+    }
 }

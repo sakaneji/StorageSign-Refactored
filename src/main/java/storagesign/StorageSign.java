@@ -28,6 +28,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.sign.Side;
 
 import storagesign.item.EnchantHelper;
+import storagesign.compat.SignDisplayFormatter;
 import storagesign.item.SpecialCaseItemSupport;
 import storagesign.item.PotionHelper;
 import storagesign.registry.LegacyNameRegistry;
@@ -75,6 +76,8 @@ public final class StorageSign {
     public static final String EMPTY_MARKER = "Empty";
     private static final NamespacedKey POTION_IDENTIFIER_KEY =
         new NamespacedKey("storagesign", "potion_identifier");
+    private static final NamespacedKey CANONICAL_IDENTIFIER_KEY =
+        new NamespacedKey("storagesign", "storage_identifier");
 
     // ── 特殊レガシー値 ─────────────────────────────────────────────────────────────
     static final short DAMAGE_SS_ITEM   = 1;  // 看板/旧ウマの卵をアイテムとして保管する際の damage フラグ
@@ -187,7 +190,11 @@ public final class StorageSign {
         Integer amount = parseStoredAmount(lines[2]);
         if (amount == null) return null;
         String canonical = sign.getPersistentDataContainer().get(
-            POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
+            CANONICAL_IDENTIFIER_KEY, PersistentDataType.STRING);
+        if (canonical == null || canonical.isBlank()) {
+            canonical = sign.getPersistentDataContainer().get(
+                POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
+        }
         if (canonical != null) return parseIdentifier(canonical, amount);
         return fromSignLines(lines);
     }
@@ -278,10 +285,12 @@ public final class StorageSign {
             String[] parts = identifier.split(":");
             if (parts.length < 3) return null;
             Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
-            short level = 0;
+            if (ench == null) return null;
+            short level;
             try { level = Short.parseShort(parts[2]); }
             catch (NumberFormatException e) {
                 LOG.log(Level.WARNING, "parseIdentifier", "エンチャントレベルが不正: {0}", identifier);
+                return null;
             }
             return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
         }
@@ -304,9 +313,10 @@ public final class StorageSign {
                 // parts[1] が数値でない → 旧形式 "ENCHANTED_BOOK:fire_protection:3" の可能性
                 if (matName.equals("ENCHANTED_BOOK") && parts.length >= 3) {
                     Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
-                    short level = 0;
+                    if (ench == null) return null;
+                    short level;
                     try { level = Short.parseShort(parts[2]); }
-                    catch (NumberFormatException ignored2) {}
+                    catch (NumberFormatException ignored2) { return null; }
                     return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
                 }
                 // 未知の非数値サブタイプ → damage を 0 として扱う
@@ -393,12 +403,17 @@ public final class StorageSign {
         return material.toString();
     }
 
+    /** Physical-sign label. The complete identifier is persisted in the sign PDC. */
+    String getDisplayIdentifier() {
+        return unregistered ? "" : SignDisplayFormatter.fit(getIdentifier());
+    }
+
     /**
      * 物理看板ブロック用の 4 行テキストを生成する。
      */
     public String[] getSignLines() {
         // 空（未登録）のとき行 1 は空文字列（旧版の getShortName() が "" を返すのと同じ）
-        String identifier = unregistered ? "" : getIdentifier();
+        String identifier = getDisplayIdentifier();
         int lc = amount / 3456;
         int rem = amount % 3456;
         int stacks = rem / 64;
@@ -465,7 +480,7 @@ public final class StorageSign {
      */
     public void applyToSign(Sign sign) {
         // getSignLines() をインライン展開し、看板書き込みのたびに String[] を確保しない。
-        String identifier = unregistered ? "" : getIdentifier();
+        String identifier = getDisplayIdentifier();
         int lc = amount / 3456;
         int rem = amount % 3456;
         int stacks = rem / 64;
@@ -475,6 +490,12 @@ public final class StorageSign {
         front.setLine(1, identifier);
         front.setLine(2, String.valueOf(amount));
         front.setLine(3, lc + "LC " + stacks + "s " + singles);
+        if (unregistered) {
+            sign.getPersistentDataContainer().remove(CANONICAL_IDENTIFIER_KEY);
+        } else {
+            sign.getPersistentDataContainer().set(
+                CANONICAL_IDENTIFIER_KEY, PersistentDataType.STRING, getIdentifier());
+        }
         String canonical = getCanonicalPotionIdentifier();
         if (canonical == null) {
             sign.getPersistentDataContainer().remove(POTION_IDENTIFIER_KEY);
