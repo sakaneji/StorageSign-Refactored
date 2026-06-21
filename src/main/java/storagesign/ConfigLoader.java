@@ -38,6 +38,18 @@ public final class ConfigLoader {
     private static final String KEY_POTION_KEY_ALIASES = "potion-key-aliases";
     private static final String KEY_BREWING_INGREDIENTS = "brewing-ingredient-identifiers";
     private static final String KEY_VIRTUAL_IDENTIFIERS = "virtual-item-identifiers";
+    private static final String KEY_STORAGE_INDEX_ENABLED = "storage-index.enabled";
+    private static final String KEY_INDEX_CHUNKS_PER_TICK = "storage-index.rebuild-chunks-per-tick";
+    private static final String KEY_NEARBY_DISPLAY_ENABLED = "nearby-display.enabled";
+    private static final String KEY_DISPLAY_DISTANCE = "nearby-display.distance";
+    private static final String KEY_DISPLAY_FOV = "nearby-display.field-of-view-degrees";
+    private static final String KEY_DISPLAY_IDLE_TICKS = "nearby-display.idle-delay-ticks";
+    private static final String KEY_DISPLAY_INTERVAL_TICKS = "nearby-display.monitor-interval-ticks";
+    private static final String KEY_DISPLAY_MAX_PER_PLAYER = "nearby-display.max-per-player";
+    private static final String KEY_DISPLAY_SEARCHES_PER_TICK = "nearby-display.max-searches-per-tick";
+    private static final String KEY_DISPLAY_GLOBAL_LIMIT = "nearby-display.global-label-limit";
+    private static final String KEY_SEARCH_PAGE_SIZE = "admin-search.page-size";
+    private static final String KEY_SEARCH_MAX_CONCURRENT = "admin-search.max-concurrent";
 
     // ── Cached values ─────────────────────────────────────────────────────────
     private static String  noPermission;
@@ -59,6 +71,18 @@ public final class ConfigLoader {
     private static Map<String, String> potionKeyAliases = Map.of();
     private static java.util.Set<String> brewingIngredientIdentifiers = java.util.Set.of();
     private static Map<String, String> virtualItemIdentifiers = Map.of();
+    private static boolean storageIndexEnabled;
+    private static int indexChunksPerTick;
+    private static boolean nearbyDisplayEnabled;
+    private static double nearbyDisplayDistance;
+    private static double nearbyDisplayFov;
+    private static int nearbyDisplayIdleTicks;
+    private static int nearbyDisplayIntervalTicks;
+    private static int nearbyDisplayMaxPerPlayer;
+    private static int nearbyDisplaySearchesPerTick;
+    private static int nearbyDisplayGlobalLimit;
+    private static int adminSearchPageSize;
+    private static int adminSearchMaxConcurrent;
 
     private ConfigLoader() {}
 
@@ -93,6 +117,18 @@ public final class ConfigLoader {
         }
         brewingIngredientIdentifiers = Collections.unmodifiableSet(brewingIngredients);
         virtualItemIdentifiers = readStringMap(cfg.getConfigurationSection(KEY_VIRTUAL_IDENTIFIERS));
+        storageIndexEnabled = cfg.getBoolean(KEY_STORAGE_INDEX_ENABLED, true);
+        indexChunksPerTick = positive(cfg.getInt(KEY_INDEX_CHUNKS_PER_TICK, 8), 8);
+        nearbyDisplayEnabled = cfg.getBoolean(KEY_NEARBY_DISPLAY_ENABLED, true);
+        nearbyDisplayDistance = positive(cfg.getDouble(KEY_DISPLAY_DISTANCE, 6.0), 6.0);
+        nearbyDisplayFov = clamp(cfg.getDouble(KEY_DISPLAY_FOV, 90.0), 1.0, 360.0);
+        nearbyDisplayIdleTicks = positive(cfg.getInt(KEY_DISPLAY_IDLE_TICKS, 10), 10);
+        nearbyDisplayIntervalTicks = positive(cfg.getInt(KEY_DISPLAY_INTERVAL_TICKS, 5), 5);
+        nearbyDisplayMaxPerPlayer = positive(cfg.getInt(KEY_DISPLAY_MAX_PER_PLAYER, 3), 3);
+        nearbyDisplaySearchesPerTick = positive(cfg.getInt(KEY_DISPLAY_SEARCHES_PER_TICK, 25), 25);
+        nearbyDisplayGlobalLimit = positive(cfg.getInt(KEY_DISPLAY_GLOBAL_LIMIT, 512), 512);
+        adminSearchPageSize = positive(cfg.getInt(KEY_SEARCH_PAGE_SIZE, 10), 10);
+        adminSearchMaxConcurrent = positive(cfg.getInt(KEY_SEARCH_MAX_CONCURRENT, 2), 2);
     }
 
     // ── ゲッター ───────────────────────────────────────────────────────────────
@@ -116,6 +152,21 @@ public final class ConfigLoader {
     public static Map<String, String> getPotionKeyAliases() { return potionKeyAliases; }
     public static java.util.Set<String> getBrewingIngredientIdentifiers() { return brewingIngredientIdentifiers; }
     public static Map<String, String> getVirtualItemIdentifiers() { return virtualItemIdentifiers; }
+    public static boolean getStorageIndexEnabled() { return storageIndexEnabled; }
+    public static int getIndexChunksPerTick() { return indexChunksPerTick; }
+    public static boolean getNearbyDisplayEnabled() { return nearbyDisplayEnabled; }
+    public static boolean getEffectiveNearbyDisplayEnabled() {
+        return storageIndexEnabled && nearbyDisplayEnabled;
+    }
+    public static double getNearbyDisplayDistance() { return nearbyDisplayDistance; }
+    public static double getNearbyDisplayFov() { return nearbyDisplayFov; }
+    public static int getNearbyDisplayIdleTicks() { return nearbyDisplayIdleTicks; }
+    public static int getNearbyDisplayIntervalTicks() { return nearbyDisplayIntervalTicks; }
+    public static int getNearbyDisplayMaxPerPlayer() { return nearbyDisplayMaxPerPlayer; }
+    public static int getNearbyDisplaySearchesPerTick() { return nearbyDisplaySearchesPerTick; }
+    public static int getNearbyDisplayGlobalLimit() { return nearbyDisplayGlobalLimit; }
+    public static int getAdminSearchPageSize() { return adminSearchPageSize; }
+    public static int getAdminSearchMaxConcurrent() { return adminSearchMaxConcurrent; }
 
     private static Map<String, String> readStringMap(ConfigurationSection section) {
         if (section == null) return Map.of();
@@ -129,5 +180,18 @@ public final class ConfigLoader {
             values.put(key.trim(), value.trim());
         }
         return Collections.unmodifiableMap(values);
+    }
+
+    private static int positive(int value, int fallback) {
+        return value > 0 ? value : fallback;
+    }
+
+    private static double positive(double value, double fallback) {
+        return Double.isFinite(value) && value > 0.0 ? value : fallback;
+    }
+
+    private static double clamp(double value, double minimum, double maximum) {
+        if (!Double.isFinite(value)) return minimum;
+        return Math.max(minimum, Math.min(maximum, value));
     }
 }

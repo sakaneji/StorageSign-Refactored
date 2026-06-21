@@ -39,6 +39,29 @@ falling-block-itemSS: false
 # Debug: at TRACE level, log raw ItemMeta for main-hand right-clicked items (very verbose)
 banner-debug: false
 
+# Maintain an in-memory index of StorageSign block positions in loaded chunks.
+# The index never loads chunks and is rebuilt from live world data on startup.
+storage-index:
+  enabled: true
+  rebuild-chunks-per-tick: 8
+
+# Show full stored identifiers near players after they stop moving and looking around.
+# This feature is automatically disabled when storage-index.enabled is false.
+nearby-display:
+  enabled: true
+  distance: 6.0
+  field-of-view-degrees: 90.0
+  idle-delay-ticks: 10
+  monitor-interval-ticks: 5
+  max-per-player: 3
+  max-searches-per-tick: 25
+  global-label-limit: 512
+
+# Administrative searches run from an immutable index snapshot.
+admin-search:
+  page-size: 10
+  max-concurrent: 2
+
 # Compatibility alias table for identifier parsing.
 # Key: identifier token found on sign/lore, Value: current Material name.
 # Add entries here to absorb MC rename changes or custom migration aliases without code changes.

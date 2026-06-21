@@ -19,6 +19,7 @@ Paper 向け Minecraft プラグインです。
   - [コマンド](#コマンド)
   - [権限一覧](#権限一覧)
   - [主な設定項目](#主な設定項目)
+- [位置索引・検索・近接表示の詳細](docs/storage-sign-index.md)
 - [開発者向けガイド](#開発者向けガイド)
   - [プロジェクト構成](#プロジェクト構成)
   - [ビルド手順](#ビルド手順)
@@ -182,6 +183,37 @@ StorageSign は、識別子から完全に復元できる ItemMeta だけを受�
 /ssgive ENCHBOOK:sharp:5 10 OAK_SIGN
 ```
 
+#### /storagesignindex（/ssindex）
+
+ロード済みチャンクのStorageSign位置索引を確認・再構築します。未ロードチャンクはロードしません。
+永続化、障害時復旧、負荷特性を含む詳細は[位置索引・検索・近接表示](docs/storage-sign-index.md)を参照してください。
+
+```text
+/storagesignindex status
+/storagesignindex rebuild
+/storagesignindex rebuild all
+/storagesignindex rebuild <world>
+```
+
+`rebuild`だけの場合はプレイヤーの現在Worldを対象にします。コンソールでは`all`または
+World名を指定してください。
+
+索引は`storage-sign-index.bin`へ、サーバー正常終了時と手動再構築完了時に保存されます。
+起動時に読み込んだ後、ロード済みチャンクだけを実ワールドから再検証します。
+
+#### /storagesignsearch（/sssearch）
+
+未ロードチャンクを含む保存済み索引から、格納アイテムの完全識別子を検索します。
+
+```text
+/storagesignsearch item STONE
+/storagesignsearch item POTION --contains
+/storagesignsearch item STONE --world world --page 2
+```
+
+通常は大文字小文字を無視した完全一致、`--contains`指定時は部分一致です。結果は10件ずつ、
+World、座標、数量、ロード状態とともに表示します。
+
 ### 権限一覧
 
 | 権限ノード | デフォルト | 説明 |
@@ -193,6 +225,8 @@ StorageSign は、識別子から完全に復元できる ItemMeta だけを受�
 | `storagesign.break` | 全員 | StorageSign ブロックの破壊 |
 | `storagesign.give` | 全員 | /storagesigngive（/ssgive）コマンドの使用 |
 | `storagesign.autocollect` | 全員 | 自動収集 |
+| `storagesign.index.admin` | OP | 位置索引の状態確認・手動再構築 |
+| `storagesign.search.admin` | OP | 保存済み索引のアイテム検索 |
 
 ### 主な設定項目
 
@@ -214,6 +248,22 @@ StorageSign は、識別子から完全に復元できる ItemMeta だけを受�
 | `no-bud` | `false` | BUD パルスによる看板破壊を防止する |
 | `falling-block-itemSS` | `false` | 落下ブロック着地時に隣接する StorageSign をアイテム化してドロップするか |
 | `banner-debug` | `false` | TRACE時にメインハンドで右クリックしたアイテムの生ItemMetaを出力する |
+| `storage-index.enabled` | `true` | ロード済みチャンクのStorageSign位置索引を維持する |
+| `storage-index.rebuild-chunks-per-tick` | `8` | 初回・手動再構築で1tickに走査するチャンク数 |
+| `nearby-display.enabled` | `true` | 停止時に前方のStorageSignへ完全な格納識別子を浮遊表示する |
+| `nearby-display.distance` | `6.0` | 前方検索距離 |
+| `nearby-display.field-of-view-degrees` | `90.0` | 前方検索の視野角 |
+| `nearby-display.idle-delay-ticks` | `10` | 移動と視点変更が止まってから検索するまでのtick数 |
+| `nearby-display.monitor-interval-ticks` | `5` | 位置と視点を比較する間隔 |
+| `nearby-display.max-per-player` | `3` | 1人へ同時表示する最大件数 |
+| `nearby-display.max-searches-per-tick` | `25` | 1tickに処理する停止プレイヤー検索の上限 |
+| `nearby-display.global-label-limit` | `512` | サーバー全体の同時TextDisplay上限 |
+| `admin-search.page-size` | `10` | 管理者検索で1ページに表示する件数 |
+| `admin-search.max-concurrent` | `2` | 同時に実行できる管理者検索数 |
+
+`nearby-display.enabled: true`でも`storage-index.enabled: false`の場合、近接表示は自動的に
+無効になります。索引だけを有効にして近接表示を無効にすることは可能です。同じStorageSignを
+複数人が見る場合、TextDisplayは共有され、対象プレイヤーだけに表示されます。
 
 ログメッセージには `[Class#operation]` 形式で発生箇所が付きます。通常運用では `INFO`、
 問題調査ではまず `DEBUG` を使用してください。`TRACE` は自動搬送の詳細や

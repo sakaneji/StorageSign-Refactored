@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Level;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
@@ -33,6 +34,7 @@ import storagesign.item.SpecialCaseItemSupport;
 import storagesign.item.PotionHelper;
 import storagesign.registry.LegacyNameRegistry;
 import storagesign.registry.MaterialRegistry;
+import storagesign.event.StorageSignUpdatedEvent;
 import storagesign.logging.PluginLogger;
 
 /**
@@ -504,6 +506,10 @@ public final class StorageSign {
                 POTION_IDENTIFIER_KEY, PersistentDataType.STRING, canonical);
         }
         sign.update();
+        if (Bukkit.getServer() != null) {
+            Bukkit.getPluginManager().callEvent(
+                new StorageSignUpdatedEvent(sign, unregistered ? "" : getIdentifier(), amount, !unregistered));
+        }
     }
 
     /**

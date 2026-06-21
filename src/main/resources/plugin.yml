@@ -17,6 +17,18 @@ commands:
         aliases:
             - ssgive
         permission: storagesign.give
+    storagesignindex:
+        description: Inspect or rebuild the loaded-chunk StorageSign index.
+        usage: /<command> <status|rebuild [all|world]>
+        aliases:
+            - ssindex
+        permission: storagesign.index.admin
+    storagesignsearch:
+        description: Search indexed StorageSigns by stored item identifier.
+        usage: /<command> item <identifier> [--contains] [--world world] [--page number]
+        aliases:
+            - sssearch
+        permission: storagesign.search.admin
 
 permissions:
     storagesign.*:
@@ -29,6 +41,8 @@ permissions:
             storagesign.break: true
             storagesign.give: true
             storagesign.autocollect: true
+            storagesign.index.admin: true
+            storagesign.search.admin: true
 
     storagesign.use:
         description: Allows using StorageSign interactions.
@@ -53,3 +67,11 @@ permissions:
     storagesign.autocollect:
         description: Allows automatic pickup/import behavior.
         default: true
+
+    storagesign.index.admin:
+        description: Allows inspecting and rebuilding the StorageSign index.
+        default: op
+
+    storagesign.search.admin:
+        description: Allows searching the persistent StorageSign index.
+        default: op
