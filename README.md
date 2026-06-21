@@ -214,19 +214,19 @@ World名を指定してください。
 通常は大文字小文字を無視した完全一致、`--contains`指定時は部分一致です。結果は10件ずつ、
 World、座標、数量、ロード状態とともに表示します。
 
-#### 保存済み索引ビューア
+#### 保存済み索引CLI・ビューア
 
-保存済みの `storage-sign-index.bin` を読む外部ツールがあります。Pythonで動き、Webページでも検索できます。
+保存済みの `storage-sign-index.bin` を読む外部CLIがあります。検索、集計、CSV/JSON出力はCLIで行い、Web画面は独立したviewerで起動します。
 
 ```text
-python3 tools/storage_sign_index_viewer.py --serve
-python3 tools/storage_sign_index_viewer.py --identifier STONE
-python3 tools/storage_sign_index_viewer.py --identifier POTION --mode contains
-python3 tools/storage_sign_index_viewer.py --format csv
+python3 tools/storage_sign_index_cli.py inspect
+python3 tools/storage_sign_index_cli.py search STONE
+python3 tools/storage_sign_index_cli.py search POTION --contains
+python3 tools/storage_sign_index_cli.py export --format csv --output storage-sign-index.csv
 python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 ```
 
-詳細は [位置索引・検索・近接表示](docs/storage-sign-index.md) の「外部ビューア」を参照してください。
+詳細は [位置索引・検索・近接表示](docs/storage-sign-index.md) の「外部CLI・ビューア」を参照してください。
 
 ### 権限一覧
 

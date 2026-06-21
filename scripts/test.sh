@@ -173,6 +173,9 @@ summarize_surefire() {
 
 run_unit() {
   rm -rf "$ROOT_DIR/target/surefire-reports"
+  run_logged python-tools "$TEST_LOG_DIR/python-tools.log" \
+    python3 -m unittest discover -s "$ROOT_DIR/tools/tests" -p 'test_*.py' || return 1
+  echo "PASS python-tools"
   run_logged unit "$TEST_LOG_DIR/unit.log" \
     maven_root -DexcludedGroups=integration test || return 1
   run_logged runner-selftest "$TEST_LOG_DIR/runner-selftest.log" \
