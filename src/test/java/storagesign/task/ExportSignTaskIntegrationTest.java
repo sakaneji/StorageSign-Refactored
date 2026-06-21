@@ -2,11 +2,18 @@ package storagesign.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import java.util.HashSet;
+import java.util.Set;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -16,6 +23,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import storagesign.StorageSign;
+import storagesign.ConfigLoader;
 
 @Tag("integration")
 class ExportSignTaskIntegrationTest {
@@ -23,8 +34,9 @@ class ExportSignTaskIntegrationTest {
     private ServerMock server;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         server = MockBukkit.mock();
+        setBrewingIngredients(Set.of());
     }
 
     @AfterEach
@@ -58,6 +70,15 @@ class ExportSignTaskIntegrationTest {
     }
 
     @Test
+    void configuredFutureBrewingIngredientUsesIngredientSlotWithoutCodeChange() throws Exception {
+        setBrewingIngredients(Set.of("COBBLESTONE"));
+        Inventory brewing = server.createInventory(null, InventoryType.BREWING);
+
+        assertEquals(2, addToSource(brewing, new ItemStack(Material.COBBLESTONE, 2), 2));
+        assertEquals(Material.COBBLESTONE, brewing.getItem(3).getType());
+    }
+
+    @Test
     void furnaceRoutesFuelAndInputToDedicatedSlots() throws Exception {
         Inventory furnace = server.createInventory(null, InventoryType.FURNACE);
 
@@ -65,6 +86,65 @@ class ExportSignTaskIntegrationTest {
         assertEquals(Material.COAL, furnace.getItem(1).getType());
         assertEquals(5, addToSource(furnace, new ItemStack(Material.IRON_ORE, 5), 5));
         assertEquals(Material.IRON_ORE, furnace.getItem(0).getType());
+    }
+
+    @Test
+    void unloadedChunkAbortsWithoutForcingBlockStateRead() {
+        Block block = mock(Block.class);
+        World world = mock(World.class);
+        Inventory inventory = mock(Inventory.class);
+        HashSet<Block> pending = new HashSet<>();
+        pending.add(block);
+        when(block.getWorld()).thenReturn(world);
+        when(block.getX()).thenReturn(32);
+        when(block.getZ()).thenReturn(48);
+        when(world.isChunkLoaded(2, 3)).thenReturn(false);
+
+        new ExportSignTask(block, inventory, new ItemStack(Material.STONE), pending).run();
+
+        assertEquals(0, pending.size());
+        verify(block, never()).getState();
+    }
+
+    @Test
+    void existingFullStackDoesNotConsumeStorageSign() {
+        Inventory inventory = server.createInventory(null, 9);
+        inventory.setItem(0, new ItemStack(Material.STONE, 64));
+        runWithStorageSign(inventory, 128);
+    }
+
+    @Test
+    void completelyFullInventoryDoesNotConsumeStorageSign() {
+        Inventory inventory = server.createInventory(null, 9);
+        for (int slot = 0; slot < 9; slot++) {
+            inventory.setItem(slot, new ItemStack(Material.DIRT, 64));
+        }
+        runWithStorageSign(inventory, 128);
+    }
+
+    private static void runWithStorageSign(Inventory inventory, int amount) {
+        Block block = mock(Block.class);
+        World world = mock(World.class);
+        Sign signState = mock(Sign.class);
+        StorageSign storageSign = mock(StorageSign.class);
+        when(block.getWorld()).thenReturn(world);
+        when(world.isChunkLoaded(0, 0)).thenReturn(true);
+        when(block.getState()).thenReturn(signState);
+        when(storageSign.getAmount()).thenReturn(amount);
+        when(storageSign.isUnregistered()).thenReturn(false);
+        when(storageSign.isSimilar(org.mockito.ArgumentMatchers.any(ItemStack.class)))
+            .thenAnswer(invocation -> invocation.<ItemStack>getArgument(0).getType() == Material.STONE);
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromSign(signState)).thenReturn(storageSign);
+            new ExportSignTask(block, inventory, new ItemStack(Material.STONE), new HashSet<>()).run();
+        }
+        verify(storageSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    private static void setBrewingIngredients(Set<String> values) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField("brewingIngredientIdentifiers");
+        field.setAccessible(true);
+        field.set(null, values);
     }
 
     private static int addToSource(Inventory inventory, ItemStack item, int amount) throws Exception {

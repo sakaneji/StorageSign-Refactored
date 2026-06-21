@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.List;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -26,6 +27,8 @@ class ConfigLoaderTest {
             Map.of(" old ", " NEW ", "blank", "  ")
         );
         ConfigurationSection virtuals = section(Set.of("Legacy"), Map.of("Legacy", "STONE:2"));
+        ConfigurationSection potionAliases = section(
+            Set.of("minecraft:old"), Map.of("minecraft:old", "minecraft:new"));
         when(plugin.getConfig()).thenReturn(config);
         when(config.getString("no-permisson", "You don't have permission")).thenReturn("denied");
         when(config.getString("log-level", "INFO")).thenReturn("TRACE");
@@ -43,7 +46,10 @@ class ConfigLoaderTest {
         when(config.getBoolean("falling-block-itemSS", false)).thenReturn(true);
         when(config.getBoolean("banner-debug", false)).thenReturn(true);
         when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(aliases);
+        when(config.getConfigurationSection("potion-key-aliases")).thenReturn(potionAliases);
         when(config.getConfigurationSection("virtual-item-identifiers")).thenReturn(virtuals);
+        when(config.getStringList("brewing-ingredient-identifiers"))
+            .thenReturn(List.of(" modded_ingredient ", " "));
 
         ConfigLoader.load(plugin);
 
@@ -66,6 +72,8 @@ class ConfigLoaderTest {
         assertTrue(ConfigLoader.getBannerDebug());
         assertEquals(Map.of("old", "NEW"), ConfigLoader.getIdentifierAliases());
         assertEquals(Map.of("Legacy", "STONE:2"), ConfigLoader.getVirtualItemIdentifiers());
+        assertEquals(Map.of("minecraft:old", "minecraft:new"), ConfigLoader.getPotionKeyAliases());
+        assertEquals(Set.of("MODDED_INGREDIENT"), ConfigLoader.getBrewingIngredientIdentifiers());
         assertThrows(UnsupportedOperationException.class,
             () -> ConfigLoader.getIdentifierAliases().put("x", "y"));
     }
@@ -79,6 +87,8 @@ class ConfigLoaderTest {
         ConfigLoader.load(plugin);
 
         assertTrue(ConfigLoader.getIdentifierAliases().isEmpty());
+        assertTrue(ConfigLoader.getPotionKeyAliases().isEmpty());
+        assertTrue(ConfigLoader.getBrewingIngredientIdentifiers().isEmpty());
         assertTrue(ConfigLoader.getVirtualItemIdentifiers().isEmpty());
     }
 

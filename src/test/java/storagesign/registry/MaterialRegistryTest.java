@@ -203,6 +203,17 @@ class MaterialRegistryTest {
     }
 
     @Test
+    void resolvesBlockSignMaterialToMatchingInventoryItem() {
+        assertEquals(Material.OAK_SIGN,
+            MaterialRegistry.toItemSignMaterial(Material.OAK_SIGN));
+        assertEquals(Material.OAK_SIGN,
+            MaterialRegistry.toItemSignMaterial(Material.OAK_WALL_SIGN));
+        assertEquals(Material.OAK_HANGING_SIGN,
+            MaterialRegistry.toItemSignMaterial(Material.OAK_WALL_HANGING_SIGN));
+        assertNull(MaterialRegistry.toItemSignMaterial(null));
+    }
+
+    @Test
     void signAndWallSignMaterialSetsAreDisjoint() {
         for (Material m : MaterialRegistry.SIGN_MATERIALS) {
             assertFalse(MaterialRegistry.WALL_SIGN_MATERIALS.contains(m),

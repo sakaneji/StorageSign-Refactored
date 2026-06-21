@@ -220,4 +220,45 @@ class PotionHelperTest {
                 "Round-trip failed for: " + type);
         }
     }
+
+    @Test
+    void canonicalRegistryIdentifierRoundTripsEveryRuntimePotionType() {
+        for (PotionType type : PotionType.values()) {
+            for (Material material : new Material[]{
+                    Material.POTION, Material.SPLASH_POTION, Material.LINGERING_POTION}) {
+                String identifier = PotionHelper.toCanonicalIdentifier(material, type);
+                PotionHelper.PotionData restored = PotionHelper.fromIdentifier(identifier);
+                assertNotNull(restored, identifier);
+                assertEquals(material, restored.material(), identifier);
+                assertEquals(type, restored.type(), identifier);
+            }
+        }
+    }
+
+    @Test
+    void displayIdentifierKeepsLegacySignWidthBound() {
+        for (PotionType type : PotionType.values()) {
+            for (Material material : new Material[]{
+                    Material.POTION, Material.SPLASH_POTION, Material.LINGERING_POTION}) {
+                String display = PotionHelper.toDisplayIdentifier(material, type);
+                assertTrue(display.length() <= 16, display);
+                assertTrue(vanillaAsciiWidth(display) <= 90,
+                    () -> display + " width=" + vanillaAsciiWidth(display));
+            }
+        }
+    }
+
+    private static int vanillaAsciiWidth(String value) {
+        int width = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            int glyph = switch (c) {
+                case ':', '!', '.', ',' -> 2;
+                case 'I', '1', 'i', 'l' -> 4;
+                default -> 6;
+            };
+            width += glyph;
+        }
+        return width;
+    }
 }

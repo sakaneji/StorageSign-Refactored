@@ -22,11 +22,12 @@ class SsGiveCommandIntegrationTest {
 
     private ServerMock server;
     private PlayerMock player;
+    private StorageSignPlugin plugin;
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
-        MockBukkit.load(StorageSignPlugin.class);
+        plugin = MockBukkit.load(StorageSignPlugin.class);
         player = server.addPlayer();
         player.setGameMode(GameMode.CREATIVE);
     }
@@ -66,6 +67,33 @@ class SsGiveCommandIntegrationTest {
 
         assertTrue(server.dispatchCommand(player, "ssgive UNKNOWN_IDENTIFIER 1"));
         assertTrue(player.nextMessage().contains("itemIdentifier"));
+    }
+
+    @Test
+    void invalidArgumentsPermissionAndSignTypeAreRejected() {
+        assertTrue(server.dispatchCommand(player, "ssgive STONE"));
+        assertTrue(player.nextMessage().contains("使い方"));
+        player.nextMessage(); // 使用例
+
+        assertTrue(server.dispatchCommand(player, "ssgive STONE 1 OAK_SIGN extra"));
+        assertTrue(player.nextMessage().contains("使い方"));
+        player.nextMessage(); // 使用例
+
+        assertTrue(server.dispatchCommand(player, "ssgive STONE -1"));
+        assertTrue(player.nextMessage().contains("0 以上"));
+
+        assertTrue(server.dispatchCommand(player, "ssgive STONE 1 STONE"));
+        assertTrue(player.nextMessage().contains("看板種類"));
+
+        player.addAttachment(plugin, "storagesign.give", false);
+        assertTrue(server.dispatchCommand(player, "ssgive STONE 1"));
+        assertTrue(player.nextMessage().contains("permission"));
+    }
+
+    @Test
+    void consoleReceivesPlayerOnlyMessage() {
+        assertTrue(server.dispatchCommand(server.getConsoleSender(), "ssgive STONE 1"));
+        assertTrue(server.getConsoleSender().nextMessage().contains("プレイヤー専用"));
     }
 
     private ItemStack firstItem(Material material) {

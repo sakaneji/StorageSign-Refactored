@@ -107,19 +107,25 @@ class StorageSignTest {
 
 
     @Test
-    void fromSignLines_nonNumericAmountDefaultsToZero() {
+    void fromSignLines_nonNumericAmountIsRejected() {
         StorageSign ss = StorageSign.fromSignLines(
             new String[]{"StorageSign", "STONE", "not_a_number", "..."});
-        assertNotNull(ss);
-        assertEquals(0, ss.getAmount());
+        assertNull(ss);
     }
 
     @Test
-    void fromSignLines_blankAmountLineDefaultsToZero() {
+    void fromSignLines_blankAmountLineIsRejected() {
         StorageSign ss = StorageSign.fromSignLines(
             new String[]{"StorageSign", "STONE", "", "..."});
-        assertNotNull(ss);
-        assertEquals(0, ss.getAmount());
+        assertNull(ss);
+    }
+
+    @Test
+    void fromSignLines_negativeAndOverflowAmountsAreRejected() {
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE", "-1"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE", "2147483648"}));
     }
 
     @Test
