@@ -176,6 +176,87 @@ async function runMainSuite() {
     assert.equal(state.playerStone, 0)
   })
 
+  await runCase('manual import stops at Integer maximum', async () => {
+    await reset('overflow-import')
+    await equip('stone')
+    await activateSign({ sneak: true })
+    const state = await inspect('overflow-import')
+    assert.equal(state.lines[2], '2147483647')
+    assert.equal(state.playerStone, 6)
+  })
+
+  await runCase('partial StorageSign merge preserves registered remainder', async () => {
+    await reset('merge-partial')
+    await equip('oak_sign')
+    await activateSign()
+    const state = await inspect('merge-partial')
+    assert.equal(state.lines[2], '2147483647')
+    assert.equal(state.playerRegisteredStorageSigns, 1)
+    assert.equal(state.playerEmptyStorageSigns, 1)
+    assert.equal(state.droppedStone, 0)
+    assert.equal(state.droppedStorageSigns, 0)
+    assert.ok(state.heldLore.includes('STONE 10'), `Expected remainder lore, got ${state.heldLore}`)
+  })
+
+  await runCase('full inventory drops only emptied sign after partial merge', async () => {
+    await reset('merge-partial-full')
+    await equip('oak_sign')
+    await activateSign()
+    const state = await inspect('merge-partial-full')
+    assert.equal(state.lines[2], '2147483647')
+    assert.equal(state.playerRegisteredStorageSigns, 1)
+    assert.equal(state.playerEmptyStorageSigns, 0)
+    assert.equal(state.droppedEmptyStorageSigns, 1)
+    assert.equal(state.droppedStone, 0)
+    assert.ok(state.heldLore.includes('STONE 10'), `Expected remainder lore, got ${state.heldLore}`)
+  })
+
+  await runCase('give command drops StorageSign when inventory is full', async () => {
+    await reset('full-command')
+    bot.chat('/ssgive STONE 1 OAK_SIGN')
+    await waitForMessage(message => message.includes('StorageSign を付与しました'))
+    await sleep(300)
+    const state = await inspect('full-command')
+    assert.equal(state.droppedStorageSigns, 1)
+  })
+
+  await runCase('mismatched held item triggers export without consumption', async () => {
+    await reset('mismatch-export')
+    await equip('dirt')
+    await activateSign()
+    const state = await inspect('mismatch-export')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerStone + state.droppedStone, 64)
+    assert.equal(state.heldType, 'DIRT')
+  })
+
+  await runCase('register item type on empty StorageSign', async () => {
+    await reset('register-empty')
+    await equip('stone')
+    await activateSign()
+    const state = await inspect('register-empty')
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '0'])
+    assert.equal(state.playerStone, 16)
+  })
+
+  await runCase('full inventory export drops without loss', async () => {
+    await reset('full-inventory-export')
+    await equip('dirt')
+    await activateSign()
+    const state = await inspect('full-inventory-export')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.droppedStone, 64)
+  })
+
+  await runCase('same-tick interactions preserve total quantity', async () => {
+    await reset('double-interact')
+    await command('/sstest double-interact double-interact', 'SSTEST DOUBLE double-interact')
+    await sleep(300)
+    const state = await inspect('double-interact')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerStone + state.droppedStone, 128)
+  })
+
   await runCase('sneak import', async () => {
     await reset('sneak-import')
     await equip('stone')
@@ -219,6 +300,14 @@ async function runMainSuite() {
     assert.equal(state.droppedStorageSigns, 1)
   })
 
+  await runCase('breaking support drops attached StorageSign', async () => {
+    await reset('attached-sign')
+    await command('/sstest break-support attached-sign', 'SSTEST SUPPORT attached-sign')
+    const state = await inspect('attached-sign')
+    assert.equal(state.lines.length, 0)
+    assert.equal(state.droppedStorageSigns, 1)
+  })
+
   await runCase('sign edit preserves StorageSign data', async () => {
     await reset('edit-protected')
     await command('/sstest edit edit-protected', 'SSTEST EDITED edit-protected')
@@ -240,6 +329,26 @@ async function runMainSuite() {
     state = await inspect('storage-sign-items')
     assert.equal(state.lines[2], '2')
     assert.equal(state.playerSigns, 0)
+  })
+
+  await runCase('StorageSign division with multiple empty signs', async () => {
+    await reset('divide')
+    await equip('oak_sign')
+    await activateSign()
+    const state = await inspect('divide')
+    assert.equal(state.lines[2], '34')
+    assert.equal(state.playerSigns, 2)
+    assert.ok(state.heldLore.includes('STONE 33'), `Expected divided lore, got ${state.heldLore}`)
+  })
+
+  await runCase('StorageSign sneak division limit', async () => {
+    await reset('divide-sneak')
+    await equip('oak_sign')
+    await activateSign({ sneak: true })
+    const state = await inspect('divide-sneak')
+    assert.equal(state.lines[2], '130880')
+    assert.equal(state.playerSigns, 2)
+    assert.ok(state.heldLore.includes('STONE 34560'), `Expected sneak limit lore, got ${state.heldLore}`)
   })
 
   await runCase('hopper auto import', async () => {
@@ -269,6 +378,53 @@ async function runMainSuite() {
     assert.equal(state.minecartStone, 64)
   })
 
+  await runCase('hopper minecart export refill', async () => {
+    await reset('minecart-export')
+    await sleep(1800)
+    const state = await inspect('minecart-export')
+    assert.equal(Number(state.lines[2]) + state.minecartStone + state.hopperStone, 256)
+    assert.ok(Number(state.lines[2]) < 192, `Expected StorageSign refill, got ${state.lines[2]}`)
+    assert.ok(state.hopperStone > 64, 'Expected more than the minecart seed inventory to be exported')
+  })
+
+  await runCase('dropper world dispense refill', async () => {
+    await reset('world-dispense')
+    await command('/sstest dispense world-dispense', 'SSTEST DISPENSED world-dispense')
+    await sleep(600)
+    const state = await inspect('world-dispense')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.chestStone, 64)
+    assert.equal(state.droppedStone + state.playerStone, 1)
+  })
+
+  for (const scenario of ['world-dispenser', 'world-crafter']) {
+    await runCase(`${scenario} world dispense refill`, async () => {
+      await reset(scenario)
+      await command(`/sstest dispense ${scenario}`, `SSTEST DISPENSED ${scenario}`)
+      await sleep(600)
+      const state = await inspect(scenario)
+      assert.equal(state.lines[2], '0')
+      assert.equal(state.chestStone, 64)
+      assert.equal(state.droppedStone + state.playerStone, 1)
+    })
+  }
+
+  await runCase('chest boat inventory import', async () => {
+    await reset('chest-boat-import')
+    await command('/sstest boat-transfer chest-boat-import', 'SSTEST BOAT chest-boat-import')
+    const state = await inspect('chest-boat-import')
+    assert.equal(state.lines[2], '1')
+    assert.equal(state.chestBoatStone, 63)
+  })
+
+  await runCase('double chest inventory import', async () => {
+    await reset('double-chest-import')
+    await command('/sstest double-transfer double-chest-import', 'SSTEST DOUBLECHEST double-chest-import')
+    const state = await inspect('double-chest-import')
+    assert.equal(state.lines[2], '1')
+    assert.equal(state.chestStone, 63)
+  })
+
   await runCase('autocollect', async () => {
     await reset('autocollect')
     bot.chat('/ssgive STONE 10 OAK_SIGN')
@@ -287,6 +443,19 @@ async function runMainSuite() {
     assert.equal(state.lines[0], 'StorageSign')
     assert.equal(state.lines[2], '2')
     assert.ok(state.lines[1].startsWith('POTION:'))
+    assert.equal(state.potionSignKey, 'POTION:minecraft:healing')
+    assert.ok(state.potionSignDisplayWidth <= 90,
+      `Potion sign text exceeds vanilla width: ${state.potionSignDisplayWidth}`)
+  })
+
+  await runCase('ominous bottle amplifier round trip', async () => {
+    await placeStorageSign('special-potion', 'OMINOUS_BOTTLE:3', 2)
+    await emptyHand()
+    await activateSign()
+    const state = await inspect('special-potion')
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.playerOminousBottles, 2)
+    assert.equal(state.ominousBottleAmplifier, 3)
   })
 
   await runCase('ominous banner round trip', async () => {
@@ -343,6 +512,10 @@ async function runBannerSeed() {
     assert.equal(state.playerOminousBanners, 0)
     assert.equal(state.chestOminousBanners, 1)
     assertBannerMetadata(state)
+    assert.deepEqual(state.potionSignLines.slice(0, 3),
+      ['StorageSign', 'LPOTION:SPEED:2', '3'])
+    assert.equal(state.potionSignKey, 'LPOTION:minecraft:strong_swiftness')
+    assert.ok(state.potionSignDisplayWidth <= 90)
   })
 }
 
@@ -356,6 +529,10 @@ async function runBannerUpgrade() {
     // an ItemStack. Pattern identity and the ominous name are the compatibility
     // contract; a fresh export below must restore the current-version flag.
     assertBannerCoreMetadata(state)
+    assert.deepEqual(state.potionSignLines.slice(0, 3),
+      ['StorageSign', 'LPOTION:SPEED:2', '3'])
+    assert.equal(state.potionSignKey, 'LPOTION:minecraft:strong_swiftness')
+    assert.ok(state.potionSignDisplayWidth <= 90)
 
     await command('/sstest unstash banner-upgrade', 'SSTEST UNSTASHED banner-upgrade')
     await sleep(300)

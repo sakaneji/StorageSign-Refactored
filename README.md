@@ -1,6 +1,6 @@
 # StorageSign-Refactored
 
-Spigot/Paper 向け Minecraft プラグインです。  
+Paper 向け Minecraft プラグインです。
 看板（Sign）に保管するアイテムの種類と数量を記録することで、ラージチェストやシュルカーボックスを「品目専用倉庫」として管理できます。ホッパーや投げ捨てによる自動入出庫、右クリックによる手動ピックアップなど、倉庫整理を自動化・効率化する機能を提供します。
 
 ---
@@ -73,7 +73,7 @@ Spigot/Paper 向け Minecraft プラグインです。
 
 | 項目 | 要件 |
 |---|---|
-| サーバーソフト | Spigot 1.21.4 以降 / Paper 1.21.4 以降 |
+| サーバーソフト | Paper 1.21.4 / 1.21.8 / 1.21.11（26.xは検証環境未対応のため保留） |
 | Java | 21 以降 |
 
 ### インストール
@@ -109,11 +109,39 @@ Spigot/Paper 向け Minecraft プラグインです。
 
 - 登録されたアイテムを手に持って StorageSign を右クリックすると、インベントリ内の合致するアイテムをすべて格納します。
 - スニーク（Shift）＋右クリックすると、手持ちスロットのアイテムのみを格納します。
+- 同じ内容を持つ登録済みStorageSignアイテムを右クリックすると、看板一枚単位で内容をマージします。
+  上限まで一枚分が収まらない場合、そのStorageSignは変更せずマージ元に残します。部分マージでは
+  マージできた枚数だけ空StorageSignとして返し、インベントリ満杯時は空StorageSignだけを足元へドロップします。
+  未マージの中身を通常アイテムとしてドロップすることはありません。
 
 #### 手動エクスポート（右クリック）
 
 - 空手（または登録内容と異なるアイテム）で StorageSign を右クリックすると、なるべく 1 スタック分のアイテムを足元にドロップします。
 - スニーク（Shift）＋右クリックすると、アイテムを 1 個のみドロップします。
+
+#### StorageSign アイテムへの分割
+
+登録済み StorageSign ブロックを、同じ看板素材の空 StorageSign アイテムを持って
+右クリックすると、保管内容を手持ちの各空 StorageSign へ均等に分割します。
+
+- ブロック保管数を `B`、手持ちの空 StorageSign 数を `N` とすると、各アイテムへ
+  `floor(B / (N + 1))` 個を割り当て、端数はブロック側へ残します。
+- 1枚あたりの割当数は通常 `divide-limit`、スニーク時は
+  `sneak-divide-limit` が上限です。設定値が `0` 以下なら上限はありません。
+- 例: `B=100, N=2` では各アイテムが33個、ブロックに34個残ります。
+- `manual-export: false`、保管数が空 StorageSign 数以下、異なる看板素材では分割しません。
+- StorageSign アイテム自体を保管しているブロックでは、空 StorageSign は分割ではなく
+  sign-in-sign の手動インポートとして扱います。
+
+保管数量の上限は `Integer.MAX_VALUE`（2,147,483,647）です。上限に達する搬入では
+空き容量分だけを受け入れ、余剰アイテムは手元・コンテナ・ドロップ側へ残します。
+
+### 保管できるItemMeta
+
+StorageSign は、識別子から完全に復元できる ItemMeta だけを受け入れます。基本Potion、
+単一エンチャント本、耐久値付きアイテム、空のシュルカーボックス、飛翔時間だけを持つ花火、
+不吉な旗は保管できます。カスタム名・Lore・独自Enchant、複数エンチャント本、
+中身入りシュルカーボックス、蜂入りの巣箱、効果付き花火などは、メタデータ消失を防ぐため登録を拒否します。
 
 ### 自動入出庫
 
@@ -257,8 +285,11 @@ target/StorageSign-Refactored-<version>.jar
 ./scripts/test.sh e2e 1.21.8 with-logger
 ./scripts/test.sh e2e 1.21.8 without-logger
 
-# 同一ワールドを 1.21.4 → 1.21.8 → 1.21.11 → 26.1.2 → 26.2 と更新して不吉な旗を検証
-./scripts/test.sh banner-compat
+# 対応済みの同一ワールド更新でPotion PDCと不吉な旗を検証
+./scripts/test.sh banner-compat 1.21.11
+
+# 保留中の26.xも含む定義済み経路（26.x環境が利用可能になった後に実行）
+./scripts/test.sh banner-compat all
 
 # 上記をすべて実行
 ./scripts/test.sh all
@@ -269,8 +300,8 @@ E2E は Paper と Mineflayer クライアントを Docker Compose で起動し�
 スニーク、ホッパー搬送、ホッパー付きトロッコ、自動収集、特殊アイテム、
 サーバー再起動後の永続性を実際のゲーム tick とパケット経路で検証します。
 不吉な旗は実物の BannerMeta を搬出・再取込し、8 模様の色と種類、名前、ツールチップ
-フラグを各バージョンで検証します。`banner-compat` は旧版で保存した旗と StorageSign を
-同一ワールドの次バージョンで読み込み、再取込・再搬出できることを確認します。
+フラグを各バージョンで検証します。`banner-compat 1.21.11` は旧版で保存した旗、Potionの
+NamespacedKey PDC、短縮表示を同一ワールドの次バージョンで読み込み、再取込・再搬出できることを確認します。
 StorageSign アイテムの設置は、Mineflayer がカスタム Lore 付き看板の設置応答を扱えない場合、
 テストハーネスから実際の `BlockPlaceEvent` を発火して設置リスナーを検証します。
 テストサーバーは localhost 限定のオフラインモードで、実 Minecraft アカウントは不要です。
@@ -297,8 +328,11 @@ E2Eには破壊権限とドロップ、看板編集保護、StorageSignアイテ
 8模様と名前による互換性、StorageSignへの再取込、現行版で再搬出した旗へのフラグ再付与を検証します。
 テスト用ハーネスは別 JAR であり、本番の StorageSign JAR には含まれません。
 
-Spigot は自動 E2E の対象外です。リリース前には 1.21.4 と最新対応版で、起動、
-StorageSign の設置、通常・スニーク入出庫、ホッパー搬送を手動確認してください。
+Spigot は製品保証およびリリース試験の対象外です。また、新しいMinecraft版で保存・更新した
+ワールドを古い版で開くダウングレードは非対応です。更新前に必ずバックアップしてください。
+
+外部 Logger の通常書込みはE2Eで確認します。ディスク枯渇、権限エラー、ローテーション失敗は
+外部 Logger 側の障害であるため、`docs/runtime-validation-checklist.md` の障害注入手順で確認します。
 
 ### データモデル
 
@@ -324,6 +358,12 @@ StorageSign の設置、通常・スニーク入出庫、ホッパー搬送を�
 | エンチャント本 | `ENCHBOOK:sharp:5` |
 | 不吉なビン | `OMINOUS_BOTTLE:2` |
 
+Potionの行1とLoreは、看板の標準表示幅に収まる従来の短縮形式を維持します。
+実際の復元キーは看板とStorageSignアイテムのPersistentDataContainerへ
+`POTION:minecraft:healing`のようなRegistryキー形式で保存されます。これにより、
+将来Potionが追加されても短縮名の衝突に影響されません。PDCを持たない旧データも従来形式から読み込み、
+次回の更新・アイテム化・再設置時に正規キーを付与します。
+
 ### 設定の拡張
 
 `config.yml` の以下のテーブルをコードを変更せずに拡張できます。
@@ -335,6 +375,23 @@ StorageSign の設置、通常・スニーク入出庫、ホッパー搬送を�
 item-identifier-aliases:
   SIGN: OAK_SIGN
   MY_OLD_NAME: NEW_MATERIAL_NAME
+```
+
+**`potion-key-aliases`**
+Minecraft側でPotionのRegistryキーが変更・削除された場合に、旧キーを現行キーへ移行します。
+元のキーが実行中Registryに存在する場合は別名を適用しません。
+
+```yaml
+potion-key-aliases:
+  "minecraft:old_potion": "minecraft:replacement_potion"
+```
+
+**`brewing-ingredient-identifiers`**
+将来版やサーバー拡張で追加された醸造材料を、製品コード変更なしで追加します。
+
+```yaml
+brewing-ingredient-identifiers:
+  - MODDED_BREWING_INGREDIENT
 ```
 
 **`virtual-item-identifiers`**  

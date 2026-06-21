@@ -19,7 +19,7 @@ Usage:
   ./scripts/test.sh integration
   ./scripts/test.sh coverage
   ./scripts/test.sh e2e [1.21.4|1.21.8|1.21.11|26.1.2|26.2] [both|with-logger|without-logger]
-  ./scripts/test.sh banner-compat
+  ./scripts/test.sh banner-compat [1.21.11|all]
   ./scripts/test.sh all
 EOF
   exit 2
@@ -61,6 +61,14 @@ timing_record() {
     { print }
     END { if (!found) print key, actual, 1 }
   ' "$TIMING_FILE" >"$temp_file" && mv "$temp_file" "$TIMING_FILE"
+}
+
+timing_record_if_success() {
+  local key="$1"
+  local actual_seconds="$2"
+  local status="$3"
+  [ "$status" -eq 0 ] || return 0
+  timing_record "$key" "$actual_seconds"
 }
 
 timing_estimate() {
@@ -167,6 +175,8 @@ run_unit() {
   rm -rf "$ROOT_DIR/target/surefire-reports"
   run_logged unit "$TEST_LOG_DIR/unit.log" \
     maven_root -DexcludedGroups=integration test || return 1
+  run_logged runner-selftest "$TEST_LOG_DIR/runner-selftest.log" \
+    bash "$ROOT_DIR/scripts/test-runner-selftest.sh" || return 1
   summarize_surefire unit
 }
 
@@ -330,6 +340,11 @@ run_e2e_version() {
     echo "External Logger initialization failed on Paper $version" >&2
     result=1
   fi
+  if [ "$logger_mode" = "with-logger" ] \
+     && ! grep -Fq "[StorageSignPlugin#onEnable] StorageSign enabled." "$artifact_dir/paper.log"; then
+    echo "StorageSign message did not reach the external Logger sink on Paper $version" >&2
+    result=1
+  fi
   run_step "$runner_log" docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
 
   if [ "$result" -ne 0 ]; then
@@ -389,9 +404,8 @@ run_e2e() {
       result=0
       run_e2e_version "$version" "$(paper_build "$version")" "$logger_mode" || result=$?
       actual=$(($(date +%s) - started))
-      if [ "$result" -eq 0 ]; then
-        timing_record "e2e:$version:$logger_mode" "$actual"
-      else
+      timing_record_if_success "e2e:$version:$logger_mode" "$actual" "$result"
+      if [ "$result" -ne 0 ]; then
         failed=1
       fi
       completed=$((completed + 1))
@@ -403,6 +417,11 @@ run_e2e() {
 
 run_banner_compat() {
   local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
+  case "${1:-all}" in
+    1.21.11) versions=(1.21.4 1.21.8 1.21.11) ;;
+    all) ;;
+    *) usage ;;
+  esac
   local timing_keys=("prepare:e2e")
   local runtime_dir="$ROOT_DIR/e2e/runtime/banner-upgrade"
   local artifact_root="$ROOT_DIR/e2e/artifacts/banner-upgrade"
@@ -487,7 +506,7 @@ main() {
     integration) run_integration ;;
     coverage) run_coverage ;;
     e2e) run_e2e "${2:-}" "${3:-both}" ;;
-    banner-compat) run_banner_compat ;;
+    banner-compat) run_banner_compat "${2:-all}" ;;
     all)
       run_unit && run_integration && run_coverage && run_e2e "" both && run_banner_compat
       ;;

@@ -9,7 +9,7 @@
   <version>3.0.0</version>
   <packaging>jar</packaging>
   <name>StorageSign-Refactored</name>
-  <description>Refactored StorageSign plugin for Spigot/Paper.</description>
+  <description>Refactored StorageSign plugin for Paper.</description>
   <licenses>
     <license>
       <name>MIT License</name>
