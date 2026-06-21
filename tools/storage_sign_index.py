@@ -17,6 +17,8 @@ from typing import Sequence
 MAGIC = 0x53534958
 VERSION = 1
 MAX_IDENTIFIER_BYTES = 65_536
+MAX_ENTRIES = 10_000_000
+MIN_ENTRY_BYTES = 45
 DEFAULT_INDEX_PATHS = (
     Path("plugins/StorageSign-Refactored/storage-sign-index.bin"),
     Path("plugins/StorageSign-Refactored/storage-sign-index.bin.tmp"),
@@ -99,6 +101,10 @@ def read_index(path: Path) -> list[Entry]:
         raise ValueError("invalid index magic")
     if version != VERSION:
         raise ValueError(f"unsupported index version: {version}")
+    if count > MAX_ENTRIES:
+        raise ValueError(f"invalid index count: {count}")
+    if count > (len(payload) - 12) // MIN_ENTRY_BYTES:
+        raise ValueError(f"index count exceeds available data: {count}")
 
     entries: list[Entry] = []
     for _ in range(count):
@@ -224,15 +230,22 @@ def csv_result(entries: Sequence[Entry], world_map: WorldMap | None = None) -> s
     for entry in entries:
         writer.writerow((
             entry.world_id,
-            world_map.get(entry.world_id) if world_map else "",
+            _csv_safe(world_map.get(entry.world_id) if world_map else ""),
             entry.x,
             entry.y,
             entry.z,
-            entry.identifier,
+            _csv_safe(entry.identifier),
             entry.amount,
             entry.verified_at,
         ))
     return buffer.getvalue()
+
+
+def _csv_safe(value: str | None) -> str:
+    """Prevent spreadsheet applications from evaluating exported text as a formula."""
+    if value is None:
+        return ""
+    return "'" + value if value.startswith(("=", "+", "-", "@")) else value
 
 
 def json_result(

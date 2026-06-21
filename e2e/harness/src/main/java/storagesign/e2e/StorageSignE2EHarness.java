@@ -27,6 +27,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.entity.minecart.HopperMinecart;
 import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.entity.ChestBoat;
@@ -90,6 +91,16 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 case "sneak" -> {
                     player.setSneaking(Boolean.parseBoolean(scenario));
                     player.sendMessage("SSTEST SNEAK " + scenario);
+                }
+                case "admin" -> {
+                    player.addAttachment(this, "storagesign.index.admin", true);
+                    player.addAttachment(this, "storagesign.search.admin", true);
+                    player.updateCommands();
+                    player.sendMessage("SSTEST ADMIN " + scenario);
+                }
+                case "move" -> {
+                    player.teleport(player.getLocation().add(2, 0, 0));
+                    player.sendMessage("SSTEST MOVED " + scenario);
                 }
                 case "stash" -> {
                     stashOminousBanner(player);
@@ -541,6 +552,11 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         int chestBoatStone = world.getEntitiesByClass(ChestBoat.class).stream()
             .mapToInt(boat -> count(boat.getInventory().getContents(), Material.STONE))
             .sum();
+        int textDisplayCount = world.getEntitiesByClass(TextDisplay.class).size();
+        List<String> textDisplayTexts = world.getEntitiesByClass(TextDisplay.class).stream()
+            .map(TextDisplay::getText)
+            .sorted()
+            .toList();
         ItemStack playerBanner = findOminousBanner(player.getInventory().getContents());
         ItemStack chestBanner = bannerChestItem(world);
         ItemStack inspectedBanner = playerBanner != null ? playerBanner : chestBanner;
@@ -573,6 +589,8 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"bannerTooltipHidden\":" + bannerTooltipHidden(inspectedBanner) + ","
             + "\"loggerPluginEnabled\":" + loggerPluginEnabled() + ","
             + "\"externalLoggerRegistered\":" + externalLoggerRegistered() + ","
+            + "\"textDisplayCount\":" + textDisplayCount + ","
+            + "\"textDisplayTexts\":" + jsonArray(textDisplayTexts) + ","
             + "\"heldType\":\"" + player.getInventory().getItemInMainHand().getType().name() + "\","
             + "\"storageSignAcceptsHeld\":" + storageSignAcceptsHeld(player) + ","
             + "\"canPlace\":" + player.hasPermission("storagesign.place") + ","
@@ -906,6 +924,11 @@ public final class StorageSignE2EHarness extends JavaPlugin {
     }
 
     private static String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
     }
 }

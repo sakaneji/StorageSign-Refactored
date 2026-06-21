@@ -117,6 +117,42 @@ class ConfigLoaderTest {
         assertTrue(ConfigLoader.getVirtualItemIdentifiers().isEmpty());
     }
 
+    @Test
+    void loadFallsBackForNonPositiveSizingValues() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        FileConfiguration config = mock(FileConfiguration.class);
+        when(plugin.getConfig()).thenReturn(config);
+        when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
+        when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("virtual-item-identifiers")).thenReturn(null);
+        when(config.getInt("storage-index.rebuild-chunks-per-tick", 8)).thenReturn(0);
+        when(config.getBoolean("storage-index.enabled", true)).thenReturn(true);
+        when(config.getBoolean("nearby-display.enabled", true)).thenReturn(true);
+        when(config.getDouble("nearby-display.distance", 6.0)).thenReturn(-1.0);
+        when(config.getDouble("nearby-display.field-of-view-degrees", 90.0)).thenReturn(Double.NaN);
+        when(config.getInt("nearby-display.idle-delay-ticks", 10)).thenReturn(-5);
+        when(config.getInt("nearby-display.monitor-interval-ticks", 5)).thenReturn(0);
+        when(config.getInt("nearby-display.max-per-player", 3)).thenReturn(-1);
+        when(config.getInt("nearby-display.max-searches-per-tick", 25)).thenReturn(0);
+        when(config.getInt("nearby-display.global-label-limit", 512)).thenReturn(-7);
+        when(config.getInt("admin-search.page-size", 10)).thenReturn(0);
+        when(config.getInt("admin-search.max-concurrent", 2)).thenReturn(-3);
+
+        ConfigLoader.load(plugin);
+
+        assertEquals(8, ConfigLoader.getIndexChunksPerTick());
+        assertEquals(6.0, ConfigLoader.getNearbyDisplayDistance());
+        assertEquals(1.0, ConfigLoader.getNearbyDisplayFov());
+        assertEquals(10, ConfigLoader.getNearbyDisplayIdleTicks());
+        assertEquals(5, ConfigLoader.getNearbyDisplayIntervalTicks());
+        assertEquals(3, ConfigLoader.getNearbyDisplayMaxPerPlayer());
+        assertEquals(25, ConfigLoader.getNearbyDisplaySearchesPerTick());
+        assertEquals(512, ConfigLoader.getNearbyDisplayGlobalLimit());
+        assertEquals(10, ConfigLoader.getAdminSearchPageSize());
+        assertEquals(2, ConfigLoader.getAdminSearchMaxConcurrent());
+    }
+
     private static ConfigurationSection section(Set<String> keys, Map<String, String> values) {
         ConfigurationSection section = mock(ConfigurationSection.class);
         when(section.getKeys(false)).thenReturn(keys);
