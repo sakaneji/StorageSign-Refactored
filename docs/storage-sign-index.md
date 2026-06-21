@@ -137,3 +137,30 @@ admin-search:
 - 数百人環境での実際のTPS影響は、サーバー構成とStorageSign密度を含む実負荷試験が必要です。
 
 索引ファイルをバックアップ・復元する場合はサーバーを停止してから操作してください。Worldデータと同じ時点の索引を使用するのが安全です。索引ファイルを削除してもStorageSign本体は失われず、ロード済みチャンクから索引が再構築されます。
+
+## 外部ビューア
+
+プラグイン本体とは別に、保存済み索引を読む外部ツールを使えます。`java`ではなくPythonスクリプトとして用意してあり、ローカルのWebページで検索できます。
+
+```text
+python3 tools/storage_sign_index_viewer.py --serve
+```
+
+既定では`plugins/StorageSign-Refactored/storage-sign-index.bin`を読みます。`--file`で任意のパスを指定できます。
+
+### CLI出力
+
+```text
+python3 tools/storage_sign_index_viewer.py --identifier STONE
+python3 tools/storage_sign_index_viewer.py --identifier POTION --mode contains
+python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --format json
+```
+
+### Webページ
+
+`--serve`を付けると、`http://127.0.0.1:8765/` で検索UIを開けます。Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。
+
+注意:
+
+- この保存データには World 名は入っていないため、外部ビューアでは基本的に World UUID を表示します。
+- 破損した `.bin` はプラグイン側と同様に CRC で弾きます。壊れたファイルは先に修復または再構築してください。
