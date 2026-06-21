@@ -342,7 +342,7 @@ Spigot は製品保証およびリリース試験の対象外です。また、�
 
 ```
 行 0: "StorageSign"
-行 1: アイテム識別子（例: STONE, POTION:HEAL:0）
+行 1: 表示用識別子（Vanilla標準幅90px以内）
 行 2: 保管数量（数値文字列）
 行 3: サマリー（例: "1LC 2s 3"、LC=ラージチェスト換算・s=スタック・残は個数）
 ```
@@ -358,11 +358,11 @@ Spigot は製品保証およびリリース試験の対象外です。また、�
 | エンチャント本 | `ENCHBOOK:sharp:5` |
 | 不吉なビン | `OMINOUS_BOTTLE:2` |
 
-Potionの行1とLoreは、看板の標準表示幅に収まる従来の短縮形式を維持します。
-実際の復元キーは看板とStorageSignアイテムのPersistentDataContainerへ
-`POTION:minecraft:healing`のようなRegistryキー形式で保存されます。これにより、
-将来Potionが追加されても短縮名の衝突に影響されません。PDCを持たない旧データも従来形式から読み込み、
-次回の更新・アイテム化・再設置時に正規キーを付与します。
+看板の行1は、全Material・特殊種別・設定追加識別子をVanilla標準幅90px以内に短縮します。
+完全な識別子は看板のPersistentDataContainerに保存されるため、短縮表示からデータを推測せず復元できます。
+Potionは従来の`potion_identifier`も維持し、StorageSignアイテムには
+`POTION:minecraft:healing`のようなRegistryキー形式を保存します。PDCを持たない旧データも従来形式から読み込み、
+次回の看板更新・アイテム化・再設置時に正規キーを付与します。
 
 ### 設定の拡張
 
