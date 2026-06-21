@@ -138,30 +138,41 @@ admin-search:
 
 索引ファイルをバックアップ・復元する場合はサーバーを停止してから操作してください。Worldデータと同じ時点の索引を使用するのが安全です。索引ファイルを削除してもStorageSign本体は失われず、ロード済みチャンクから索引が再構築されます。
 
-## 外部ビューア
+## 外部CLI・ビューア
 
-プラグイン本体とは別に、保存済み索引を読む外部ツールを使えます。`java`ではなくPythonスクリプトとして用意してあり、ローカルのWebページで検索できます。
+プラグイン本体とは別に、保存済み索引を読むPythonツールを使えます。検索、集計、エクスポートはCLIが担当し、Web画面は独立したviewerが担当します。
 
 ```text
-python3 tools/storage_sign_index_viewer.py --serve
+python3 tools/storage_sign_index_cli.py inspect
 ```
 
 既定では`plugins/StorageSign-Refactored/storage-sign-index.bin`を読みます。`--file`で任意のパスを指定できます。
 `--world-map`には、World UUIDから表示名へ変換するJSONまたはCSVを渡せます。
 
-### CLI出力
+### CLI
 
 ```text
-python3 tools/storage_sign_index_viewer.py --identifier STONE
-python3 tools/storage_sign_index_viewer.py --identifier POTION --mode contains
-python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --format json
-python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --format csv
-python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --world-map worlds.json
+python3 tools/storage_sign_index_cli.py inspect --file /path/to/storage-sign-index.bin
+python3 tools/storage_sign_index_cli.py search STONE
+python3 tools/storage_sign_index_cli.py search POTION --contains
+python3 tools/storage_sign_index_cli.py search STONE --world 12345678-1234-5678-9abc-def012345678 --limit 20
+python3 tools/storage_sign_index_cli.py search STONE --format json
+python3 tools/storage_sign_index_cli.py export --format csv --output storage-sign-index.csv
+python3 tools/storage_sign_index_cli.py export --identifier STONE --world-map worlds.json
 ```
+
+`inspect`は索引全体の集計、`search`はアイテム検索、`export`はCSVまたはJSON出力を行います。`search`の既定出力はテキストで、該当なしも終了コード0です。ファイル欠落、CRC不一致、不正なWorldマップは終了コード1になります。
 
 ### Webページ
 
-`--serve`を付けると、`http://127.0.0.1:8765/` で検索UIを開けます。Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。
+次のコマンドで、`http://127.0.0.1:8765/` に検索UIを起動します。
+
+```text
+python3 tools/storage_sign_index_viewer.py
+python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --world-map worlds.json
+```
+
+Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。旧形式の`--serve`も互換性のため受け付けます。
 Web UI には CSV ダウンロードボタンもあり、同じフィルタ条件で `/api/export.csv` を返します。
 
 注意:

@@ -1,253 +1,27 @@
 #!/usr/bin/env python3
-"""Read and browse the persistent StorageSign index.
-
-This tool understands the binary format written by StorageSignIndexCodec and
-can either print query results or serve a small local web UI for searching.
-"""
+"""Serve a local web viewer for the persistent StorageSign index."""
 
 from __future__ import annotations
 
 import argparse
-import csv
 import html
-import io
 import json
-import struct
 import sys
 import urllib.parse
-import uuid
-import zlib
-from collections import defaultdict
-from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Sequence
 
-
-MAGIC = 0x53534958
-VERSION = 1
-MAX_IDENTIFIER_BYTES = 65_536
-DEFAULT_INDEX_PATHS = (
-    Path("plugins/StorageSign-Refactored/storage-sign-index.bin"),
-    Path("plugins/StorageSign-Refactored/storage-sign-index.bin.tmp"),
+from storage_sign_index import (
+    csv_result,
+    default_index_path,
+    entry_payload,
+    filter_entries,
+    load_world_map,
+    read_index,
+    summarize,
 )
-WorldMap = dict[str, str]
-
-
-@dataclass(frozen=True, slots=True)
-class Entry:
-    world_id: str
-    x: int
-    y: int
-    z: int
-    identifier: str
-    amount: int
-    verified_at: int
-
-    @property
-    def world_uuid(self) -> str:
-        return self.world_id
-
-    @property
-    def chunk_x(self) -> int:
-        return self.x >> 4
-
-    @property
-    def chunk_z(self) -> int:
-        return self.z >> 4
-
-    @property
-    def location(self) -> str:
-        return f"{self.x}, {self.y}, {self.z}"
-
-
-def default_index_path() -> Path:
-    for candidate in DEFAULT_INDEX_PATHS:
-        if candidate.exists():
-            return candidate
-    return DEFAULT_INDEX_PATHS[0]
-
-
-def load_world_map(path: Path | None) -> WorldMap:
-    if path is None:
-        return {}
-    if not path.exists():
-        raise FileNotFoundError(f"world map file not found: {path}")
-    raw = path.read_text(encoding="utf-8").strip()
-    if not raw:
-        return {}
-    if path.suffix.lower() == ".csv":
-        return _load_world_map_csv(path)
-    data = json.loads(raw)
-    if isinstance(data, dict):
-        return {str(key): str(value) for key, value in data.items()}
-    if isinstance(data, list):
-        mapping: WorldMap = {}
-        for item in data:
-            if not isinstance(item, dict):
-                raise ValueError("world map array entries must be objects")
-            uuid_value = item.get("uuid") or item.get("world_id") or item.get("id")
-            name_value = item.get("name") or item.get("world_name")
-            if uuid_value is None or name_value is None:
-                raise ValueError("world map entries need uuid/name fields")
-            mapping[str(uuid_value)] = str(name_value)
-        return mapping
-    raise ValueError("world map must be a JSON object or array")
-
-
-def _load_world_map_csv(path: Path) -> WorldMap:
-    mapping: WorldMap = {}
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            if not row:
-                continue
-            uuid_value = row.get("uuid") or row.get("world_id") or row.get("id")
-            name_value = row.get("name") or row.get("world_name")
-            if not uuid_value or not name_value:
-                raise ValueError("world map CSV needs uuid/name columns")
-            mapping[uuid_value.strip()] = name_value.strip()
-    return mapping
-
-
-def read_index(path: Path) -> list[Entry]:
-    raw = path.read_bytes()
-    if len(raw) < 16:
-        raise ValueError("index file is truncated")
-
-    payload, stored_crc = raw[:-4], raw[-4:]
-    if zlib.crc32(payload) & 0xFFFFFFFF != struct.unpack(">I", stored_crc)[0]:
-        raise ValueError("index CRC mismatch")
-
-    stream = io.BytesIO(payload)
-    magic, version, count = struct.unpack(">III", stream.read(12))
-    if magic != MAGIC:
-        raise ValueError("invalid index magic")
-    if version != VERSION:
-        raise ValueError(f"unsupported index version: {version}")
-    if count < 0:
-        raise ValueError(f"invalid entry count: {count}")
-
-    entries: list[Entry] = []
-    for _ in range(count):
-        world_msb, world_lsb = struct.unpack(">qq", _read_exact(stream, 16))
-        x, y, z, amount = struct.unpack(">iiii", _read_exact(stream, 16))
-        (verified_at,) = struct.unpack(">q", _read_exact(stream, 8))
-        (identifier_length,) = struct.unpack(">i", _read_exact(stream, 4))
-        if identifier_length <= 0 or identifier_length > MAX_IDENTIFIER_BYTES:
-            raise ValueError(f"invalid identifier length: {identifier_length}")
-        identifier_bytes = _read_exact(stream, identifier_length)
-        world_uuid = _format_uuid(world_msb, world_lsb)
-        identifier = identifier_bytes.decode("utf-8")
-        entries.append(Entry(world_uuid, x, y, z, identifier, amount, verified_at))
-
-    if stream.read(1):
-        raise ValueError("unexpected trailing index data")
-    return entries
-
-
-def _format_uuid(msb: int, lsb: int) -> str:
-    return str(uuid.UUID(bytes=struct.pack(">qq", msb, lsb)))
-
-
-def _read_exact(stream: io.BytesIO, size: int) -> bytes:
-    data = stream.read(size)
-    if len(data) != size:
-        raise ValueError("index file is truncated")
-    return data
-
-
-def matches(entry: Entry, identifier: str | None, mode: str, world: str | None) -> bool:
-    if world and entry.world_id.lower() != world.lower():
-        return False
-    if not identifier:
-        return True
-    haystack = entry.identifier.lower()
-    needle = identifier.lower()
-    if mode == "contains":
-        return needle in haystack
-    return haystack == needle
-
-
-def filter_entries(entries: Sequence[Entry], identifier: str | None, mode: str, world: str | None) -> list[Entry]:
-    return [entry for entry in entries if matches(entry, identifier, mode, world)]
-
-
-def summarize(entries: Sequence[Entry], world_map: WorldMap | None = None) -> dict[str, object]:
-    by_world = defaultdict(int)
-    total_amount = 0
-    mapped_worlds = set()
-    for entry in entries:
-        by_world[entry.world_id] += 1
-        total_amount += entry.amount
-        if world_map and entry.world_id in world_map:
-            mapped_worlds.add(entry.world_id)
-    return {
-        "count": len(entries),
-        "total_amount": total_amount,
-        "worlds": dict(sorted(by_world.items(), key=lambda item: item[0])),
-        "mapped_worlds": len(mapped_worlds),
-    }
-
-
-def world_label(world_id: str, world_map: WorldMap | None = None) -> str:
-    if world_map:
-        name = world_map.get(world_id)
-        if name:
-            return f"{name} ({world_id})"
-    return world_id
-
-
-def cli_rows(entries: Sequence[Entry], limit: int | None = None, world_map: WorldMap | None = None) -> str:
-    shown = entries if limit is None else entries[:limit]
-    lines = []
-    for index, entry in enumerate(shown, 1):
-        lines.append(
-            f"{index}. {world_label(entry.world_id, world_map)} {entry.x} {entry.y} {entry.z} "
-            f"— {entry.amount} — {entry.identifier} [verified={entry.verified_at}]"
-        )
-    return "\n".join(lines)
-
-
-def entry_payload(entry: Entry, world_map: WorldMap | None = None) -> dict[str, object]:
-    return {
-        "world_id": entry.world_id,
-        "world_name": world_map.get(entry.world_id) if world_map else None,
-        "x": entry.x,
-        "y": entry.y,
-        "z": entry.z,
-        "identifier": entry.identifier,
-        "amount": entry.amount,
-        "verified_at": entry.verified_at,
-    }
-
-
-def csv_rows(entries: Sequence[Entry], world_map: WorldMap | None = None) -> str:
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow([
-        "world_id",
-        "world_name",
-        "x",
-        "y",
-        "z",
-        "identifier",
-        "amount",
-        "verified_at",
-    ])
-    for entry in entries:
-        writer.writerow([
-            entry.world_id,
-            world_map.get(entry.world_id) if world_map else "",
-            entry.x,
-            entry.y,
-            entry.z,
-            entry.identifier,
-            entry.amount,
-            entry.verified_at,
-        ])
-    return buffer.getvalue()
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -618,7 +392,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = Path(path_value).expanduser()
             entries = read_index(path)
-            filtered = filter_entries(entries, identifier, mode, world)
+            filtered = filter_entries(entries, identifier, mode == "contains", world)
             payload = {
                 "path": str(path),
                 "summary": summarize(filtered, self.server.world_map),
@@ -646,8 +420,8 @@ class Handler(BaseHTTPRequestHandler):
         world = query.get("world", [""])[0].strip() or None
         try:
             path = Path(path_value).expanduser()
-            entries = filter_entries(read_index(path), identifier, mode, world)
-            body = csv_rows(entries, self.server.world_map).encode("utf-8")
+            entries = filter_entries(read_index(path), identifier, mode == "contains", world)
+            body = csv_result(entries, self.server.world_map).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
             self.send_header("Content-Disposition", 'attachment; filename="storage-sign-index.csv"')
@@ -669,21 +443,16 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
                         help="path to storage-sign-index.bin")
     parser.add_argument("--world-map", type=Path, default=None,
                         help="JSON or CSV file mapping world UUID to world name")
-    parser.add_argument("--identifier", default="", help="identifier to search for")
-    parser.add_argument("--mode", choices=("exact", "contains"), default="exact")
-    parser.add_argument("--world", default="", help="world UUID filter")
-    parser.add_argument("--limit", type=int, default=50, help="limit for CLI output")
-    parser.add_argument("--format", choices=("table", "json", "csv", "html"), default="table")
-    parser.add_argument("--serve", action="store_true", help="start local HTTP viewer")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP host when serving")
     parser.add_argument("--port", type=int, default=8765, help="HTTP port when serving")
+    parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
-    world_map = load_world_map(args.world_map)
-    if args.serve:
+    try:
+        world_map = load_world_map(args.world_map)
         server = ViewerServer((args.host, args.port), Handler)
         server.default_path = args.file
         server.world_map = world_map
@@ -693,34 +462,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except KeyboardInterrupt:
             return 130
         return 0
-
-    entries = read_index(args.file)
-    filtered = filter_entries(entries, args.identifier or None, args.mode, args.world or None)
-    summary = summarize(filtered, world_map)
-
-    if args.format == "json":
-        print(json.dumps({
-            "path": str(args.file),
-            "summary": summary,
-            "entries": [entry_payload(entry, world_map) for entry in filtered[: args.limit]],
-        }, ensure_ascii=False, indent=2))
-        return 0
-
-    if args.format == "csv":
-        sys.stdout.write(csv_rows(filtered, world_map))
-        return 0
-
-    if args.format == "html":
-        print(HTML_TEMPLATE.replace("__INDEX_PATH__", html.escape(str(args.file))))
-        return 0
-
-    print(f"path: {args.file}")
-    print(f"entries: {summary['count']}")
-    print(f"totalAmount: {summary['total_amount']}")
-    print(f"worlds: {len(summary['worlds'])}")
-    print(f"mappedWorlds: {summary['mapped_worlds']}")
-    print(cli_rows(filtered, args.limit, world_map))
-    return 0
+    except (OSError, UnicodeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
