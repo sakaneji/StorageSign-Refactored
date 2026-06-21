@@ -75,6 +75,12 @@ public final class MaterialRegistry {
         return SIGN_MATERIALS.contains(material) || WALL_SIGN_MATERIALS.contains(material);
     }
 
+    /** 看板ブロック素材に対応するインベントリアイテム素材を返す。 */
+    public static Material toItemSignMaterial(Material material) {
+        if (material == null) return null;
+        return WALL_TO_SIGN.getOrDefault(material, material);
+    }
+
     private static String toStandingSignName(String wallName) {
         if (wallName.endsWith("_WALL_HANGING_SIGN")) {
             return wallName.replace("_WALL_HANGING_SIGN", "_HANGING_SIGN");

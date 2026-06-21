@@ -53,6 +53,15 @@ item-identifier-aliases:
   LPOTION: LINGERING_POTION
   STONE_SLAB: SMOOTH_STONE_SLAB
 
+# Potion registry-key migrations. Quotes are required because keys contain ':'.
+# Applied only when the original key no longer exists in the running server registry.
+potion-key-aliases: {}
+#  "minecraft:old_potion": "minecraft:replacement_potion"
+
+# Additional brewing ingredients introduced by a server or future Minecraft version.
+# Built-in vanilla ingredients remain enabled automatically.
+brewing-ingredient-identifiers: []
+
 # Virtual identifier table.
 # Key: identifier text on sign/lore, Value: backing storage representation MATERIAL[:damage].
 # Use this for legacy marker identifiers (example: HorseEgg) or server-specific migrations.

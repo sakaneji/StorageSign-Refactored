@@ -13,6 +13,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.ItemStack;
 
 import storagesign.ConfigLoader;
+import storagesign.AmountTransfer;
 import storagesign.StorageSign;
 import storagesign.logging.PluginLogger;
 
@@ -38,18 +39,18 @@ public final class EntityListener implements Listener {
             PlayerInventory inv = player.getInventory();
             ItemStack picked = event.getItem().getItemStack();
 
-            StorageSign ssMain = autoCollectToHand(inv.getItemInMainHand(), picked, inv, event);
-            if (ssMain != null) {
+            CollectionResult main = autoCollectToHand(inv.getItemInMainHand(), picked, inv, event);
+            if (main != null) {
                 inv.setItemInMainHand(
-                    updatedStorageSign(inv.getItemInMainHand(), ssMain, picked.getAmount())
+                    updatedStorageSign(inv.getItemInMainHand(), main.storageSign(), main.accepted())
                 );
                 player.updateInventory();
                 return;
             }
-            StorageSign ssOff = autoCollectToHand(inv.getItemInOffHand(), picked, inv, event);
-            if (ssOff != null) {
+            CollectionResult off = autoCollectToHand(inv.getItemInOffHand(), picked, inv, event);
+            if (off != null) {
                 inv.setItemInOffHand(
-                    updatedStorageSign(inv.getItemInOffHand(), ssOff, picked.getAmount())
+                    updatedStorageSign(inv.getItemInOffHand(), off.storageSign(), off.accepted())
                 );
                 player.updateInventory();
                 return;
@@ -72,17 +73,25 @@ public final class EntityListener implements Listener {
      * @return 値を再利用して 2 回目の {@code fromItemStack()} 呼び出しを回避するため、
      *         成功時はパース済み {@link StorageSign} を返す。条件を満たさない場合は {@code null}。
      */
-    private static StorageSign autoCollectToHand(ItemStack handSSItem, ItemStack picked, PlayerInventory inv,
-                                                 EntityPickupItemEvent event) {
+    private static CollectionResult autoCollectToHand(ItemStack handSSItem, ItemStack picked, PlayerInventory inv,
+                                                      EntityPickupItemEvent event) {
         StorageSign ss = StorageSign.fromItemStack(handSSItem);
         if (ss == null || ss.isUnregistered()) return null;
         if (handSSItem.getAmount() != 1) return null;
         if (!ss.isSimilar(picked)) return null;
         if (!inv.containsAtLeast(picked, picked.getMaxStackSize())) return null;
 
+        int accepted = AmountTransfer.accepted(ss.getAmount(), picked.getAmount());
+        if (accepted <= 0) return null;
         event.setCancelled(true);
-        event.getItem().remove();
-        return ss;
+        if (accepted == picked.getAmount()) {
+            event.getItem().remove();
+        } else {
+            ItemStack remaining = picked.clone();
+            remaining.setAmount(picked.getAmount() - accepted);
+            event.getItem().setItemStack(remaining);
+        }
+        return new CollectionResult(ss, accepted);
     }
 
     /**
@@ -94,8 +103,10 @@ public final class EntityListener implements Listener {
      */
     private static ItemStack updatedStorageSign(ItemStack handSSItem, StorageSign ss, int addAmount) {
         ss.setAmount(ss.getAmount() + addAmount);
-        return StorageSign.createStorageSignItem(handSSItem.getType(), ss.getLoreText(), handSSItem.getAmount());
+        return StorageSign.createStorageSignItem(handSSItem.getType(), ss, handSSItem.getAmount());
     }
+
+    private record CollectionResult(StorageSign storageSign, int accepted) {}
 
     // ── EntityChangeBlockEvent ───────────────────────────────────────────────────
 

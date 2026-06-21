@@ -18,6 +18,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
 import storagesign.ConfigLoader;
+import storagesign.AmountTransfer;
 import storagesign.StorageSign;
 import storagesign.StorageSignPlugin;
 import storagesign.logging.PluginLogger;
@@ -149,13 +150,15 @@ public final class PlayerInteractListener implements Listener {
         if (!handSS.isUnregistered() && ConfigLoader.getManualImport()) {
             ItemStack handContents = handSS.getContents(1);
             if (handContents != null && blockSS.isSimilar(handContents)) {
-                long add = (long) handSS.getAmount() * Math.max(1, handItem.getAmount());
-                // 上限（Integer.MAX_VALUE）を超える場合は何もしない（サイレントに無視）。
-                if (add <= Integer.MAX_VALUE - blockSS.getAmount()) {
+                int perItem = handSS.getAmount();
+                int mergeableItems = perItem <= 0 ? 0 : Math.min(
+                    Math.max(1, handItem.getAmount()),
+                    (Integer.MAX_VALUE - blockSS.getAmount()) / perItem
+                );
+                if (mergeableItems > 0) {
+                    long add = (long) perItem * mergeableItems;
                     blockSS.setAmount((int) (blockSS.getAmount() + add));
-                    player.getInventory().setItemInMainHand(
-                        StorageSign.createStorageSignItem(handItem.getType(), StorageSign.EMPTY_MARKER, handItem.getAmount())
-                    );
+                    applyMergedStorageSigns(player, handItem, handSS, mergeableItems);
                     applyToBlock(block, blockSS);
                     LOG.debug("processStorageSignItemInteraction", () -> "merged=" + add
                               + ", sign=" + block.getLocation()
@@ -170,8 +173,9 @@ public final class PlayerInteractListener implements Listener {
             && blockSS.isSignAsItem() && blockSS.getMaterial() == handItem.getType()) {
             int added = 0;
             if (player.isSneaking()) {
-                added = handItem.getAmount();
-                player.getInventory().clear(player.getInventory().getHeldItemSlot());
+                added = AmountTransfer.accepted(blockSS.getAmount(), handItem.getAmount());
+                if (added <= 0) return;
+                consumeSlot(player, player.getInventory().getHeldItemSlot(), handItem, added);
             } else {
                 // getContents() はバッキング配列を一度の呼び出しで返す。N 回の getItem() API 呼び出しを回避できる。
                 ItemStack[] contents = player.getInventory().getContents();
@@ -180,8 +184,10 @@ public final class PlayerInteractListener implements Listener {
                     if (item == null || item.getType() != handItem.getType()) continue;
                     StorageSign itemSS = StorageSign.fromItemStack(item);
                     if (itemSS == null || !itemSS.isUnregistered()) continue;
-                    added += item.getAmount();
-                    player.getInventory().setItem(i, null);
+                    int accepted = AmountTransfer.accepted(blockSS.getAmount() + added, item.getAmount());
+                    if (accepted <= 0) break;
+                    added += accepted;
+                    consumeSlot(player, i, item, accepted);
                 }
             }
             if (added > 0) {
@@ -197,6 +203,7 @@ public final class PlayerInteractListener implements Listener {
 
         // 手持ちの空 SS スタックにブロック SS を分割する。
         if (handSS.isUnregistered() && ConfigLoader.getManualExport()
+            && handItem.getType() == MaterialRegistry.toItemSignMaterial(block.getType())
             && blockSS.getAmount() > handItem.getAmount()) {
             ItemStack template = blockSS.getContents(1);
             if (template == null) return;
@@ -206,17 +213,12 @@ public final class PlayerInteractListener implements Listener {
 
             int signsInHand = Math.max(1, handItem.getAmount());
             int limit = player.isSneaking() ? ConfigLoader.getSneakDivideLimit() : ConfigLoader.getDivideLimit();
-            int perSign;
-            if (limit > 0 && blockSS.getAmount() > limit * (signsInHand + 1)) {
-                perSign = limit;
-            } else {
-                perSign = blockSS.getAmount() / (signsInHand + 1);
-            }
+            int perSign = AmountTransfer.dividedPerSign(blockSS.getAmount(), signsInHand, limit);
             if (perSign <= 0) return;
 
             divided.setAmount(perSign);
             player.getInventory().setItemInMainHand(
-                StorageSign.createStorageSignItem(handItem.getType(), divided.getLoreText(), signsInHand)
+                StorageSign.createStorageSignItem(handItem.getType(), divided, signsInHand)
             );
             blockSS.setAmount(blockSS.getAmount() - (perSign * signsInHand));
             applyToBlock(block, blockSS);
@@ -232,9 +234,10 @@ public final class PlayerInteractListener implements Listener {
 
         int before = ss.getAmount();
         if (player.isSneaking()) {
-            int add = hand.getAmount();
+            int add = AmountTransfer.accepted(ss.getAmount(), hand.getAmount());
+            if (add <= 0) return;
             ss.setAmount(ss.getAmount() + add);
-            player.getInventory().clear(player.getInventory().getHeldItemSlot());
+            consumeSlot(player, player.getInventory().getHeldItemSlot(), hand, add);
 
             // スニークインポート: 手持ちアイテムのみが対象。染料/インクも併せて看板固有の制限を適用する。
             if (block.getState() instanceof Sign sign) {
@@ -254,8 +257,10 @@ public final class PlayerInteractListener implements Listener {
             for (int i = 0; i < contents.length; i++) {
                 ItemStack item = contents[i];
                 if (!ss.isSimilar(item)) continue;
-                ss.setAmount(ss.getAmount() + item.getAmount());
-                player.getInventory().setItem(i, null);
+                int add = AmountTransfer.accepted(ss.getAmount(), item.getAmount());
+                if (add <= 0) break;
+                ss.setAmount(ss.getAmount() + add);
+                consumeSlot(player, i, item, add);
             }
             applyToBlock(block, ss);
         }
@@ -298,6 +303,41 @@ public final class PlayerInteractListener implements Listener {
 
     private static boolean isSac(Material mat) {
         return mat == INK_SAC || mat == GLOW_INK_SAC;  // インクサックか光るインクサックであれば次
+    }
+
+    private static ItemStack remainingMergedStack(ItemStack original, StorageSign contents, int mergedItems) {
+        ItemStack remaining = original.clone();
+        int remainingAmount = original.getAmount() - mergedItems;
+        remaining.setAmount(remainingAmount);
+        return StorageSign.createStorageSignItem(remaining.getType(), contents, remainingAmount);
+    }
+
+    private static void applyMergedStorageSigns(Player player, ItemStack original,
+                                                StorageSign contents, int mergedItems) {
+        if (mergedItems == original.getAmount()) {
+            player.getInventory().setItemInMainHand(StorageSign.createStorageSignItem(
+                original.getType(), StorageSign.EMPTY_MARKER, mergedItems));
+            return;
+        }
+
+        player.getInventory().setItemInMainHand(
+            remainingMergedStack(original, contents, mergedItems));
+        ItemStack emptied = StorageSign.createStorageSignItem(
+            original.getType(), StorageSign.EMPTY_MARKER, mergedItems);
+        for (ItemStack leftover : player.getInventory().addItem(emptied).values()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+        }
+    }
+
+    private static void consumeSlot(Player player, int slot, ItemStack item, int consumed) {
+        int remaining = item.getAmount() - consumed;
+        if (remaining <= 0) {
+            player.getInventory().setItem(slot, null);
+        } else {
+            ItemStack rest = item.clone();
+            rest.setAmount(remaining);
+            player.getInventory().setItem(slot, rest);
+        }
     }
 
     private static boolean isGlowSac(Material mat) {

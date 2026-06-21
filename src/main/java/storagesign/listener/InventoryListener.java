@@ -15,12 +15,15 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
+import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.block.Container;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
 import storagesign.ConfigLoader;
+import storagesign.AmountTransfer;
 import storagesign.StorageSignPlugin;
 import storagesign.adjacency.SsAdjacencyMatch;
 import storagesign.adjacency.SsAdjacencyPurpose;
@@ -68,6 +71,7 @@ public final class InventoryListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onItemMove(InventoryMoveItemEvent event) {
+        if (event.isCancelled()) return;
         boolean autoImport = ConfigLoader.getAutoImport();
         boolean autoExport = ConfigLoader.getAutoExport();
         if (!autoImport && !autoExport) return;
@@ -86,10 +90,8 @@ public final class InventoryListener implements Listener {
                 Optional<SsAdjacencyMatch> matchOpt = resolveAdjacentStorageSignForInventory(destination, item);
                 if (matchOpt.isPresent()) {
                     SsAdjacencyMatch match = matchOpt.get();
-                    int absorbed = removeMatchingAmount(destination, item);
+                    int absorbed = absorbAvailable(destination, item, match);
                     if (absorbed > 0) {
-                        match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
-                        match.storageSign().applyToSign(match.signState());
                         if (LOG.isTraceEnabled()) {
                             LOG.trace("onItemMove", () -> "auto-import absorbed=" + absorbed
                                       + ", material=" + item.getType()
@@ -107,7 +109,7 @@ public final class InventoryListener implements Listener {
             Optional<SsAdjacencyMatch> matchOpt = resolveAdjacentStorageSignForInventory(source, item);
             if (matchOpt.isPresent()) {
                 SsAdjacencyMatch match = matchOpt.get();
-                if (pendingExports.add(match.signBlock())) {
+                if (reserveExport(match.signBlock())) {
                     new ExportSignTask(match.signBlock(), source, item.clone(), pendingExports).runTask(plugin);
                     if (LOG.isTraceEnabled()) {
                         LOG.trace("onItemMove", () -> "auto-export scheduled, material=" + item.getType()
@@ -122,6 +124,7 @@ public final class InventoryListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInventoryPickup(InventoryPickupItemEvent event) {
+        if (event.isCancelled()) return;
         if (!ConfigLoader.getAutoImport()) return;
 
         Inventory inventory = event.getInventory();
@@ -138,16 +141,48 @@ public final class InventoryListener implements Listener {
         if (matchOpt.isEmpty()) return;
 
         SsAdjacencyMatch match = matchOpt.get();
-        int absorbed = removeMatchingAmount(inventory, item);
+        int absorbed = absorbAvailable(inventory, item, match);
         if (absorbed > 0) {
-            match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
-            match.storageSign().applyToSign(match.signState());
             if (LOG.isTraceEnabled()) {
                 LOG.trace("onInventoryPickup", () -> "pickup absorbed=" + absorbed
                           + ", material=" + item.getType()
                           + ", sign=" + match.signBlock().getLocation());
             }
         }
+    }
+
+    // ── BlockDispenseEvent（搬送ブロック→ワールド排出）────────────────────────
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockDispense(BlockDispenseEvent event) {
+        if (event.isCancelled() || !ConfigLoader.getAutoExport()) return;
+        if (!(event.getBlock().getState() instanceof Container source)) return;
+
+        ItemStack item = event.getItem();
+        if (item == null || item.getAmount() <= 0) return;
+        Optional<SsAdjacencyMatch> matchOpt = resolveAdjacentStorageSign(event.getBlock(), item);
+        if (matchOpt.isEmpty()) return;
+
+        SsAdjacencyMatch match = matchOpt.get();
+        if (reserveExport(match.signBlock())) {
+            new ExportSignTask(match.signBlock(), source.getInventory(), item.clone(), pendingExports)
+                .runTask(plugin);
+        }
+    }
+
+    boolean reserveExport(Block signBlock) {
+        return pendingExports.add(signBlock);
+    }
+
+    static int absorbAvailable(Inventory inventory, ItemStack item, SsAdjacencyMatch match) {
+        int requested = Math.min(item.getAmount(),
+            AmountTransfer.accepted(match.storageSign().getAmount(), item.getAmount()));
+        int absorbed = removeMatchingAmount(inventory, withAmount(item, requested));
+        if (absorbed > 0) {
+            match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
+            match.storageSign().applyToSign(match.signState());
+        }
+        return absorbed;
     }
 
     // ── ヘルパー ──────────────────────────────────────────────────────────────────
@@ -226,5 +261,12 @@ public final class InventoryListener implements Listener {
         }
 
         return Math.max(0, requestAmount - notRemoved);
+    }
+
+    private static ItemStack withAmount(ItemStack item, int amount) {
+        if (amount <= 0) return null;
+        ItemStack copy = item.clone();
+        copy.setAmount(amount);
+        return copy;
     }
 }

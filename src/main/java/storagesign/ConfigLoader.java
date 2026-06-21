@@ -35,6 +35,8 @@ public final class ConfigLoader {
     private static final String KEY_FALLING_BLOCK     = "falling-block-itemSS";
     private static final String KEY_BANNER_DEBUG      = "banner-debug";
     private static final String KEY_IDENTIFIER_ALIASES = "item-identifier-aliases";
+    private static final String KEY_POTION_KEY_ALIASES = "potion-key-aliases";
+    private static final String KEY_BREWING_INGREDIENTS = "brewing-ingredient-identifiers";
     private static final String KEY_VIRTUAL_IDENTIFIERS = "virtual-item-identifiers";
 
     // ── Cached values ─────────────────────────────────────────────────────────
@@ -54,6 +56,8 @@ public final class ConfigLoader {
     private static boolean fallingBlockItemSS;
     private static boolean bannerDebug;
     private static Map<String, String> identifierAliases = Map.of();
+    private static Map<String, String> potionKeyAliases = Map.of();
+    private static java.util.Set<String> brewingIngredientIdentifiers = java.util.Set.of();
     private static Map<String, String> virtualItemIdentifiers = Map.of();
 
     private ConfigLoader() {}
@@ -82,6 +86,12 @@ public final class ConfigLoader {
         fallingBlockItemSS = cfg.getBoolean(KEY_FALLING_BLOCK, false);
         bannerDebug       = cfg.getBoolean(KEY_BANNER_DEBUG, false);
         identifierAliases = readStringMap(cfg.getConfigurationSection(KEY_IDENTIFIER_ALIASES));
+        potionKeyAliases = readStringMap(cfg.getConfigurationSection(KEY_POTION_KEY_ALIASES));
+        java.util.Set<String> brewingIngredients = new java.util.HashSet<>();
+        for (String value : cfg.getStringList(KEY_BREWING_INGREDIENTS)) {
+            if (value != null && !value.isBlank()) brewingIngredients.add(value.trim().toUpperCase());
+        }
+        brewingIngredientIdentifiers = Collections.unmodifiableSet(brewingIngredients);
         virtualItemIdentifiers = readStringMap(cfg.getConfigurationSection(KEY_VIRTUAL_IDENTIFIERS));
     }
 
@@ -103,6 +113,8 @@ public final class ConfigLoader {
     public static boolean getFallingBlockItemSS(){ return fallingBlockItemSS;}
     public static boolean getBannerDebug()       { return bannerDebug;       }
     public static Map<String, String> getIdentifierAliases() { return identifierAliases; }
+    public static Map<String, String> getPotionKeyAliases() { return potionKeyAliases; }
+    public static java.util.Set<String> getBrewingIngredientIdentifiers() { return brewingIngredientIdentifiers; }
     public static Map<String, String> getVirtualItemIdentifiers() { return virtualItemIdentifiers; }
 
     private static Map<String, String> readStringMap(ConfigurationSection section) {

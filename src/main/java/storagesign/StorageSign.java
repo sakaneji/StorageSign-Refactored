@@ -8,10 +8,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Level;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
 import org.bukkit.block.ShulkerBox;
+import org.bukkit.block.Beehive;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BannerMeta;
@@ -22,6 +24,7 @@ import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.sign.Side;
 
 import storagesign.item.EnchantHelper;
@@ -70,6 +73,8 @@ public final class StorageSign {
 
     public static final String HEADER_LINE  = "StorageSign";
     public static final String EMPTY_MARKER = "Empty";
+    private static final NamespacedKey POTION_IDENTIFIER_KEY =
+        new NamespacedKey("storagesign", "potion_identifier");
 
     // ── 特殊レガシー値 ─────────────────────────────────────────────────────────────
     static final short DAMAGE_SS_ITEM   = 1;  // 看板/旧ウマの卵をアイテムとして保管する際の damage フラグ
@@ -151,11 +156,8 @@ public final class StorageSign {
             return empty();
         }
 
-        int amount = 0;
-        if (lines.length >= 3 && !lines[2].isBlank()) {
-            try { amount = Integer.parseInt(lines[2].trim()); }
-            catch (NumberFormatException ignored) {}
-        }
+        Integer amount = parseStoredAmount(lines[2]);
+        if (amount == null) return null;
 
         return parseIdentifier(identifier, amount);
     }
@@ -181,6 +183,12 @@ public final class StorageSign {
     public static StorageSign fromSign(Sign sign) {
         if (sign == null) return null;
         String[] lines = sign.getSide(Side.FRONT).getLines();
+        if (lines.length < 3 || !HEADER_LINE.equals(lines[0])) return null;
+        Integer amount = parseStoredAmount(lines[2]);
+        if (amount == null) return null;
+        String canonical = sign.getPersistentDataContainer().get(
+            POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
+        if (canonical != null) return parseIdentifier(canonical, amount);
         return fromSignLines(lines);
     }
 
@@ -208,11 +216,24 @@ public final class StorageSign {
         if (sep < 0) return null;
 
         String identifier = loreLine.substring(0, sep).trim();
-        int amount = 0;
-        try { amount = Integer.parseInt(loreLine.substring(sep + 1).trim()); }
-        catch (NumberFormatException ignored) {}
+        Integer amount = parseStoredAmount(loreLine.substring(sep + 1));
+        if (amount == null) return null;
+
+        String canonical = meta.getPersistentDataContainer().get(
+            POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
+        if (canonical != null) return parseIdentifier(canonical, amount);
 
         return parseIdentifier(identifier, amount);
+    }
+
+    private static Integer parseStoredAmount(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            return parsed < 0 ? null : parsed;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     // ── Static factory helpers ─────────────────────────────────────────────────
@@ -267,19 +288,10 @@ public final class StorageSign {
 
         // ── ポーション: "POTION:HEAL:0", "SPOTION:REGEN:1", "LPOTION:HEAL:2" ───
         if (identifier.contains("POTION:")) {
-            int potionIdx = identifier.indexOf("POTION:");
-            String prefix = identifier.substring(0, potionIdx); // "", "S", "L"
-            Material potMat = PotionHelper.materialFromPrefix(prefix);
-            String rest = identifier.substring(potionIdx + "POTION:".length());
-            String[] parts = rest.split(":");
-            if (parts.length < 2) return null;
-            String shortName = PotionHelper.normalizeName(parts[0]);
-            String code = parts[1];
-            PotionType pot = PotionHelper.fromSignText(shortName, code);
-            short damage = 0;
-            try { damage = Short.parseShort(code); }
-            catch (NumberFormatException ignored) {}
-            return new StorageSign(potMat, damage, amount, pot, null, false);
+            PotionHelper.PotionData potion = PotionHelper.fromIdentifier(identifier);
+            if (potion == null) return null;
+            short damage = (short) (PotionHelper.getEnhanceCode(potion.type()).charAt(0) - '0');
+            return new StorageSign(potion.material(), damage, amount, potion.type(), null, false);
         }
 
         // ── 通常アイテム: "STONE", "STONE:0"（レガシー名前解決あり）──────────────
@@ -373,9 +385,7 @@ public final class StorageSign {
 
         // ポーション
         if (MaterialRegistry.POTION_MATERIALS.contains(material) && potionType != null) {
-            return PotionHelper.getMaterialPrefix(material)
-                   + "POTION:" + PotionHelper.getShortName(potionType)
-                   + ":" + PotionHelper.getEnhanceCode(potionType);
+            return PotionHelper.toDisplayIdentifier(material, potionType);
         }
 
         // 通常アイテム
@@ -405,6 +415,14 @@ public final class StorageSign {
         return getIdentifier() + " " + amount;
     }
 
+    /** PDCへ保存する完全なPotion識別子。Potion以外はnull。 */
+    public String getCanonicalPotionIdentifier() {
+        if (unregistered || potionType == null || !MaterialRegistry.POTION_MATERIALS.contains(material)) {
+            return null;
+        }
+        return PotionHelper.toCanonicalIdentifier(material, potionType);
+    }
+
     /**
      * インベントリドロップ・出力用の StorageSign アイテム（表示名 + Lore）を生成する。
      */
@@ -418,6 +436,19 @@ public final class StorageSign {
         applyConfiguredMaxStack(meta);
         ssItem.setItemMeta(meta);
         return ssItem;
+    }
+
+    /** StorageSignモデルからLoreと正規Potion PDCを同時に生成する。 */
+    public static ItemStack createStorageSignItem(Material signMaterial, StorageSign contents, int amount) {
+        ItemStack item = createStorageSignItem(signMaterial, contents.getLoreText(), amount);
+        String canonical = contents.getCanonicalPotionIdentifier();
+        if (canonical == null) return item;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+        meta.getPersistentDataContainer().set(
+            POTION_IDENTIFIER_KEY, PersistentDataType.STRING, canonical);
+        item.setItemMeta(meta);
+        return item;
     }
 
     private static void applyConfiguredMaxStack(ItemMeta meta) {
@@ -444,6 +475,13 @@ public final class StorageSign {
         front.setLine(1, identifier);
         front.setLine(2, String.valueOf(amount));
         front.setLine(3, lc + "LC " + stacks + "s " + singles);
+        String canonical = getCanonicalPotionIdentifier();
+        if (canonical == null) {
+            sign.getPersistentDataContainer().remove(POTION_IDENTIFIER_KEY);
+        } else {
+            sign.getPersistentDataContainer().set(
+                POTION_IDENTIFIER_KEY, PersistentDataType.STRING, canonical);
+        }
         sign.update();
     }
 
@@ -625,6 +663,11 @@ public final class StorageSign {
             item = new ItemStack(item.getType());
         }
 
+        // 耐久値は ItemStack 実装差に依存せず明示比較する。
+        if (meta instanceof Damageable damageable && damageable.getDamage() != damage) {
+            return false;
+        }
+
         // 通常アイテム — Bukkit の isSimilar に委譲。
         // 遅延キャッシュを使い、呼び出しのたびに ItemStack を確保するのを避ける。
         if (cachedReference == null) cachedReference = getContents(1);
@@ -661,7 +704,8 @@ public final class StorageSign {
         // 特殊アイテム
         Short specialDamage = SpecialCaseItemSupport.fromStoredItem(mat, meta);
         if (specialDamage != null) {
-            return new StorageSign(mat, specialDamage, 0, null, null, false);
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, specialDamage, 0, null, null, false));
         }
 
         // エンチャント本
@@ -671,14 +715,17 @@ public final class StorageSign {
             Map.Entry<Enchantment, Integer> entry = stored.entrySet().iterator().next();
             Enchantment ench = entry.getKey();
             short level = entry.getValue().shortValue();
-            return new StorageSign(mat, level, 0, null, ench, false);
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, level, 0, null, ench, false));
         }
 
         // ポーション
         if (MaterialRegistry.POTION_MATERIALS.contains(mat) && meta instanceof PotionMeta pm) {
+            if (pm.hasCustomEffects()) return null;
             PotionType pot = pm.getBasePotionType();
             short damage = (short) (PotionHelper.getEnhanceCode(pot).charAt(0) - '0');
-            return new StorageSign(mat, damage, 0, pot, null, false);
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, damage, 0, pot, null, false));
         }
 
         // 白バナー（レイドバナー）
@@ -694,18 +741,53 @@ public final class StorageSign {
 
         // 打ち上げ花火（power を damage に保管、power=1 は互換のため 0）
         if (mat == Material.FIREWORK_ROCKET && meta instanceof FireworkMeta fireworkMeta) {
+            if (!fireworkMeta.getEffects().isEmpty()) return null;
             int power = fireworkMeta.getPower();
             short encoded = (short) (power > 1 ? power : DAMAGE_FIREWORK_ZERO);
-            return new StorageSign(mat, encoded, 0, null, null, false);
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, encoded, 0, null, null, false));
+        }
+
+        // シュルカーボックスは中身を識別子へ保存できないため、空のものだけ受け入れる。
+        if (MaterialRegistry.SHULKER_BOX_MATERIALS.contains(mat)) {
+            if (!(meta instanceof BlockStateMeta blockMeta)
+                || !(blockMeta.getBlockState() instanceof ShulkerBox shulker)
+                || !shulker.getInventory().isEmpty()) {
+                return null;
+            }
+        }
+
+        if (MaterialRegistry.BLOCK_ENTITY_DATA_MATERIALS.contains(mat)
+            && meta instanceof BlockStateMeta blockMeta
+            && blockMeta.getBlockState() instanceof Beehive beehive
+            && beehive.getEntityCount() > 0) {
+            return null;
         }
 
         // 耐久値を持つ通常アイテム（耐久値を保持する）
         if (meta instanceof Damageable damageable) {
-            return new StorageSign(mat, (short) damageable.getDamage(), 0, null, null, false);
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, (short) damageable.getDamage(), 0, null, null, false));
         }
 
         // その他の通常アイテム
-        return new StorageSign(mat, (short) 0, 0, null, null, false);
+        return ifExactlyRestorable(item,
+            new StorageSign(mat, (short) 0, 0, null, null, false));
+    }
+
+    /** 保存形式から完全に復元できない ItemMeta を fail closed で拒否する。 */
+    private static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
+        ItemMeta originalMeta = original.getItemMeta();
+        if (originalMeta != null
+            && (originalMeta.hasDisplayName() || originalMeta.hasLore()
+                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty())) {
+            return null;
+        }
+        ItemStack restored = candidate.getContents(1);
+        if (restored == null) return null;
+        ItemStack one = original.clone();
+        one.setAmount(1);
+        return restored.isSimilar(one) ? candidate : null;
     }
 
     private static ItemStack createLegacyMarkerItem(int amount, String markerName) {

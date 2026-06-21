@@ -4,9 +4,14 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.potion.PotionType;
+import storagesign.ConfigLoader;
 import storagesign.logging.PluginLogger;
 
 import static org.bukkit.potion.PotionType.*;
@@ -69,6 +74,7 @@ public final class PotionHelper {
      * (derived from the 5-char rule) fill the rest via putIfAbsent.
      */
     private static final Map<String, Map<String, PotionType>> COMPLETE_SIGN_LOOKUP;
+    private static final Set<String> AMBIGUOUS_LEGACY_KEYS;
 
     // ── Legacy NBT name → short name (migration for very old data) ────────────
     private static final Map<String, String> LEGACY_NAME_MAP = Map.of(
@@ -119,13 +125,18 @@ public final class PotionHelper {
         // iterate PotionType.values() at runtime. Special-case entries already in signLookup
         // take priority (putIfAbsent); generic entries fill the rest.
         // This relies on POTION_TO_SHORT being fully assigned above before getShortName() is called.
-        Map<String, Map<String, PotionType>> completeLookup = new HashMap<>(signLookup);
+        Map<String, Map<String, PotionType>> completeLookup = new HashMap<>();
+        signLookup.forEach((name, values) -> completeLookup.put(name, new HashMap<>(values)));
+        Set<String> ambiguous = new HashSet<>();
         for (PotionType type : PotionType.values()) {
             String shortName = getShortName(type);
             String code      = getEnhanceCode(type);
-            completeLookup.computeIfAbsent(shortName, k -> new HashMap<>()).putIfAbsent(code, type);
+            PotionType previous = completeLookup.computeIfAbsent(shortName, k -> new HashMap<>())
+                .putIfAbsent(code, type);
+            if (previous != null && previous != type) ambiguous.add(shortName + ":" + code);
         }
         COMPLETE_SIGN_LOOKUP = Collections.unmodifiableMap(completeLookup);
+        AMBIGUOUS_LEGACY_KEYS = Collections.unmodifiableSet(ambiguous);
     }
 
     // ── Helper for building the static maps ──────────────────────────────────
@@ -202,6 +213,66 @@ public final class PotionHelper {
         return mat.toString() + ":" + getShortName(pot) + ":" + damage + " " + amount;
     }
 
+    /** Registry keyを使った、表示幅に依存しない正規保存識別子。 */
+    public static String toCanonicalIdentifier(Material mat, PotionType pot) {
+        return getMaterialPrefix(mat) + "POTION:" + pot.getKey();
+    }
+
+    /** 看板表示用。従来形式と同じ短い文字列を維持する。 */
+    public static String toDisplayIdentifier(Material mat, PotionType pot) {
+        return getMaterialPrefix(mat) + "POTION:" + getShortName(pot) + ":" + getEnhanceCode(pot);
+    }
+
+    /** 正規形式または従来形式のPotion識別子を解決する。 */
+    public static PotionData fromIdentifier(String identifier) {
+        if (identifier == null) return null;
+        int potionIndex = identifier.indexOf("POTION:");
+        if (potionIndex < 0) return null;
+        String prefix = identifier.substring(0, potionIndex);
+        if (!(prefix.isEmpty() || PREFIX_SPLASH.equals(prefix) || PREFIX_LINGERING.equals(prefix))) {
+            return null;
+        }
+        Material material = materialFromPrefix(prefix);
+        String value = identifier.substring(potionIndex + "POTION:".length());
+
+        PotionType canonical = resolveRegistryKey(value);
+        if (canonical != null) return new PotionData(material, canonical);
+
+        String[] legacy = value.split(":", -1);
+        if (legacy.length != 2 || !legacy[1].matches("[012]")) return null;
+        String shortName = normalizeName(legacy[0]);
+        PotionType type = fromSignText(shortName, legacy[1]);
+        return type == null ? null : new PotionData(material, type);
+    }
+
+    private static PotionType resolveRegistryKey(String rawKey) {
+        NamespacedKey key = NamespacedKey.fromString(rawKey);
+        if (key == null) return null;
+        PotionType direct = Registry.POTION.get(key);
+        if (direct != null) return direct;
+
+        String alias = ConfigLoader.getPotionKeyAliases().get(rawKey);
+        if (alias == null || alias.isBlank() || alias.equals(rawKey)) {
+            if (alias != null) {
+                LOG.log(Level.WARNING, "resolvePotionKey", "Invalid potion key alias: {0} -> {1}",
+                    new Object[]{rawKey, alias});
+            }
+            return null;
+        }
+        NamespacedKey target = NamespacedKey.fromString(alias);
+        PotionType resolved = target == null ? null : Registry.POTION.get(target);
+        if (resolved == null && ConfigLoader.getPotionKeyAliases().containsKey(alias)) {
+            LOG.log(Level.WARNING, "resolvePotionKey", "Chained potion key alias is not allowed: {0} -> {1}",
+                new Object[]{rawKey, alias});
+            return null;
+        }
+        if (resolved == null) {
+            LOG.log(Level.WARNING, "resolvePotionKey", "Potion key alias target is unavailable: {0} -> {1}",
+                new Object[]{rawKey, alias});
+        }
+        return resolved;
+    }
+
     /**
      * Converts a legacy NBT name to the current short name, or returns the input unchanged
      * if no mapping exists. Used when reading old item lore data.
@@ -221,6 +292,11 @@ public final class PotionHelper {
      * @return matching PotionType, or {@code null} if not found.
      */
     public static PotionType fromSignText(String shortName, String code) {
+        if (AMBIGUOUS_LEGACY_KEYS.contains(shortName + ":" + code)) {
+            LOG.log(Level.WARNING, "resolvePotionType", "Ambiguous legacy potion identifier: {0}:{1}",
+                new Object[]{shortName, code});
+            return null;
+        }
         Map<String, PotionType> codeMap = COMPLETE_SIGN_LOOKUP.get(shortName);
         if (codeMap != null) {
             PotionType type = codeMap.get(code);
@@ -248,4 +324,6 @@ public final class PotionHelper {
     }
 
     private PotionHelper() {}
+
+    public record PotionData(Material material, PotionType type) {}
 }

@@ -169,8 +169,9 @@ public final class BlockEventListener implements Listener {
     private static void dropSingleStorageSign(Block signBlock, Material signType, StorageSign ss) {
         Material itemMat = MaterialRegistry.WALL_TO_SIGN.getOrDefault(signType, signType);
         // アイテム化する際は数量0なら設定に関わらず必ず登録解除する
-        String loreText = (ss.getAmount() <= 0) ? StorageSign.EMPTY_MARKER : ss.getLoreText();
-        ItemStack drop = StorageSign.createStorageSignItem(itemMat, loreText, 1);
+        ItemStack drop = ss.getAmount() <= 0
+            ? StorageSign.createStorageSignItem(itemMat, StorageSign.EMPTY_MARKER, 1)
+            : StorageSign.createStorageSignItem(itemMat, ss, 1);
 
         Location dropLocation = signBlock.getLocation().clone().add(0.5, 0.5, 0.5);
         signBlock.getWorld().dropItem(dropLocation, drop);

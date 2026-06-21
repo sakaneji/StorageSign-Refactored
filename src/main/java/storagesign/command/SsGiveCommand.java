@@ -69,7 +69,7 @@ public final class SsGiveCommand implements CommandExecutor {
             return true;
         }
 
-        ItemStack ssItem = StorageSign.createStorageSignItem(signMaterial, parsed.getLoreText(), 1);
+        ItemStack ssItem = StorageSign.createStorageSignItem(signMaterial, parsed, 1);
         Map<Integer, ItemStack> leftovers = player.getInventory().addItem(ssItem);
         for (ItemStack leftover : leftovers.values()) {
             player.getWorld().dropItemNaturally(player.getLocation(), leftover);

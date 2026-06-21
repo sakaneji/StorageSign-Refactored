@@ -10,6 +10,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import storagesign.ConfigLoader;
 import storagesign.StorageSign;
 import storagesign.logging.PluginLogger;
 import storagesign.registry.MaterialRegistry;
@@ -71,6 +72,11 @@ public final class ExportSignTask extends BukkitRunnable {
     public void run() {
         // 将来のホッパーティックがこのタスクを再スケジュールできるようにする。
         pendingExports.remove(ssBlock);
+
+        if (!ssBlock.getWorld().isChunkLoaded(ssBlock.getX() >> 4, ssBlock.getZ() >> 4)) {
+            traceSkip("chunk-unloaded");
+            return;
+        }
 
         // タスク実行時に看板の状態を再読み込む（常に最新状態を得るため重要）。
         // Sign ブロック状態を一度取得し、パースと applyToSign の両方で再利用する。
@@ -220,6 +226,7 @@ public final class ExportSignTask extends BukkitRunnable {
     }
 
     private static boolean isBrewingIngredient(Material material) {
+        if (ConfigLoader.getBrewingIngredientIdentifiers().contains(material.name())) return true;
         return switch (material) {
             case NETHER_WART, SUGAR, REDSTONE, GLOWSTONE_DUST, GUNPOWDER,
                  RABBIT_FOOT, GLISTERING_MELON_SLICE, GOLDEN_CARROT, MAGMA_CREAM,
