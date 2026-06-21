@@ -7,6 +7,7 @@ import argparse
 import html
 import json
 import sys
+import threading
 import urllib.parse
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -209,7 +210,7 @@ HTML_TEMPLATE = """<!doctype html>
       <div class="card controls">
         <label>
           Index file
-          <input id="path" value="__INDEX_PATH__" spellcheck="false">
+          <input id="path" value="__INDEX_PATH__" spellcheck="false" readonly>
         </label>
         <label>
           Identifier
@@ -240,6 +241,8 @@ HTML_TEMPLATE = """<!doctype html>
           <div class="stat"><span class="k">Mapped worlds</span><span class="v" id="stat-mapped-worlds">-</span></div>
         </div>
         <div style="padding: 0 18px 12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="secondary" id="previous" type="button">Previous</button>
+          <button class="secondary" id="next" type="button">Next</button>
           <button class="secondary" id="export-csv" type="button">Download CSV</button>
         </div>
         <div class="table-wrap">
@@ -275,6 +278,7 @@ HTML_TEMPLATE = """<!doctype html>
       mode: document.getElementById("mode"),
       world: document.getElementById("world"),
     }};
+    let page = 1;
 
     async function refresh() {{
       const params = new URLSearchParams({{
@@ -282,6 +286,7 @@ HTML_TEMPLATE = """<!doctype html>
         identifier: fields.identifier.value,
         mode: fields.mode.value,
         world: fields.world.value,
+        page: String(page),
       }});
       status.textContent = "Loading...";
       const response = await fetch(`/api/entries?${{params.toString()}}`);
@@ -319,12 +324,21 @@ HTML_TEMPLATE = """<!doctype html>
 
     document.getElementById("search").addEventListener("click", (event) => {{
       event.preventDefault();
+      page = 1;
       refresh();
     }});
     document.getElementById("reset").addEventListener("click", () => {{
       fields.identifier.value = "";
       fields.mode.value = "exact";
       fields.world.value = "";
+      page = 1;
+      refresh();
+    }});
+    document.getElementById("previous").addEventListener("click", () => {{
+      if (page > 1) {{ page--; refresh(); }}
+    }});
+    document.getElementById("next").addEventListener("click", () => {{
+      page++;
       refresh();
     }});
     document.getElementById("export-csv").addEventListener("click", () => {{
@@ -352,6 +366,13 @@ HTML_TEMPLATE = """<!doctype html>
 
 class ViewerServer(ThreadingHTTPServer):
     daemon_threads = True
+    max_results = 200
+
+    def server_bind(self) -> None:
+        self.cache_lock = threading.Lock()
+        self.cache_key = None
+        self.cache_entries = None
+        super().server_bind()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -385,18 +406,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_api(self, parsed: urllib.parse.ParseResult) -> None:
         query = urllib.parse.parse_qs(parsed.query)
-        path_value = query.get("path", [str(self.server.default_path)])[0]
         identifier = query.get("identifier", [""])[0].strip() or None
         mode = query.get("mode", ["exact"])[0].strip().lower()
         world = query.get("world", [""])[0].strip() or None
         try:
-            path = Path(path_value).expanduser()
-            entries = read_index(path)
+            self._validate_query(query, mode)
+            page = self._positive_int(query, "page", 1)
+            page_size = min(self._positive_int(query, "page_size", 50), self.server.max_results)
+            path = self.server.default_path
+            entries = self._entries(path)
             filtered = filter_entries(entries, identifier, mode == "contains", world)
+            start = (page - 1) * page_size
+            selected = filtered[start:start + page_size]
             payload = {
                 "path": str(path),
                 "summary": summarize(filtered, self.server.world_map),
-                "entries": [entry_payload(entry, self.server.world_map) for entry in filtered],
+                "page": page,
+                "page_size": page_size,
+                "entries": [entry_payload(entry, self.server.world_map) for entry in selected],
             }
             body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(HTTPStatus.OK)
@@ -414,13 +441,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_csv(self, parsed: urllib.parse.ParseResult) -> None:
         query = urllib.parse.parse_qs(parsed.query)
-        path_value = query.get("path", [str(self.server.default_path)])[0]
         identifier = query.get("identifier", [""])[0].strip() or None
         mode = query.get("mode", ["exact"])[0].strip().lower()
         world = query.get("world", [""])[0].strip() or None
         try:
-            path = Path(path_value).expanduser()
-            entries = filter_entries(read_index(path), identifier, mode == "contains", world)
+            self._validate_query(query, mode)
+            path = self.server.default_path
+            entries = filter_entries(self._entries(path), identifier, mode == "contains", world)
             body = csv_result(entries, self.server.world_map).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/csv; charset=utf-8")
@@ -435,6 +462,33 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    def _validate_query(self, query: dict[str, list[str]], mode: str) -> None:
+        requested_path = query.get("path", [str(self.server.default_path)])[0]
+        if Path(requested_path).expanduser().resolve() != self.server.default_path.expanduser().resolve():
+            raise ValueError("requested path is not the configured index file")
+        if mode not in {"exact", "contains"}:
+            raise ValueError(f"invalid match mode: {mode}")
+
+    def _entries(self, path: Path):
+        stat = path.stat()
+        key = (path.resolve(), stat.st_mtime_ns, stat.st_size)
+        with self.server.cache_lock:
+            if self.server.cache_key != key:
+                self.server.cache_entries = tuple(read_index(path))
+                self.server.cache_key = key
+            return self.server.cache_entries
+
+    @staticmethod
+    def _positive_int(query: dict[str, list[str]], name: str, default: int) -> int:
+        raw = query.get(name, [str(default)])[0]
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise ValueError(f"{name} must be a number") from exc
+        if value < 1:
+            raise ValueError(f"{name} must be at least 1")
+        return value
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:

@@ -14,6 +14,8 @@
 
 管理者検索と近接表示はこの索引を利用します。`storage-index.enabled: false`の場合、索引の読込・更新・保存を行わず、近接表示と管理者検索も無効になります。索引だけを有効にして近接表示を無効にすることはできます。
 
+設定値のうち、`storage-index.rebuild-chunks-per-tick`、`nearby-display.idle-delay-ticks`、`nearby-display.monitor-interval-ticks`、`nearby-display.max-per-player`、`nearby-display.max-searches-per-tick`、`nearby-display.global-label-limit`、`admin-search.page-size`、`admin-search.max-concurrent` は 0 以下なら既定値へ戻します。`nearby-display.field-of-view-degrees` は 1～360 度に丸めます。距離は 0 以下なら既定値へ戻します。
+
 ## 起動から終了までの動作
 
 1. 起動時に`plugins/StorageSign-Refactored/storage-sign-index.bin`を読み込みます。
@@ -69,6 +71,8 @@
 
 `--contains`を付けると大文字小文字を無視した部分一致になります。部分一致は保存済み索引全体を対象とするため非同期実行され、同時実行数は設定で制限されます。
 
+検索結果は `World UUID -> X -> Y -> Z` の昇順で並べます。`--page` は 1 始まりで、範囲外ページはエラーです。`--world` は現在ロードされている World 名のみ受け付けます。
+
 ### Worldとページの指定
 
 ```text
@@ -95,6 +99,8 @@ StorageSign search 'STONE': matches=12, totalAmount=98765, page=1/2
 ## 近接全文表示
 
 プレイヤーの位置と視点が`idle-delay-ticks`の間変化しなかった場合だけ検索します。標準設定では、6ブロック以内、前方90度、遮蔽物のないStorageSignから最寄り3件を表示します。
+
+上限制御では、表示件数が `max-per-player` を超えた分は次回以降に回し、`max-searches-per-tick` と `global-label-limit` に達しても既存の表示は維持します。負荷が落ち着くと未処理分を再試行します。
 
 表示内容:
 
@@ -172,11 +178,14 @@ python3 tools/storage_sign_index_viewer.py
 python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --world-map worlds.json
 ```
 
-Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。旧形式の`--serve`も互換性のため受け付けます。
+Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。表示対象ファイルは起動時の`--file`で固定され、Webリクエストから別のファイルへ変更できません。APIは既定50件、最大200件ずつページングします。変更されていない索引はメモリへキャッシュし、同時アクセスのたびに再読込しません。旧形式の`--serve`も互換性のため受け付けます。
 Web UI には CSV ダウンロードボタンもあり、同じフィルタ条件で `/api/export.csv` を返します。
+
+表示文字列は vanilla sign の見やすさを優先して内部で 28 文字ごとに折り返します。外部から見たときに枠外へはみ出さないことを意図した実装です。
 
 注意:
 
 - この保存データには World 名は入っていないため、外部ビューアでは基本的に World UUID を表示します。
 - World 名を出したい場合は `--world-map` を使って UUID と表示名を紐付けてください。JSON は `{ "uuid": "world" }` 形式、CSV は `uuid,name` 形式を想定しています。
 - 破損した `.bin` はプラグイン側と同様に CRC で弾きます。壊れたファイルは先に修復または再構築してください。
+- CSVの識別子とWorld名が`=`, `+`, `-`, `@`で始まる場合、表計算ソフトの数式として実行されないよう先頭にアポストロフィを付けます。

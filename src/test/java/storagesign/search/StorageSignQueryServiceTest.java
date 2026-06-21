@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import storagesign.index.IndexedStorageSign;
 import storagesign.index.StorageSignPosition;
@@ -41,6 +42,47 @@ class StorageSignQueryServiceTest {
 
         assertEquals(2, result.entries().size());
         assertEquals(2L * Integer.MAX_VALUE, result.totalAmount());
+    }
+
+    @Test
+    void amountBoundariesAreInclusiveAndResultsHaveStableCoordinateOrder() {
+        UUID laterWorld = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        UUID earlierWorld = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        List<IndexedStorageSign> entries = List.of(
+            new IndexedStorageSign(new StorageSignPosition(laterWorld, 0, 64, 0), "STONE", 10, 1),
+            new IndexedStorageSign(new StorageSignPosition(earlierWorld, 2, 64, 0), "STONE", 20, 1),
+            new IndexedStorageSign(new StorageSignPosition(earlierWorld, 1, 65, 0), "STONE", 15, 1),
+            new IndexedStorageSign(new StorageSignPosition(earlierWorld, 1, 64, 0), "STONE", 14, 1));
+
+        var result = StorageSignQueryService.filter(entries, new StorageSignSearchCriteria(
+            "STONE", StorageSignSearchCriteria.MatchMode.EXACT, null, 10, 20));
+
+        assertEquals(List.of(14, 15, 20, 10),
+            result.entries().stream().map(IndexedStorageSign::amount).toList());
+        assertEquals(59, result.totalAmount());
+    }
+
+    @Test
+    void emptyResultHasZeroTotal() {
+        var result = StorageSignQueryService.filter(List.of(), new StorageSignSearchCriteria(
+            "STONE", StorageSignSearchCriteria.MatchMode.EXACT, null, null, null));
+        assertEquals(List.of(), result.entries());
+        assertEquals(0, result.totalAmount());
+    }
+
+    @Test
+    void concurrencySlotAcquisitionNeverExceedsLimit() throws Exception {
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger accepted = new AtomicInteger();
+        List<Thread> threads = java.util.stream.IntStream.range(0, 50)
+            .mapToObj(ignored -> new Thread(() -> {
+                if (StorageSignQueryService.tryAcquire(active, 3)) accepted.incrementAndGet();
+            })).toList();
+        threads.forEach(Thread::start);
+        for (Thread thread : threads) thread.join();
+
+        assertEquals(3, accepted.get());
+        assertEquals(3, active.get());
     }
 
     private static IndexedStorageSign entry(UUID world, int x, String identifier, int amount) {

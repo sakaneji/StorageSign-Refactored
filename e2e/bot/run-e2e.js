@@ -46,6 +46,16 @@ function waitForMessage(predicate, timeout = timeoutMs) {
   })
 }
 
+async function waitForSnapshot(scenario, predicate, timeout = timeoutMs, interval = 100) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt <= timeout) {
+    const state = await inspect(scenario)
+    if (predicate(state)) return state
+    await sleep(interval)
+  }
+  throw new Error(`Timed out waiting for snapshot of ${scenario}`)
+}
+
 async function command(text, expectedPrefix) {
   bot.chat(text)
   return waitForMessage(message => message.includes(expectedPrefix))
@@ -53,7 +63,7 @@ async function command(text, expectedPrefix) {
 
 async function reset(scenario) {
   await command(`/sstest reset ${scenario}`, `SSTEST READY ${scenario}`)
-  await sleep(1000)
+  await sleep(250)
 }
 
 async function inspect(scenario) {
@@ -90,12 +100,13 @@ async function placeStorageSign(scenario, identifier, amount) {
     forceLook: true,
     swingArm: 'right'
   })
-  await sleep(500)
-  let state = await inspect(scenario)
-  if (state.lines.length === 0) {
+  let state
+  try {
+    state = await waitForSnapshot(scenario, snapshot => snapshot.lines.length > 0, 5000)
+  } catch (error) {
     process.stdout.write('Mineflayer placement was not acknowledged; exercising BlockPlaceEvent fallback\n')
     await command(`/sstest place ${scenario}`, `SSTEST PLACED ${scenario}`)
-    state = await inspect(scenario)
+    state = await waitForSnapshot(scenario, snapshot => snapshot.lines.length > 0, 5000)
   }
   return state
 }
@@ -251,7 +262,6 @@ async function runMainSuite() {
   await runCase('same-tick interactions preserve total quantity', async () => {
     await reset('double-interact')
     await command('/sstest double-interact double-interact', 'SSTEST DOUBLE double-interact')
-    await sleep(300)
     const state = await inspect('double-interact')
     assert.equal(state.lines[2], '0')
     assert.equal(state.playerStone + state.droppedStone, 128)
@@ -490,6 +500,26 @@ async function runMainSuite() {
     const state = await inspect('restart')
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
   })
+
+  await runCase('storage index rebuild search and nearby display', async () => {
+    await command('/sstest admin true', 'SSTEST ADMIN true')
+    bot.chat('/storagesignindex rebuild all')
+    await waitForMessage(message => message.includes('rebuild started'))
+    await waitForMessage(message => message.includes('rebuild and save complete'))
+    const status = await command('/storagesignindex status', 'Indexed signs:')
+    assert.match(status, /Indexed signs: [1-9][0-9]*/)
+    bot.chat('/storagesignsearch item STONE')
+    await waitForMessage(message => message.includes('Searching StorageSign index'))
+    const result = await waitForMessage(message => message.includes("StorageSign search 'STONE'"))
+    assert.match(result, /matches=[1-9][0-9]*/)
+    let state = await waitForSnapshot('restart', snapshot => snapshot.textDisplayCount >= 1, 15000)
+    assert.ok(state.textDisplayCount >= 1, `Expected nearby TextDisplay, got ${state.textDisplayCount}`)
+    assert.ok(state.textDisplayTexts.some(text => text.includes('STONE')),
+      `Expected nearby TextDisplay text to include identifier, got ${state.textDisplayTexts}`)
+    await command('/sstest move true', 'SSTEST MOVED true')
+    state = await waitForSnapshot('restart', snapshot => snapshot.textDisplayCount === 0, 10000)
+    assert.equal(state.textDisplayCount, 0)
+  })
 }
 
 async function runRestartCheck() {
@@ -497,6 +527,13 @@ async function runRestartCheck() {
   await runCase('restart persistence', async () => {
     const state = await inspect('restart')
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
+  })
+  await runCase('storage index persists across restart', async () => {
+    await command('/sstest admin true', 'SSTEST ADMIN true')
+    bot.chat('/storagesignsearch item STONE')
+    await waitForMessage(message => message.includes('Searching StorageSign index'))
+    const result = await waitForMessage(message => message.includes("StorageSign search 'STONE'"))
+    assert.match(result, /matches=[1-9][0-9]*/)
   })
 }
 

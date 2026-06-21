@@ -6,6 +6,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,7 +56,15 @@ public final class StorageSignIndexCodec {
                     || identifierLength > input.available()) {
                     throw new IOException("Invalid identifier length: " + identifierLength);
                 }
-                String identifier = new String(input.readNBytes(identifierLength), StandardCharsets.UTF_8);
+                String identifier;
+                try {
+                    identifier = StandardCharsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                        .decode(java.nio.ByteBuffer.wrap(input.readNBytes(identifierLength))).toString();
+                } catch (CharacterCodingException e) {
+                    throw new IOException("Invalid identifier UTF-8", e);
+                }
                 entries.add(new IndexedStorageSign(
                     new StorageSignPosition(world, x, y, z), identifier, amount, verifiedAt));
             }

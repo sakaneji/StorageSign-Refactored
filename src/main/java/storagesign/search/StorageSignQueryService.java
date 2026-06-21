@@ -25,10 +25,10 @@ public final class StorageSignQueryService {
     public boolean search(StorageSignSearchCriteria criteria,
                           Consumer<StorageSignSearchResult> success,
                           Consumer<Throwable> failure) {
-        if (!index.isEnabled() || active.get() >= ConfigLoader.getAdminSearchMaxConcurrent()) return false;
+        if (!index.isEnabled()) return false;
         List<IndexedStorageSign> snapshot = criteria.matchMode() == StorageSignSearchCriteria.MatchMode.EXACT
             ? index.findByIdentifierExact(criteria.identifier()) : index.snapshot();
-        active.incrementAndGet();
+        if (!tryAcquire(active, ConfigLoader.getAdminSearchMaxConcurrent())) return false;
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 StorageSignSearchResult result = filter(snapshot, criteria);
@@ -44,6 +44,14 @@ public final class StorageSignQueryService {
             }
         });
         return true;
+    }
+
+    static boolean tryAcquire(AtomicInteger counter, int maximum) {
+        while (true) {
+            int current = counter.get();
+            if (current >= maximum) return false;
+            if (counter.compareAndSet(current, current + 1)) return true;
+        }
     }
 
     static StorageSignSearchResult filter(List<IndexedStorageSign> snapshot,

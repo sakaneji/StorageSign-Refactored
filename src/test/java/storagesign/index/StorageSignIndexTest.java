@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import java.util.List;
 import org.bukkit.Location;
@@ -20,6 +22,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import storagesign.StorageSign;
 import storagesign.StorageSignPlugin;
+import storagesign.event.StorageSignUpdatedEvent;
 
 @Tag("integration")
 class StorageSignIndexTest {
@@ -117,6 +120,60 @@ class StorageSignIndexTest {
         index.upsert(position, "DIRT", 99, 30L);
         assertTrue(index.findByIdentifierExact("STONE").isEmpty());
         assertEquals(1, index.findByIdentifierExact("dirt").size());
+    }
+
+    @Test
+    void syncSaveLoadsIntoFreshIndexWithSecondaryLookup() throws Exception {
+        var world = server.addSimpleWorld("index-persistence");
+        Path file = plugin.getDataFolder().toPath().resolve("storage-sign-index.bin");
+        Files.deleteIfExists(file);
+        StorageSignIndex writer = new StorageSignIndex(plugin, true);
+        writer.upsert(new StorageSignPosition(world.getUID(), -4, 70, 9), "STONE", 123, 456L);
+
+        StorageSignIndex.SaveResult saved = writer.saveSync();
+        StorageSignIndex reader = new StorageSignIndex(plugin, true);
+        StorageSignIndex.LoadResult loaded = reader.load();
+
+        assertTrue(saved.success());
+        assertTrue(saved.bytes() > 0);
+        assertTrue(loaded.success());
+        assertEquals(1, loaded.count());
+        assertEquals(123, reader.findByIdentifierExact("stone").getFirst().amount());
+    }
+
+    @Test
+    void corruptIndexIsQuarantinedAndDoesNotExposePartialEntries() throws Exception {
+        Path folder = plugin.getDataFolder().toPath();
+        Path file = folder.resolve("storage-sign-index.bin");
+        Files.createDirectories(folder);
+        Files.write(file, new byte[] {1, 2, 3});
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+
+        StorageSignIndex.LoadResult result = index.load();
+
+        assertFalse(result.success());
+        assertEquals(0, index.size());
+        assertTrue(result.status().startsWith("corrupt:"));
+        assertFalse(Files.exists(file));
+        try (var files = Files.list(folder)) {
+            assertTrue(files.anyMatch(path -> path.getFileName().toString()
+                .startsWith("storage-sign-index.bin.corrupt-")));
+        }
+    }
+
+    @Test
+    void storageSignUpdateEventRefreshesContentAndUnregisteredEventRemovesEntry() {
+        var world = server.addSimpleWorld("index-update-event");
+        Block block = createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
+        Sign sign = (Sign) block.getState();
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+
+        index.onStorageSignUpdated(new StorageSignUpdatedEvent(sign, "STONE", 42, true));
+        assertEquals(42, index.findByIdentifierExact("STONE").getFirst().amount());
+
+        index.onStorageSignUpdated(new StorageSignUpdatedEvent(sign, "", 0, false));
+        assertTrue(index.findByIdentifierExact("STONE").isEmpty());
+        assertEquals(0, index.size());
     }
 
     private static Block createSign(Block block, String identifier, int amount) {
