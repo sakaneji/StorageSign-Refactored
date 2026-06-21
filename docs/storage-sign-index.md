@@ -147,6 +147,7 @@ python3 tools/storage_sign_index_viewer.py --serve
 ```
 
 既定では`plugins/StorageSign-Refactored/storage-sign-index.bin`を読みます。`--file`で任意のパスを指定できます。
+`--world-map`には、World UUIDから表示名へ変換するJSONまたはCSVを渡せます。
 
 ### CLI出力
 
@@ -154,13 +155,17 @@ python3 tools/storage_sign_index_viewer.py --serve
 python3 tools/storage_sign_index_viewer.py --identifier STONE
 python3 tools/storage_sign_index_viewer.py --identifier POTION --mode contains
 python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --format json
+python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --format csv
+python3 tools/storage_sign_index_viewer.py --file /path/to/storage-sign-index.bin --world-map worlds.json
 ```
 
 ### Webページ
 
 `--serve`を付けると、`http://127.0.0.1:8765/` で検索UIを開けます。Webページ側でも `identifier` / `contains` / `world UUID` を指定できます。
+Web UI には CSV ダウンロードボタンもあり、同じフィルタ条件で `/api/export.csv` を返します。
 
 注意:
 
 - この保存データには World 名は入っていないため、外部ビューアでは基本的に World UUID を表示します。
+- World 名を出したい場合は `--world-map` を使って UUID と表示名を紐付けてください。JSON は `{ "uuid": "world" }` 形式、CSV は `uuid,name` 形式を想定しています。
 - 破損した `.bin` はプラグイン側と同様に CRC で弾きます。壊れたファイルは先に修復または再構築してください。

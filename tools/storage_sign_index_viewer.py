@@ -8,7 +8,7 @@ can either print query results or serve a small local web UI for searching.
 from __future__ import annotations
 
 import argparse
-import dataclasses
+import csv
 import html
 import io
 import json
@@ -32,6 +32,7 @@ DEFAULT_INDEX_PATHS = (
     Path("plugins/StorageSign-Refactored/storage-sign-index.bin"),
     Path("plugins/StorageSign-Refactored/storage-sign-index.bin.tmp"),
 )
+WorldMap = dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,48 @@ def default_index_path() -> Path:
         if candidate.exists():
             return candidate
     return DEFAULT_INDEX_PATHS[0]
+
+
+def load_world_map(path: Path | None) -> WorldMap:
+    if path is None:
+        return {}
+    if not path.exists():
+        raise FileNotFoundError(f"world map file not found: {path}")
+    raw = path.read_text(encoding="utf-8").strip()
+    if not raw:
+        return {}
+    if path.suffix.lower() == ".csv":
+        return _load_world_map_csv(path)
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        return {str(key): str(value) for key, value in data.items()}
+    if isinstance(data, list):
+        mapping: WorldMap = {}
+        for item in data:
+            if not isinstance(item, dict):
+                raise ValueError("world map array entries must be objects")
+            uuid_value = item.get("uuid") or item.get("world_id") or item.get("id")
+            name_value = item.get("name") or item.get("world_name")
+            if uuid_value is None or name_value is None:
+                raise ValueError("world map entries need uuid/name fields")
+            mapping[str(uuid_value)] = str(name_value)
+        return mapping
+    raise ValueError("world map must be a JSON object or array")
+
+
+def _load_world_map_csv(path: Path) -> WorldMap:
+    mapping: WorldMap = {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            if not row:
+                continue
+            uuid_value = row.get("uuid") or row.get("world_id") or row.get("id")
+            name_value = row.get("name") or row.get("world_name")
+            if not uuid_value or not name_value:
+                raise ValueError("world map CSV needs uuid/name columns")
+            mapping[uuid_value.strip()] = name_value.strip()
+    return mapping
 
 
 def read_index(path: Path) -> list[Entry]:
@@ -131,28 +174,80 @@ def filter_entries(entries: Sequence[Entry], identifier: str | None, mode: str, 
     return [entry for entry in entries if matches(entry, identifier, mode, world)]
 
 
-def summarize(entries: Sequence[Entry]) -> dict[str, object]:
+def summarize(entries: Sequence[Entry], world_map: WorldMap | None = None) -> dict[str, object]:
     by_world = defaultdict(int)
     total_amount = 0
+    mapped_worlds = set()
     for entry in entries:
         by_world[entry.world_id] += 1
         total_amount += entry.amount
+        if world_map and entry.world_id in world_map:
+            mapped_worlds.add(entry.world_id)
     return {
         "count": len(entries),
         "total_amount": total_amount,
         "worlds": dict(sorted(by_world.items(), key=lambda item: item[0])),
+        "mapped_worlds": len(mapped_worlds),
     }
 
 
-def cli_rows(entries: Sequence[Entry], limit: int | None = None) -> str:
+def world_label(world_id: str, world_map: WorldMap | None = None) -> str:
+    if world_map:
+        name = world_map.get(world_id)
+        if name:
+            return f"{name} ({world_id})"
+    return world_id
+
+
+def cli_rows(entries: Sequence[Entry], limit: int | None = None, world_map: WorldMap | None = None) -> str:
     shown = entries if limit is None else entries[:limit]
     lines = []
     for index, entry in enumerate(shown, 1):
         lines.append(
-            f"{index}. {entry.world_id} {entry.x} {entry.y} {entry.z} "
+            f"{index}. {world_label(entry.world_id, world_map)} {entry.x} {entry.y} {entry.z} "
             f"— {entry.amount} — {entry.identifier} [verified={entry.verified_at}]"
         )
     return "\n".join(lines)
+
+
+def entry_payload(entry: Entry, world_map: WorldMap | None = None) -> dict[str, object]:
+    return {
+        "world_id": entry.world_id,
+        "world_name": world_map.get(entry.world_id) if world_map else None,
+        "x": entry.x,
+        "y": entry.y,
+        "z": entry.z,
+        "identifier": entry.identifier,
+        "amount": entry.amount,
+        "verified_at": entry.verified_at,
+    }
+
+
+def csv_rows(entries: Sequence[Entry], world_map: WorldMap | None = None) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "world_id",
+        "world_name",
+        "x",
+        "y",
+        "z",
+        "identifier",
+        "amount",
+        "verified_at",
+    ])
+    for entry in entries:
+        writer.writerow([
+            entry.world_id,
+            world_map.get(entry.world_id) if world_map else "",
+            entry.x,
+            entry.y,
+            entry.z,
+            entry.identifier,
+            entry.amount,
+            entry.verified_at,
+        ])
+    return buffer.getvalue()
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -257,7 +352,7 @@ HTML_TEMPLATE = """<!doctype html>
     .stats {{
       display: grid;
       gap: 10px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }}
     .stat {{
       background: rgba(15, 23, 42, 0.8);
@@ -368,6 +463,10 @@ HTML_TEMPLATE = """<!doctype html>
           <div class="stat"><span class="k">Entries</span><span class="v" id="stat-count">-</span></div>
           <div class="stat"><span class="k">Total amount</span><span class="v" id="stat-amount">-</span></div>
           <div class="stat"><span class="k">Worlds</span><span class="v" id="stat-worlds">-</span></div>
+          <div class="stat"><span class="k">Mapped worlds</span><span class="v" id="stat-mapped-worlds">-</span></div>
+        </div>
+        <div style="padding: 0 18px 12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="secondary" id="export-csv" type="button">Download CSV</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -375,6 +474,7 @@ HTML_TEMPLATE = """<!doctype html>
               <tr>
                 <th>#</th>
                 <th>World UUID</th>
+                <th>World Name</th>
                 <th>Position</th>
                 <th>Identifier</th>
                 <th>Amount</th>
@@ -394,6 +494,7 @@ HTML_TEMPLATE = """<!doctype html>
     const statCount = document.getElementById("stat-count");
     const statAmount = document.getElementById("stat-amount");
     const statWorlds = document.getElementById("stat-worlds");
+    const statMappedWorlds = document.getElementById("stat-mapped-worlds");
     const fields = {{
       path: document.getElementById("path"),
       identifier: document.getElementById("identifier"),
@@ -419,11 +520,13 @@ HTML_TEMPLATE = """<!doctype html>
       statCount.textContent = data.summary.count;
       statAmount.textContent = data.summary.total_amount;
       statWorlds.textContent = Object.keys(data.summary.worlds).length;
+      statMappedWorlds.textContent = data.summary.mapped_worlds || 0;
       status.textContent = `Showing ${{data.entries.length}} of ${{data.summary.count}} entries from ${{data.path}}`;
       rows.innerHTML = data.entries.map((entry, index) => `
         <tr>
           <td>${{index + 1}}</td>
           <td><span class="pill">${{entry.world_id}}</span></td>
+          <td>${{entry.world_name ? escapeHtml(entry.world_name) : '<span class="muted">-</span>'}}</td>
           <td>${{entry.x}}, ${{entry.y}}, ${{entry.z}}</td>
           <td>${{escapeHtml(entry.identifier)}}</td>
           <td>${{entry.amount}}</td>
@@ -450,6 +553,15 @@ HTML_TEMPLATE = """<!doctype html>
       fields.world.value = "";
       refresh();
     }});
+    document.getElementById("export-csv").addEventListener("click", () => {{
+      const params = new URLSearchParams({{
+        path: fields.path.value,
+        identifier: fields.identifier.value,
+        mode: fields.mode.value,
+        world: fields.world.value,
+      }});
+      window.location.href = `/api/export.csv?${{params.toString()}}`;
+    }});
     for (const field of Object.values(fields)) {{
       field.addEventListener("keydown", (event) => {{
         if (event.key === "Enter") refresh();
@@ -475,6 +587,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/entries":
             self._serve_api(parsed)
+            return
+        if parsed.path == "/api/export.csv":
+            self._serve_csv(parsed)
             return
         if parsed.path in {"/", "/index.html"}:
             self._serve_index()
@@ -506,12 +621,36 @@ class Handler(BaseHTTPRequestHandler):
             filtered = filter_entries(entries, identifier, mode, world)
             payload = {
                 "path": str(path),
-                "summary": summarize(filtered),
-                "entries": [dataclasses.asdict(entry) for entry in filtered],
+                "summary": summarize(filtered, self.server.world_map),
+                "entries": [entry_payload(entry, self.server.world_map) for entry in filtered],
             }
             body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:  # noqa: BLE001
+            body = json.dumps({"error": str(exc)}).encode("utf-8")
+            self.send_response(HTTPStatus.BAD_REQUEST)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def _serve_csv(self, parsed: urllib.parse.ParseResult) -> None:
+        query = urllib.parse.parse_qs(parsed.query)
+        path_value = query.get("path", [str(self.server.default_path)])[0]
+        identifier = query.get("identifier", [""])[0].strip() or None
+        mode = query.get("mode", ["exact"])[0].strip().lower()
+        world = query.get("world", [""])[0].strip() or None
+        try:
+            path = Path(path_value).expanduser()
+            entries = filter_entries(read_index(path), identifier, mode, world)
+            body = csv_rows(entries, self.server.world_map).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="storage-sign-index.csv"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -528,11 +667,13 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--file", type=Path, default=default_index_path(),
                         help="path to storage-sign-index.bin")
+    parser.add_argument("--world-map", type=Path, default=None,
+                        help="JSON or CSV file mapping world UUID to world name")
     parser.add_argument("--identifier", default="", help="identifier to search for")
     parser.add_argument("--mode", choices=("exact", "contains"), default="exact")
     parser.add_argument("--world", default="", help="world UUID filter")
     parser.add_argument("--limit", type=int, default=50, help="limit for CLI output")
-    parser.add_argument("--format", choices=("table", "json", "html"), default="table")
+    parser.add_argument("--format", choices=("table", "json", "csv", "html"), default="table")
     parser.add_argument("--serve", action="store_true", help="start local HTTP viewer")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP host when serving")
     parser.add_argument("--port", type=int, default=8765, help="HTTP port when serving")
@@ -541,9 +682,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    world_map = load_world_map(args.world_map)
     if args.serve:
         server = ViewerServer((args.host, args.port), Handler)
         server.default_path = args.file
+        server.world_map = world_map
         print(f"Serving {args.file} at http://{args.host}:{args.port}/")
         try:
             server.serve_forever()
@@ -553,14 +696,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     entries = read_index(args.file)
     filtered = filter_entries(entries, args.identifier or None, args.mode, args.world or None)
-    summary = summarize(filtered)
+    summary = summarize(filtered, world_map)
 
     if args.format == "json":
         print(json.dumps({
             "path": str(args.file),
             "summary": summary,
-            "entries": [dataclasses.asdict(entry) for entry in filtered[: args.limit]],
+            "entries": [entry_payload(entry, world_map) for entry in filtered[: args.limit]],
         }, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.format == "csv":
+        sys.stdout.write(csv_rows(filtered, world_map))
         return 0
 
     if args.format == "html":
@@ -571,7 +718,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"entries: {summary['count']}")
     print(f"totalAmount: {summary['total_amount']}")
     print(f"worlds: {len(summary['worlds'])}")
-    print(cli_rows(filtered, args.limit))
+    print(f"mappedWorlds: {summary['mapped_worlds']}")
+    print(cli_rows(filtered, args.limit, world_map))
     return 0
 
 

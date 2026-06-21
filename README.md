@@ -222,6 +222,8 @@ World、座標、数量、ロード状態とともに表示します。
 python3 tools/storage_sign_index_viewer.py --serve
 python3 tools/storage_sign_index_viewer.py --identifier STONE
 python3 tools/storage_sign_index_viewer.py --identifier POTION --mode contains
+python3 tools/storage_sign_index_viewer.py --format csv
+python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 ```
 
 詳細は [位置索引・検索・近接表示](docs/storage-sign-index.md) の「外部ビューア」を参照してください。
