@@ -417,6 +417,15 @@ async function runMainSuite() {
     assert.equal(state.chestBoatStone, 63)
   })
 
+  await runCase('chest minecart inventory import', async () => {
+    await reset('chest-minecart-import')
+    await command('/sstest storage-minecart-transfer chest-minecart-import',
+      'SSTEST STORAGE-MINECART chest-minecart-import')
+    const state = await inspect('chest-minecart-import')
+    assert.equal(state.lines[2], '1')
+    assert.equal(state.storageMinecartStone, 63)
+  })
+
   await runCase('double chest inventory import', async () => {
     await reset('double-chest-import')
     await command('/sstest double-transfer double-chest-import', 'SSTEST DOUBLECHEST double-chest-import')

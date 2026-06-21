@@ -28,6 +28,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.minecart.HopperMinecart;
+import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.entity.ChestBoat;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -126,6 +127,10 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 case "boat-transfer" -> {
                     transferIntoChestBoat(player);
                     player.sendMessage("SSTEST BOAT " + scenario);
+                }
+                case "storage-minecart-transfer" -> {
+                    transferIntoStorageMinecart(player);
+                    player.sendMessage("SSTEST STORAGE-MINECART " + scenario);
                 }
                 case "double-transfer" -> {
                     transferIntoDoubleChest(player);
@@ -244,6 +249,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             case "world-dispenser" -> prepareWorldDispense(world, Material.DISPENSER);
             case "world-crafter" -> prepareWorldDispense(world, Material.CRAFTER);
             case "chest-boat-import" -> prepareChestBoatImport(world);
+            case "chest-minecart-import" -> prepareStorageMinecartImport(world);
             case "double-chest-import" -> prepareDoubleChestImport(world);
             case "autocollect" -> {
                 player.getInventory().setItem(1, new ItemStack(Material.STONE, 64));
@@ -429,6 +435,15 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         boat.getInventory().setItem(0, new ItemStack(Material.STONE, 64));
     }
 
+    private static void prepareStorageMinecartImport(World world) {
+        createWallStorageSign(world, -1, BASE_Y, 0, BlockFace.WEST, "STONE", 0);
+        world.getBlockAt(0, BASE_Y, 0).setType(Material.RAIL, false);
+        StorageMinecart minecart = (StorageMinecart) world.spawnEntity(
+            new Location(world, 0.5, BASE_Y, 0.5), EntityType.CHEST_MINECART
+        );
+        minecart.getInventory().setItem(0, new ItemStack(Material.STONE, 64));
+    }
+
     private static void prepareDoubleChestImport(World world) {
         Block left = world.getBlockAt(0, BASE_Y, 0);
         Block right = world.getBlockAt(1, BASE_Y, 0);
@@ -473,6 +488,18 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         Bukkit.getPluginManager().callEvent(event);
     }
 
+    private static void transferIntoStorageMinecart(Player player) {
+        StorageMinecart minecart = player.getWorld().getEntitiesByClass(StorageMinecart.class).stream()
+            .filter(entity -> !(entity instanceof HopperMinecart))
+            .findFirst().orElseThrow(() -> new IllegalStateException("Chest minecart is missing"));
+        Block sourceBlock = player.getWorld().getBlockAt(3, BASE_Y, 0);
+        sourceBlock.setType(Material.CHEST);
+        Chest source = (Chest) sourceBlock.getState();
+        Bukkit.getPluginManager().callEvent(new InventoryMoveItemEvent(
+            source.getInventory(), new ItemStack(Material.STONE), minecart.getInventory(), true
+        ));
+    }
+
     private static void dispenseToWorld(Player player) {
         Block block = player.getWorld().getBlockAt(0, BASE_Y, 0);
         if (!(block.getState() instanceof Container source)) {
@@ -507,6 +534,10 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         int minecartStone = world.getEntitiesByClass(HopperMinecart.class).stream()
             .mapToInt(cart -> count(cart.getInventory().getContents(), Material.STONE))
             .sum();
+        int storageMinecartStone = world.getEntitiesByClass(StorageMinecart.class).stream()
+            .filter(entity -> !(entity instanceof HopperMinecart))
+            .mapToInt(cart -> count(cart.getInventory().getContents(), Material.STONE))
+            .sum();
         int chestBoatStone = world.getEntitiesByClass(ChestBoat.class).stream()
             .mapToInt(boat -> count(boat.getInventory().getContents(), Material.STONE))
             .sum();
@@ -529,6 +560,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"chestStone\":" + chestStone + ","
             + "\"hopperStone\":" + hopperStone + ","
             + "\"minecartStone\":" + minecartStone + ","
+            + "\"storageMinecartStone\":" + storageMinecartStone + ","
             + "\"chestBoatStone\":" + chestBoatStone + ","
             + "\"playerOminousBanners\":"
             + countOminousBanners(player.getInventory().getContents()) + ","

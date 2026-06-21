@@ -107,6 +107,22 @@ class ExportSignTaskIntegrationTest {
     }
 
     @Test
+    void missingSignStateStillReleasesPendingReservation() {
+        Block block = mock(Block.class);
+        World world = mock(World.class);
+        Set<Block> pending = new HashSet<>();
+        pending.add(block);
+        when(block.getWorld()).thenReturn(world);
+        when(world.isChunkLoaded(0, 0)).thenReturn(true);
+        when(block.getState()).thenReturn(mock(org.bukkit.block.BlockState.class));
+
+        new ExportSignTask(block, mock(Inventory.class),
+            new ItemStack(Material.STONE), pending).run();
+
+        assertEquals(0, pending.size());
+    }
+
+    @Test
     void existingFullStackDoesNotConsumeStorageSign() {
         Inventory inventory = server.createInventory(null, 9);
         inventory.setItem(0, new ItemStack(Material.STONE, 64));
