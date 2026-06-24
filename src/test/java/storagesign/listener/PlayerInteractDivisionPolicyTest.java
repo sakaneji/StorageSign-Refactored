@@ -3,12 +3,14 @@ package storagesign.listener;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -18,6 +20,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockbukkit.mockbukkit.MockBukkit;
@@ -103,51 +106,42 @@ class PlayerInteractDivisionPolicyTest {
     }
 
     @Test
-    void partialRegisteredSignMergePreservesRemainingAndEmptiedSigns() throws Exception {
+    void partialRegisteredSignMergeReturnsReducedStackAfterEmptyStack() throws Exception {
         Field field = ConfigLoader.class.getDeclaredField("manualImport");
         field.setAccessible(true);
         field.setBoolean(null, true);
-        Player player = mock(Player.class);
-        PlayerInventory inventory = mock(PlayerInventory.class);
-        Block block = mock(Block.class);
-        StorageSign blockSign = mock(StorageSign.class);
-        StorageSign handSign = mock(StorageSign.class);
-        ItemStack contents = mock(ItemStack.class);
-        ItemStack remainingRegistered = mock(ItemStack.class);
-        ItemStack emptied = mock(ItemStack.class);
-        ItemStack hand = mock(ItemStack.class);
-        ItemStack remaining = mock(ItemStack.class);
-        when(player.getInventory()).thenReturn(inventory);
-        when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 10);
-        when(blockSign.isSimilar(contents)).thenReturn(true);
-        when(handSign.isUnregistered()).thenReturn(false);
-        when(handSign.getAmount()).thenReturn(10);
-        when(handSign.getContents(1)).thenReturn(contents);
-        when(handSign.getLoreText()).thenReturn("STONE 10");
-        when(hand.getType()).thenReturn(Material.OAK_SIGN);
-        when(hand.getAmount()).thenReturn(2);
-        when(hand.clone()).thenReturn(remaining);
-        when(remaining.getType()).thenReturn(Material.OAK_SIGN);
-        when(inventory.addItem(emptied)).thenReturn(new HashMap<>());
+        MockBukkit.mock();
+        try {
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = mock(StorageSign.class);
+            StorageSign handSign = StorageSign.fromSignLines(new String[] {
+                StorageSign.HEADER_LINE, "STONE", "10"
+            });
+            ItemStack contents = handSign.getContents(1);
+            ItemStack hand = StorageSign.createStorageSignItem(Material.OAK_SIGN, handSign, 3);
+            when(player.getInventory()).thenReturn(inventory);
+            when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 15);
+            when(blockSign.isSimilar(contents)).thenReturn(true);
+            when(inventory.addItem(org.mockito.ArgumentMatchers.any(ItemStack.class)))
+                .thenAnswer(invocation -> new HashMap<>());
 
-        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
-            signs.when(() -> StorageSign.createStorageSignItem(
-                org.mockito.ArgumentMatchers.eq(Material.OAK_SIGN),
-                org.mockito.ArgumentMatchers.eq(handSign), org.mockito.ArgumentMatchers.eq(1)))
-                .thenReturn(remainingRegistered);
-            signs.when(() -> StorageSign.createStorageSignItem(
-                Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1)).thenReturn(emptied);
-            Method method = PlayerInteractListener.class.getDeclaredMethod(
-                "processStorageSignItemInteraction", Player.class, Block.class,
-                StorageSign.class, ItemStack.class, StorageSign.class
-            );
-            method.setAccessible(true);
-            method.invoke(new PlayerInteractListener(null), player, block, blockSign, hand, handSign);
+            invokeInteraction(player, block, blockSign, hand, handSign);
+
+            verify(blockSign).setAmount(Integer.MAX_VALUE);
+            ArgumentCaptor<ItemStack> mainHandCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory).setItemInMainHand(mainHandCaptor.capture());
+            assertEquals(List.of("STONE 10"), mainHandCaptor.getValue().getItemMeta().getLore());
+            assertEquals(1, mainHandCaptor.getValue().getAmount());
+            ArgumentCaptor<ItemStack> addCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory, times(2)).addItem(addCaptor.capture());
+            assertEquals("Empty", addCaptor.getAllValues().get(0).getItemMeta().getLore().get(0));
+            assertEquals("STONE 5", addCaptor.getAllValues().get(1).getItemMeta().getLore().get(0));
+            verify(player, never()).getWorld();
+        } finally {
+            MockBukkit.unmock();
         }
-
-        verify(blockSign).setAmount(Integer.MAX_VALUE);
-        verify(inventory).setItemInMainHand(remainingRegistered);
-        verify(inventory).addItem(emptied);
     }
 
     @Test
@@ -181,26 +175,32 @@ class PlayerInteractDivisionPolicyTest {
     }
 
     @Test
-    void mergeWithLessThanOneStorageSignCapacityLeavesSourceUntouched() throws Exception {
-        Player player = mock(Player.class);
-        PlayerInventory inventory = mock(PlayerInventory.class);
-        Block block = mock(Block.class);
-        StorageSign blockSign = mock(StorageSign.class);
-        StorageSign handSign = mock(StorageSign.class);
-        ItemStack contents = mock(ItemStack.class);
-        ItemStack hand = mock(ItemStack.class);
-        when(player.getInventory()).thenReturn(inventory);
-        when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 5);
-        when(blockSign.isSimilar(contents)).thenReturn(true);
-        when(handSign.isUnregistered()).thenReturn(false);
-        when(handSign.getAmount()).thenReturn(10);
-        when(handSign.getContents(1)).thenReturn(contents);
-        when(hand.getAmount()).thenReturn(1);
+    void mergeWithLessThanOneStorageSignCapacityConsumesPartialStack() throws Exception {
+        MockBukkit.mock();
+        try {
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = mock(StorageSign.class);
+            StorageSign handSign = StorageSign.fromSignLines(new String[] {
+                StorageSign.HEADER_LINE, "STONE", "10"
+            });
+            ItemStack contents = handSign.getContents(1);
+            ItemStack hand = StorageSign.createStorageSignItem(Material.OAK_SIGN, handSign, 1);
+            when(player.getInventory()).thenReturn(inventory);
+            when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 5);
+            when(blockSign.isSimilar(contents)).thenReturn(true);
+            invokeInteraction(player, block, blockSign, hand, handSign);
 
-        invokeInteraction(player, block, blockSign, hand, handSign);
-
-        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
-        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+            verify(blockSign).setAmount(Integer.MAX_VALUE);
+            ArgumentCaptor<ItemStack> mainHandCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory).setItemInMainHand(mainHandCaptor.capture());
+            assertEquals(List.of("STONE 5"), mainHandCaptor.getValue().getItemMeta().getLore());
+            assertEquals(1, mainHandCaptor.getValue().getAmount());
+            verify(inventory, never()).addItem(org.mockito.ArgumentMatchers.any(ItemStack.class));
+        } finally {
+            MockBukkit.unmock();
+        }
     }
 
     @Test
@@ -249,47 +249,51 @@ class PlayerInteractDivisionPolicyTest {
     }
 
     @Test
-    void fullInventoryDropsOnlyEmptiedStorageSignAfterPartialMerge() throws Exception {
-        Player player = mock(Player.class);
-        PlayerInventory inventory = mock(PlayerInventory.class);
-        World world = mock(World.class);
-        Location location = mock(Location.class);
-        Block block = mock(Block.class);
-        StorageSign blockSign = mock(StorageSign.class);
-        StorageSign handSign = mock(StorageSign.class);
-        ItemStack contents = mock(ItemStack.class);
-        ItemStack hand = mock(ItemStack.class);
-        ItemStack clone = mock(ItemStack.class);
-        ItemStack remainingRegistered = mock(ItemStack.class);
-        ItemStack emptied = mock(ItemStack.class);
-        when(player.getInventory()).thenReturn(inventory);
-        when(player.getWorld()).thenReturn(world);
-        when(player.getLocation()).thenReturn(location);
-        when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 10);
-        when(blockSign.isSimilar(contents)).thenReturn(true);
-        when(handSign.isUnregistered()).thenReturn(false);
-        when(handSign.getAmount()).thenReturn(10);
-        when(handSign.getContents(1)).thenReturn(contents);
-        when(handSign.getLoreText()).thenReturn("STONE 10");
-        when(hand.getType()).thenReturn(Material.OAK_SIGN);
-        when(hand.getAmount()).thenReturn(2);
-        when(hand.clone()).thenReturn(clone);
-        when(clone.getType()).thenReturn(Material.OAK_SIGN);
-        HashMap<Integer, ItemStack> leftovers = new HashMap<>();
-        leftovers.put(0, emptied);
-        when(inventory.addItem(emptied)).thenReturn(leftovers);
+    void fullInventoryDropsEmptyBeforeReducedStackAfterPartialMerge() throws Exception {
+        MockBukkit.mock();
+        try {
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            World world = mock(World.class);
+            Location location = mock(Location.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = mock(StorageSign.class);
+            StorageSign handSign = StorageSign.fromSignLines(new String[] {
+                StorageSign.HEADER_LINE, "STONE", "10"
+            });
+            ItemStack contents = handSign.getContents(1);
+            ItemStack hand = StorageSign.createStorageSignItem(Material.OAK_SIGN, handSign, 3);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.getWorld()).thenReturn(world);
+            when(player.getLocation()).thenReturn(location);
+            when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 15);
+            when(blockSign.isSimilar(contents)).thenReturn(true);
+            when(inventory.addItem(org.mockito.ArgumentMatchers.any(ItemStack.class)))
+                .thenAnswer(invocation -> {
+                    ItemStack stack = invocation.getArgument(0);
+                    HashMap<Integer, ItemStack> leftovers = new HashMap<>();
+                    leftovers.put(0, stack);
+                    return leftovers;
+                });
 
-        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
-            signs.when(() -> StorageSign.createStorageSignItem(
-                Material.OAK_SIGN, handSign, 1)).thenReturn(remainingRegistered);
-            signs.when(() -> StorageSign.createStorageSignItem(
-                Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1)).thenReturn(emptied);
             invokeInteraction(player, block, blockSign, hand, handSign);
-        }
 
-        verify(inventory).setItemInMainHand(remainingRegistered);
-        verify(world).dropItemNaturally(location, emptied);
-        verify(world, never()).dropItemNaturally(location, contents);
+            ArgumentCaptor<ItemStack> mainHandCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory).setItemInMainHand(mainHandCaptor.capture());
+            assertEquals(List.of("STONE 10"), mainHandCaptor.getValue().getItemMeta().getLore());
+            assertEquals(1, mainHandCaptor.getValue().getAmount());
+            verify(blockSign).setAmount(Integer.MAX_VALUE);
+            ArgumentCaptor<ItemStack> addCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory, times(2)).addItem(addCaptor.capture());
+            assertEquals("Empty", addCaptor.getAllValues().get(0).getItemMeta().getLore().get(0));
+            assertEquals("STONE 5", addCaptor.getAllValues().get(1).getItemMeta().getLore().get(0));
+            ArgumentCaptor<ItemStack> dropCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(world, times(2)).dropItemNaturally(org.mockito.ArgumentMatchers.eq(location), dropCaptor.capture());
+            assertEquals("Empty", dropCaptor.getAllValues().get(0).getItemMeta().getLore().get(0));
+            assertEquals("STONE 5", dropCaptor.getAllValues().get(1).getItemMeta().getLore().get(0));
+        } finally {
+            MockBukkit.unmock();
+        }
     }
 
     @Test

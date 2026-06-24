@@ -213,12 +213,12 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 player.getInventory().setHeldItemSlot(0);
             }
             case "merge-partial" -> {
-                createStorageSign(world, 0, BASE_Y, 0, "STONE", Integer.MAX_VALUE - 10);
-                giveRegisteredStorageSigns(player, "STONE", 10, 2);
+                createStorageSign(world, 0, BASE_Y, 0, "STONE", Integer.MAX_VALUE - 15);
+                giveRegisteredStorageSigns(player, "STONE", 10, 3);
             }
             case "merge-partial-full" -> {
-                createStorageSign(world, 0, BASE_Y, 0, "STONE", Integer.MAX_VALUE - 10);
-                giveRegisteredStorageSigns(player, "STONE", 10, 2);
+                createStorageSign(world, 0, BASE_Y, 0, "STONE", Integer.MAX_VALUE - 15);
+                giveRegisteredStorageSigns(player, "STONE", 10, 3);
                 for (int slot = 1; slot < player.getInventory().getStorageContents().length; slot++) {
                     player.getInventory().setItem(slot, new ItemStack(Material.DIRT, 64));
                 }
@@ -544,6 +544,8 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             player.getInventory().getContents(), "Empty");
         int playerRegisteredStorageSigns = countStorageSignsWithLore(
             player.getInventory().getContents(), "STONE 10");
+        int playerReducedStorageSigns = countStorageSignsWithLore(
+            player.getInventory().getContents(), "STONE 5");
         int droppedStone = world.getEntitiesByClass(Item.class).stream()
             .map(Item::getItemStack)
             .filter(item -> item.getType() == Material.STONE)
@@ -580,10 +582,13 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"playerSigns\":" + playerSigns + ","
             + "\"playerEmptyStorageSigns\":" + playerEmptyStorageSigns + ","
             + "\"playerRegisteredStorageSigns\":" + playerRegisteredStorageSigns + ","
+            + "\"playerReducedStorageSigns\":" + playerReducedStorageSigns + ","
             + "\"droppedStone\":" + droppedStone + ","
             + "\"droppedStorageSigns\":" + droppedStorageSigns(world) + ","
             + "\"droppedEmptyStorageSigns\":"
             + droppedStorageSignsWithLore(world, "Empty") + ","
+            + "\"droppedReducedStorageSigns\":"
+            + droppedStorageSignsWithLore(world, "STONE 5") + ","
             + "\"chestStone\":" + chestStone + ","
             + "\"hopperStone\":" + hopperStone + ","
             + "\"minecartStone\":" + minecartStone + ","
