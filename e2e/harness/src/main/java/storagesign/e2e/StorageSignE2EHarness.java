@@ -36,6 +36,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -146,6 +147,10 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 case "double-transfer" -> {
                     transferIntoDoubleChest(player);
                     player.sendMessage("SSTEST DOUBLECHEST " + scenario);
+                }
+                case "chunk-load" -> {
+                    triggerChunkLoadScan();
+                    player.sendMessage("SSTEST CHUNKLOAD " + scenario);
                 }
                 default -> { return false; }
             }
@@ -267,6 +272,10 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 world.getBlockAt(0, BASE_Y - 1, 0).setType(Material.STONE);
             }
             case "restart" -> createStorageSign(world, 0, BASE_Y, 0, "STONE", 77);
+            case "index-chunk-load" -> {
+                clearIndexedStorageSign(32, BASE_Y, 32);
+                createStorageSign(world, 32, BASE_Y, 32, "STONE", 12);
+            }
             default -> throw new IllegalArgumentException("Unknown scenario: " + scenario);
         }
     }
@@ -528,6 +537,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
     private String snapshot(Player player, String scenario) {
         World world = player.getWorld();
         List<String> lines = signLines(world);
+        int indexedSigns = indexedSigns();
         int playerStone = count(player.getInventory().getContents(), Material.STONE);
         int playerSigns = count(player.getInventory().getContents(), Material.OAK_SIGN);
         int playerEmptyStorageSigns = countStorageSignsWithLore(
@@ -565,6 +575,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         ItemStack ominousBottle = find(player.getInventory().getContents(), Material.OMINOUS_BOTTLE);
         return "{\"scenario\":\"" + escape(scenario) + "\","
             + "\"lines\":" + jsonArray(lines) + ","
+            + "\"indexedSigns\":" + indexedSigns + ","
             + "\"playerStone\":" + playerStone + ","
             + "\"playerSigns\":" + playerSigns + ","
             + "\"playerEmptyStorageSigns\":" + playerEmptyStorageSigns + ","
@@ -712,6 +723,44 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             EquipmentSlot.HAND
         );
         Bukkit.getPluginManager().callEvent(event);
+    }
+
+    private static void triggerChunkLoadScan() {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (plugin == null) throw new IllegalStateException("StorageSign plugin is missing");
+        World world = Bukkit.getWorlds().get(0);
+        org.bukkit.Chunk chunk = world.getChunkAt(2, 2);
+        ChunkLoadEvent event = new ChunkLoadEvent(chunk, false);
+        try {
+            Object storageSignIndex = plugin.getClass().getMethod("getStorageSignIndex").invoke(plugin);
+            storageSignIndex.getClass().getMethod("onChunkLoad", ChunkLoadEvent.class).invoke(storageSignIndex, event);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to trigger chunk load scan", e);
+        }
+    }
+
+    private static int indexedSigns() {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (plugin == null) return 0;
+        try {
+            Object storageSignIndex = plugin.getClass().getMethod("getStorageSignIndex").invoke(plugin);
+            return (int) storageSignIndex.getClass().getMethod("size").invoke(storageSignIndex);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to read index size", e);
+        }
+    }
+
+    private void clearIndexedStorageSign(int x, int y, int z) {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (plugin == null) return;
+        try {
+            Object storageSignIndex = plugin.getClass().getMethod("getStorageSignIndex").invoke(plugin);
+            Block block = getServer().getWorlds().get(0).getBlockAt(x, y, z);
+            storageSignIndex.getClass().getMethod("unregister", Block.class).invoke(storageSignIndex, block);
+            block.setType(Material.AIR, false);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to clear indexed StorageSign", e);
+        }
     }
 
     private void breakStorageSign(Player player) {

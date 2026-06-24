@@ -3,6 +3,9 @@ package storagesign.item;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mockConstruction;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
@@ -51,6 +54,8 @@ class OminousBottleHelperTest {
         assertFalse(OminousBottleHelper.isSimilar(meta, (short) 1));
         assertEquals(0, OminousBottleHelper.getAmplifier((ItemMeta) null));
         assertFalse(OminousBottleHelper.isSimilar(null, (short) 0));
+        assertEquals(0, OminousBottleHelper.getAmplifier(new ItemStack(Material.STONE).getItemMeta()));
+        assertFalse(OminousBottleHelper.isSimilar(new ItemStack(Material.STONE).getItemMeta(), (short) 0));
     }
 
     @Test
@@ -61,5 +66,20 @@ class OminousBottleHelperTest {
         assertEquals(1, zero.getAmount());
         assertEquals(maximum.getMaxStackSize(), maximum.getAmount());
         assertEquals(2, OminousBottleHelper.getAmplifier(maximum.getItemMeta()));
+    }
+
+    @Test
+    void missingItemMetaLeavesTheConstructedBottleUsable() {
+        try (var constructions = mockConstruction(ItemStack.class, (mock, context) -> {
+            when(mock.getType()).thenReturn((Material) context.arguments().get(0));
+            when(mock.getMaxStackSize()).thenReturn(16);
+            when(mock.getItemMeta()).thenReturn(null);
+        })) {
+            ItemStack item = OminousBottleHelper.toItemStack((short) 4, 8);
+
+            assertEquals(Material.OMINOUS_BOTTLE, item.getType());
+            verify(item).setAmount(8);
+            assertTrue(constructions.constructed().size() == 1);
+        }
     }
 }

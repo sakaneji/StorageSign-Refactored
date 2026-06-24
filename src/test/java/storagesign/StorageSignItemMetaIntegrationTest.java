@@ -4,10 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.mockConstruction;
 
 import java.util.List;
+import java.lang.reflect.Field;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -23,6 +27,7 @@ import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
+import org.bukkit.inventory.meta.BannerMeta;
 import org.bukkit.NamespacedKey;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.FireworkEffect;
@@ -31,7 +36,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockbukkit.mockbukkit.MockBukkit;
+import storagesign.item.OminousBottleHelper;
 
 @Tag("integration")
 class StorageSignItemMetaIntegrationTest {
@@ -125,6 +132,318 @@ class StorageSignItemMetaIntegrationTest {
     }
 
     @Test
+    void rejectsPlainWhiteBannerAndParsesLegacyHorseEggMarkerItem() {
+        StorageSign whiteBanner = StorageSign.fromStoredItem(new ItemStack(Material.WHITE_BANNER));
+        assertNotNull(whiteBanner);
+        assertEquals(Material.WHITE_BANNER, whiteBanner.getMaterial());
+
+        ItemStack marker = new ItemStack(Material.GHAST_SPAWN_EGG);
+        ItemMeta meta = marker.getItemMeta();
+        meta.setDisplayName("HorseEgg");
+        meta.setLore(List.of("Empty"));
+        marker.setItemMeta(meta);
+
+        StorageSign parsed = StorageSign.fromStoredItem(marker);
+        assertNotNull(parsed);
+        assertEquals(Material.END_PORTAL, parsed.getMaterial());
+        assertEquals(1, parsed.getDamage());
+    }
+
+    @Test
+    void rejectsDecoratedWhiteBannerAndBlankLegacyMarkerName() {
+        ItemStack banner = new ItemStack(Material.WHITE_BANNER);
+        BannerMeta meta = (BannerMeta) banner.getItemMeta();
+        meta.addPattern(new org.bukkit.block.banner.Pattern(
+            org.bukkit.DyeColor.BLACK,
+            org.bukkit.Registry.BANNER_PATTERN.get(
+                org.bukkit.NamespacedKey.minecraft("border"))));
+        banner.setItemMeta(meta);
+        assertNotNull(StorageSign.fromStoredItem(banner));
+
+        ItemStack marker = new ItemStack(Material.GHAST_SPAWN_EGG);
+        ItemMeta markerMeta = marker.getItemMeta();
+        markerMeta.setDisplayName(" ");
+        markerMeta.setLore(List.of("Empty"));
+        marker.setItemMeta(markerMeta);
+        assertNull(StorageSign.fromStoredItem(marker));
+    }
+
+    @Test
+    void rejectsWhiteBannerAndShulkerWhenMetaIsMissing() {
+        ItemStack banner = mock(ItemStack.class);
+        when(banner.getType()).thenReturn(Material.WHITE_BANNER);
+        when(banner.getItemMeta()).thenReturn(null);
+        assertNull(StorageSign.fromStoredItem(banner));
+
+        ItemStack shulker = mock(ItemStack.class);
+        when(shulker.getType()).thenReturn(Material.SHULKER_BOX);
+        when(shulker.getItemMeta()).thenReturn(null);
+        assertNull(StorageSign.fromStoredItem(shulker));
+    }
+
+    @Test
+    void rejectsWhiteBannerAndShulkerWhenMetaTypeIsWrong() {
+        ItemStack banner = mock(ItemStack.class);
+        when(banner.getType()).thenReturn(Material.WHITE_BANNER);
+        when(banner.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        assertNull(StorageSign.fromStoredItem(banner));
+
+        ItemStack shulker = mock(ItemStack.class);
+        when(shulker.getType()).thenReturn(Material.SHULKER_BOX);
+        when(shulker.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        assertNull(StorageSign.fromStoredItem(shulker));
+    }
+
+    @Test
+    void rejectsPotionBookAndRocketWhenMetaIsMissing() {
+        ItemStack potion = mock(ItemStack.class);
+        when(potion.getType()).thenReturn(Material.POTION);
+        when(potion.getItemMeta()).thenReturn(null);
+        when(potion.clone()).thenReturn(new ItemStack(Material.POTION));
+        assertNotNull(StorageSign.fromStoredItem(potion));
+
+        ItemStack book = mock(ItemStack.class);
+        when(book.getType()).thenReturn(Material.ENCHANTED_BOOK);
+        when(book.getItemMeta()).thenReturn(null);
+        when(book.clone()).thenReturn(new ItemStack(Material.ENCHANTED_BOOK));
+        assertNotNull(StorageSign.fromStoredItem(book));
+
+        ItemStack rocket = mock(ItemStack.class);
+        when(rocket.getType()).thenReturn(Material.FIREWORK_ROCKET);
+        when(rocket.getItemMeta()).thenReturn(null);
+        when(rocket.clone()).thenReturn(new ItemStack(Material.FIREWORK_ROCKET));
+        assertNotNull(StorageSign.fromStoredItem(rocket));
+    }
+
+    @Test
+    void fromStoredItemRejectsOccupiedBeehive() {
+        ItemStack occupied = mock(ItemStack.class);
+        BlockStateMeta meta = mock(BlockStateMeta.class);
+        Beehive beehive = mock(Beehive.class);
+        when(occupied.getType()).thenReturn(Material.BEEHIVE);
+        when(occupied.getItemMeta()).thenReturn(meta);
+        when(meta.getBlockState()).thenReturn(beehive);
+        when(beehive.getEntityCount()).thenReturn(2);
+        when(occupied.clone()).thenReturn(new ItemStack(Material.BEEHIVE));
+
+        assertNull(StorageSign.fromStoredItem(occupied));
+    }
+
+    @Test
+    void fromStoredItemCoversWrongMetaTypeForBookAndPotion() {
+        ItemStack book = mock(ItemStack.class);
+        when(book.getType()).thenReturn(Material.ENCHANTED_BOOK);
+        when(book.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        when(book.clone()).thenReturn(new ItemStack(Material.ENCHANTED_BOOK));
+        assertNotNull(StorageSign.fromStoredItem(book));
+
+        ItemStack potion = mock(ItemStack.class);
+        when(potion.getType()).thenReturn(Material.POTION);
+        when(potion.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        when(potion.clone()).thenReturn(new ItemStack(Material.POTION));
+        assertNotNull(StorageSign.fromStoredItem(potion));
+    }
+
+    @Test
+    void getContentsReturnsNullWhenOminousBannerTemplateIsUnavailable() {
+        StorageSign banner = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"});
+        assertNotNull(banner);
+        try (MockedStatic<StorageSignPlugin> mocked = mockStatic(StorageSignPlugin.class)) {
+            mocked.when(StorageSignPlugin::getOminousBannerMeta).thenReturn(null);
+            assertNull(banner.getContents(1));
+        }
+    }
+
+    @Test
+    void getContentsHandlesPotionAndBookItemsWithoutMutableMeta() {
+        StorageSign potion = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+        StorageSign book = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"});
+        assertNotNull(book);
+
+        try (var mocked = mockConstruction(ItemStack.class, (stack, context) -> {
+            when(stack.getItemMeta()).thenReturn(null);
+        })) {
+            assertNotNull(potion.getContents(1));
+            assertNotNull(book.getContents(1));
+            assertEquals(2, mocked.constructed().size());
+        }
+    }
+
+    @Test
+    void getContentsFallsBackWhenItemMetaCannotBeCreated() {
+        StorageSign potion = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+        StorageSign book = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"});
+        assertNotNull(book);
+        StorageSign rocket = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "FIREWORK_ROCKET:3", "1"});
+        assertNotNull(rocket);
+        StorageSign stone = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "STONE:1", "1"});
+        assertNotNull(stone);
+
+        try (var mocked = mockConstruction(ItemStack.class, (stack, context) -> {
+            when(stack.getItemMeta()).thenReturn(null);
+        })) {
+            assertNotNull(potion.getContents(1));
+            assertNotNull(book.getContents(1));
+            assertNotNull(rocket.getContents(1));
+            assertNotNull(stone.getContents(1));
+            assertEquals(4, mocked.constructed().size());
+        }
+    }
+
+    @Test
+    void getContentsEncodesFireworkPowerGreaterThanOne() {
+        StorageSign rocket = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "FIREWORK_ROCKET:3", "1"});
+        assertNotNull(rocket);
+
+        ItemStack item = rocket.getContents(1);
+        assertNotNull(item);
+        assertEquals(Material.FIREWORK_ROCKET, item.getType());
+        assertEquals(3, ((FireworkMeta) item.getItemMeta()).getPower());
+    }
+
+    @Test
+    void createStorageSignItemAppliesConfiguredMaxStackSize() throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField("maxStackSize");
+        field.setAccessible(true);
+        int original = field.getInt(null);
+        field.setInt(null, 8);
+        try {
+            ItemStack item = StorageSign.createStorageSignItem(
+                Material.OAK_SIGN, "STONE 1", 1);
+            assertEquals(8, item.getItemMeta().getMaxStackSize());
+        } finally {
+            field.setInt(null, original);
+        }
+    }
+
+    @Test
+    void createStorageSignItemWithContentsReturnsRawItemWhenMetaUnavailable() {
+        StorageSign potion = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+
+        try (var mocked = mockConstruction(ItemStack.class, (stack, context) -> {
+            when(stack.getItemMeta()).thenReturn(null);
+        })) {
+            ItemStack item = StorageSign.createStorageSignItem(Material.OAK_SIGN, potion, 1);
+            assertNotNull(item);
+            assertEquals(1, mocked.constructed().size());
+        }
+    }
+
+    @Test
+    void signInSignAndHorseEggContentsRoundTripThroughGetContents() {
+        StorageSign signItem = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "OakStorageSign", "4"});
+        assertNotNull(signItem);
+        assertTrue(signItem.isSignAsItem());
+        ItemStack signStack = signItem.getContents(2);
+        assertNotNull(signStack);
+        assertEquals(Material.OAK_SIGN, signStack.getType());
+        assertEquals(2, signStack.getAmount());
+
+        StorageSign horseEgg = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "HorseEgg", "3"});
+        assertNotNull(horseEgg);
+        ItemStack marker = horseEgg.getContents(1);
+        assertNotNull(marker);
+        assertEquals(Material.GHAST_SPAWN_EGG, marker.getType());
+        assertEquals("HorseEgg", marker.getItemMeta().getDisplayName());
+    }
+
+    @Test
+    void ordinaryItemContentsRoundTripWithoutDamage() {
+        StorageSign stored = StorageSign.fromSignLines(
+            new String[] {StorageSign.HEADER_LINE, "STONE", "12"});
+        assertNotNull(stored);
+        ItemStack item = stored.getContents(1);
+        assertNotNull(item);
+        assertEquals(Material.STONE, item.getType());
+        assertEquals(1, item.getAmount());
+    }
+
+    @Test
+    void legacyEndPortalSignUsesEmptySignContentsWhenNotMarker() {
+        StorageSign endPortal = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "END_PORTAL:0", "1"});
+        assertNotNull(endPortal);
+
+        ItemStack contents = endPortal.getContents(1);
+        assertNotNull(contents);
+        assertEquals(Material.OAK_SIGN, contents.getType());
+        assertEquals(Material.END_PORTAL, endPortal.getMaterial());
+        assertEquals(0, endPortal.getDamage());
+    }
+
+    @Test
+    void legacyMarkerSignCreatesHorseEggContentsAndSimilarity() {
+        StorageSign horseEgg = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "HorseEgg", "1"});
+        assertNotNull(horseEgg);
+
+        ItemStack contents = horseEgg.getContents(1);
+        assertNotNull(contents);
+        assertEquals(Material.GHAST_SPAWN_EGG, contents.getType());
+        assertTrue(horseEgg.isSimilar(contents));
+    }
+
+    @Test
+    void legacyMarkerSimilarityRejectsMissingLore() {
+        StorageSign horseEgg = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "HorseEgg", "1"});
+        assertNotNull(horseEgg);
+
+        ItemStack item = mock(ItemStack.class);
+        ItemMeta meta = mock(ItemMeta.class);
+        when(item.getType()).thenReturn(Material.GHAST_SPAWN_EGG);
+        when(item.getItemMeta()).thenReturn(meta);
+        when(meta.getDisplayName()).thenReturn("HorseEgg");
+        when(meta.hasLore()).thenReturn(false);
+
+        assertFalse(horseEgg.isSimilar(item));
+    }
+
+    @Test
+    void emptyStorageSignHasNoContents() {
+        assertNull(StorageSign.empty().getContents(1));
+    }
+
+    @Test
+    void canonicalPotionIdentifierExistsOnlyForPotionBackedSigns() {
+        StorageSign potion = StorageSign.fromSignLines(
+            new String[] {StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+        assertNotNull(potion.getCanonicalPotionIdentifier());
+
+        StorageSign stone = StorageSign.fromSignLines(
+            new String[] {StorageSign.HEADER_LINE, "STONE", "1"});
+        assertNotNull(stone);
+        assertNull(stone.getCanonicalPotionIdentifier());
+    }
+
+    @Test
+    void invalidLegacyEnchantBookSpecIsRejectedWhileValidOneRoundTrips() {
+        assertNull(StorageSign.fromSignLines(
+            new String[] {StorageSign.HEADER_LINE, "ENCHBOOK:sharp:not-a-number", "1"}));
+
+        StorageSign stored = StorageSign.fromSignLines(
+            new String[] {StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"});
+        assertNotNull(stored);
+        assertEquals(Material.ENCHANTED_BOOK, stored.getMaterial());
+        assertEquals(5, stored.getDamage());
+    }
+
+    @Test
     void rejectsPotionWithCustomEffects() {
         ItemStack potion = new ItemStack(Material.POTION);
         PotionMeta meta = (PotionMeta) potion.getItemMeta();
@@ -143,6 +462,12 @@ class StorageSignItemMetaIntegrationTest {
         StorageSign stored = StorageSign.fromStoredItem(book);
         assertNotNull(stored);
         assertNotNull(stored.getContents(1));
+        assertTrue(stored.isSimilar(book));
+        ItemStack wrongBook = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta wrongMeta = (EnchantmentStorageMeta) wrongBook.getItemMeta();
+        wrongMeta.addStoredEnchant(Enchantment.EFFICIENCY, 5, true);
+        wrongBook.setItemMeta(wrongMeta);
+        assertFalse(stored.isSimilar(wrongBook));
 
         meta.addStoredEnchant(Enchantment.EFFICIENCY, 3, true);
         book.setItemMeta(meta);
@@ -162,6 +487,221 @@ class StorageSignItemMetaIntegrationTest {
         meta.addEffect(FireworkEffect.builder().withColor(Color.RED).with(FireworkEffect.Type.BALL).build());
         rocket.setItemMeta(meta);
         assertNull(StorageSign.fromStoredItem(rocket));
+    }
+
+    @Test
+    void similarChecksCoverShulkerAndBeehiveAndSignCases() {
+        StorageSign emptyShulker = StorageSign.fromStoredItem(new ItemStack(Material.SHULKER_BOX));
+        assertNotNull(emptyShulker);
+        assertTrue(emptyShulker.isSimilar(new ItemStack(Material.SHULKER_BOX)));
+
+        ItemStack filled = new ItemStack(Material.SHULKER_BOX);
+        BlockStateMeta filledMeta = (BlockStateMeta) filled.getItemMeta();
+        ShulkerBox box = (ShulkerBox) filledMeta.getBlockState();
+        box.getInventory().setItem(0, new ItemStack(Material.DIAMOND));
+        filledMeta.setBlockState(box);
+        filled.setItemMeta(filledMeta);
+        assertTrue(emptyShulker.isSimilar(filled));
+
+        StorageSign emptyBeehive = StorageSign.fromStoredItem(new ItemStack(Material.BEEHIVE));
+        assertNotNull(emptyBeehive);
+        assertTrue(emptyBeehive.isSimilar(new ItemStack(Material.BEEHIVE)));
+
+        ItemStack occupiedBeehive = mock(ItemStack.class);
+        BlockStateMeta beehiveMeta = mock(BlockStateMeta.class);
+        Beehive beehive = mock(Beehive.class);
+        when(occupiedBeehive.getType()).thenReturn(Material.BEEHIVE);
+        when(occupiedBeehive.getItemMeta()).thenReturn(beehiveMeta);
+        when(beehiveMeta.getBlockState()).thenReturn(beehive);
+        when(beehive.getEntityCount()).thenReturn(1);
+        assertTrue(emptyBeehive.isSimilar(occupiedBeehive));
+
+        StorageSign signItem = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "OakStorageSign", "4"});
+        assertNotNull(signItem);
+        assertTrue(signItem.isSimilar(StorageSign.createStorageSignItem(
+            Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1)));
+        ItemStack namedSign = StorageSign.createStorageSignItem(
+            Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1);
+        ItemMeta namedSignMeta = namedSign.getItemMeta();
+        namedSignMeta.setDisplayName("custom");
+        namedSign.setItemMeta(namedSignMeta);
+        assertFalse(signItem.isSimilar(namedSign));
+
+        ItemStack emptyBanner = new ItemStack(Material.WHITE_BANNER);
+        assertFalse(signItem.isSimilar(emptyBanner));
+
+        ItemStack potion = new ItemStack(Material.POTION);
+        assertFalse(signItem.isSimilar(potion));
+    }
+
+    @Test
+    void similarChecksCoverEnchantedBookPotionAndBannerRejections() {
+        StorageSign book = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"});
+        assertNotNull(book);
+        StorageSign storedBook = StorageSign.fromStoredItem(
+            StorageSign.fromSignLines(new String[]{StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"})
+                .getContents(1));
+        assertNotNull(storedBook);
+        assertTrue(book.isSimilar(storedBook.getContents(1)));
+
+        ItemStack wrongMetaBook = new ItemStack(Material.ENCHANTED_BOOK);
+        assertFalse(book.isSimilar(wrongMetaBook));
+
+        StorageSign potion = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+        ItemStack wrongPotion = new ItemStack(Material.SPLASH_POTION);
+        PotionMeta wrongPotionMeta = (PotionMeta) wrongPotion.getItemMeta();
+        wrongPotionMeta.setBasePotionType(PotionType.HEALING);
+        wrongPotion.setItemMeta(wrongPotionMeta);
+        assertFalse(potion.isSimilar(wrongPotion));
+
+        StorageSign banner = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"});
+        assertNotNull(banner);
+        assertFalse(banner.isSimilar(new ItemStack(Material.WHITE_BANNER)));
+    }
+
+    @Test
+    void similarChecksCoverUnenchantedBookAndWrongPotionBodyRejections() {
+        StorageSign plainBook = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "ENCHANTED_BOOK:5", "1"});
+        assertNotNull(plainBook);
+        assertFalse(plainBook.isSimilar(new ItemStack(Material.ENCHANTED_BOOK)));
+
+        StorageSign potion = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potion);
+        ItemStack wrongPotion = new ItemStack(Material.POTION);
+        PotionMeta wrongPotionMeta = (PotionMeta) wrongPotion.getItemMeta();
+        wrongPotionMeta.setBasePotionType(PotionType.REGENERATION);
+        wrongPotion.setItemMeta(wrongPotionMeta);
+        assertFalse(potion.isSimilar(wrongPotion));
+    }
+
+    @Test
+    void similarChecksCoverWrongMetaTypeForBannerBookAndPotion() {
+        ItemStack banner = mock(ItemStack.class);
+        when(banner.getType()).thenReturn(Material.WHITE_BANNER);
+        when(banner.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        StorageSign ominous = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"});
+        assertNotNull(ominous);
+        assertFalse(ominous.isSimilar(banner));
+
+        ItemStack book = mock(ItemStack.class);
+        when(book.getType()).thenReturn(Material.ENCHANTED_BOOK);
+        when(book.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        StorageSign enchanted = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"});
+        assertNotNull(enchanted);
+        assertFalse(enchanted.isSimilar(book));
+
+        ItemStack potion = mock(ItemStack.class);
+        when(potion.getType()).thenReturn(Material.POTION);
+        when(potion.getItemMeta()).thenReturn(mock(ItemMeta.class));
+        StorageSign potionSign = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});
+        assertNotNull(potionSign);
+        assertFalse(potionSign.isSimilar(potion));
+    }
+
+    @Test
+    void fromStoredItemCoversTypeAndMetaMismatchRejections() {
+        ItemStack shulker = new ItemStack(Material.SHULKER_BOX);
+        assertNotNull(StorageSign.fromStoredItem(shulker));
+        ItemStack plainShulker = mock(ItemStack.class);
+        when(plainShulker.getType()).thenReturn(Material.SHULKER_BOX);
+        when(plainShulker.getItemMeta()).thenReturn(null);
+        assertNull(StorageSign.fromStoredItem(plainShulker));
+
+        ItemStack whiteBanner = new ItemStack(Material.WHITE_BANNER);
+        ItemMeta plainMeta = mock(ItemMeta.class);
+        when(whiteBanner.getItemMeta()).thenReturn(plainMeta);
+        assertNotNull(StorageSign.fromStoredItem(whiteBanner));
+
+        ItemStack rocket = new ItemStack(Material.FIREWORK_ROCKET);
+        FireworkMeta rocketMeta = (FireworkMeta) rocket.getItemMeta();
+        rocketMeta.addEffect(FireworkEffect.builder().withColor(Color.BLUE).with(FireworkEffect.Type.BALL).build());
+        rocket.setItemMeta(rocketMeta);
+        assertNull(StorageSign.fromStoredItem(rocket));
+    }
+
+    @Test
+    void lowPowerFireworkKeepsLegacyZeroEncoding() {
+        ItemStack rocket = new ItemStack(Material.FIREWORK_ROCKET);
+        FireworkMeta meta = (FireworkMeta) rocket.getItemMeta();
+        meta.setPower(1);
+        rocket.setItemMeta(meta);
+
+        StorageSign stored = StorageSign.fromStoredItem(rocket);
+        assertNotNull(stored);
+        assertEquals(0, stored.getDamage());
+        assertEquals(0, ((FireworkMeta) stored.getContents(1).getItemMeta()).getPower());
+    }
+
+    @Test
+    void preservesOminousBottleAmplifierAndRoundsTripContents() {
+        ItemStack bottle = OminousBottleHelper.toItemStack((short) 3, 1);
+        StorageSign stored = StorageSign.fromStoredItem(bottle);
+        assertNotNull(stored);
+        assertEquals(Material.OMINOUS_BOTTLE, stored.getMaterial());
+        assertEquals(3, stored.getDamage());
+        assertEquals("OMINOUS_BOTTLE:3", stored.getIdentifier());
+        assertTrue(stored.isSimilar(bottle));
+        assertFalse(stored.isSimilar(OminousBottleHelper.toItemStack((short) 2, 1)));
+        assertEquals(3, OminousBottleHelper.getAmplifier(stored.getContents(1).getItemMeta()));
+    }
+
+    @Test
+    void preservesOminousBannerMetaWhenLoadedFromStorageSign() {
+        BannerMeta ominous = StorageSignPlugin.getOminousBannerMeta();
+        assertNotNull(ominous);
+
+        ItemStack banner = new ItemStack(Material.WHITE_BANNER);
+        banner.setItemMeta(ominous.clone());
+
+        StorageSign stored = StorageSign.fromStoredItem(banner);
+        assertNotNull(stored);
+        assertEquals(Material.WHITE_BANNER, stored.getMaterial());
+        assertEquals(8, stored.getDamage());
+        assertTrue(stored.isSimilar(banner));
+        assertFalse(stored.isSimilar(new ItemStack(Material.WHITE_BANNER)));
+        ItemStack restored = stored.getContents(1);
+        assertNotNull(restored);
+        assertEquals(Material.WHITE_BANNER, restored.getType());
+        assertTrue(StorageSignPlugin.isOminousBannerMeta((BannerMeta) restored.getItemMeta()));
+    }
+
+    @Test
+    void ominousBannerSimilarityFallsBackToRegistryKeyWhenTemplateIsMissing() {
+        StorageSign banner = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"});
+        assertNotNull(banner);
+
+        BannerMeta ominous = StorageSignPlugin.getOminousBannerMeta();
+        assertNotNull(ominous);
+        ItemStack item = new ItemStack(Material.WHITE_BANNER);
+        item.setItemMeta(ominous.clone());
+
+        try (MockedStatic<StorageSignPlugin> mocked = mockStatic(StorageSignPlugin.class)) {
+            mocked.when(StorageSignPlugin::getOminousBannerMeta).thenReturn(null);
+            assertFalse(banner.isSimilar(item));
+        }
+    }
+
+    @Test
+    void ominousBannerSignContentsUseLoadedTemplateWhenRequested() {
+        StorageSign stored = StorageSign.fromSignLines(new String[]{
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "2"});
+        assertNotNull(stored);
+
+        ItemStack item = stored.getContents(1);
+        assertNotNull(item);
+        assertEquals(Material.WHITE_BANNER, item.getType());
+        assertTrue(StorageSignPlugin.isOminousBannerMeta((BannerMeta) item.getItemMeta()));
     }
 
     @Test

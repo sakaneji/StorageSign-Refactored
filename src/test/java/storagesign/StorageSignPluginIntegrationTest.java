@@ -1,6 +1,7 @@
 package storagesign;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -14,12 +15,12 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionType;
 import storagesign.registry.MaterialRegistry;
 
-import org.mockbukkit.mockbukkit.MockBukkit;
-import org.mockbukkit.mockbukkit.ServerMock;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.mockbukkit.mockbukkit.MockBukkit;
+import org.mockbukkit.mockbukkit.ServerMock;
 
 @Tag("integration")
 class StorageSignPluginIntegrationTest {
@@ -114,6 +115,19 @@ class StorageSignPluginIntegrationTest {
         plugin.onEnable();
 
         assertTrue(ConfigLoader.getManualImport());
+        assertNotNull(StorageSignPlugin.getOminousBannerMeta());
+    }
+
+    @Test
+    void reenableWithDisabledIndexAndDebugLoggingCoversStartupBranches() throws Exception {
+        plugin.getConfig().set("log-level", "DEBUG");
+        plugin.getConfig().set("storage-index.enabled", false);
+        plugin.getConfig().set("nearby-display.enabled", true);
+        plugin.getConfig().set("no-bud", true);
+        plugin.saveConfig();
+        plugin.onDisable();
+        plugin.onEnable();
+
         assertNotNull(StorageSignPlugin.getOminousBannerMeta());
     }
 }

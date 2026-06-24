@@ -1,14 +1,19 @@
 package storagesign.index;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Base64;
@@ -16,6 +21,8 @@ import java.util.UUID;
 import java.util.zip.CRC32;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 class StorageSignIndexCodecTest {
     @TempDir Path temporary;
@@ -63,7 +70,8 @@ class StorageSignIndexCodecTest {
         assertRejected(codec, payload(0, 1, 0), "magic");
         assertRejected(codec, payload(0x53534958, 2, 0), "version");
         assertRejected(codec, payload(0x53534958, 1, -1), "count");
-        assertRejected(codec, payload(0x53534958, 1, 1), "available data");
+        assertRejected(codec, payload(0x53534958, 1, 10_000_001), "count");
+        assertRejected(codec, payload(0x53534958, 1, 1), "count");
 
         ByteArrayOutputStream trailing = payload(0x53534958, 1, 0);
         trailing.write(1);
@@ -76,6 +84,38 @@ class StorageSignIndexCodecTest {
             output.writeLong(0); output.writeInt(1); output.writeByte(0xff);
         }
         assertRejected(codec, invalidUtf8, "UTF-8");
+
+        ByteArrayOutputStream invalidIdentifierLength = payload(0x53534958, 1, 1);
+        try (DataOutputStream output = new DataOutputStream(invalidIdentifierLength)) {
+            output.writeLong(0); output.writeLong(0);
+            output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
+            output.writeLong(0); output.writeInt(65_537); output.writeByte(0);
+        }
+        assertRejected(codec, invalidIdentifierLength, "Invalid identifier length");
+
+        ByteArrayOutputStream missingIdentifierBytes = payload(0x53534958, 1, 1);
+        try (DataOutputStream output = new DataOutputStream(missingIdentifierBytes)) {
+            output.writeLong(0); output.writeLong(0);
+            output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
+            output.writeLong(0); output.writeInt(2); output.writeByte(0);
+        }
+        assertRejected(codec, missingIdentifierBytes, "Invalid identifier length");
+
+        ByteArrayOutputStream emptyIdentifier = payload(0x53534958, 1, 1);
+        try (DataOutputStream output = new DataOutputStream(emptyIdentifier)) {
+            output.writeLong(0); output.writeLong(0);
+            output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
+            output.writeLong(0); output.writeInt(0); output.writeByte(0);
+        }
+        assertRejected(codec, emptyIdentifier, "Invalid identifier length");
+
+        ByteArrayOutputStream negativeAmount = payload(0x53534958, 1, 1);
+        try (DataOutputStream output = new DataOutputStream(negativeAmount)) {
+            output.writeLong(0); output.writeLong(0);
+            output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(-1);
+            output.writeLong(0); output.writeInt(1); output.writeByte('S');
+        }
+        assertRejected(codec, negativeAmount, "Invalid index entry");
     }
 
     @Test
@@ -105,6 +145,68 @@ class StorageSignIndexCodecTest {
         assertEquals(List.of(valid), codec.read(file));
     }
 
+    @Test
+    void writeAtomicFallsBackWhenAtomicMoveIsNotSupported() throws Exception {
+        Path file = temporary.resolve("storage-sign-index.bin");
+        StorageSignIndexCodec codec = new StorageSignIndexCodec();
+        IndexedStorageSign entry = new IndexedStorageSign(
+            new StorageSignPosition(UUID.randomUUID(), 1, 2, 3), "STONE", 4, 5);
+
+        try (MockedStatic<Files> files = Mockito.mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.move(
+                    Mockito.any(Path.class), Mockito.any(Path.class),
+                    Mockito.eq(java.nio.file.StandardCopyOption.ATOMIC_MOVE),
+                    Mockito.eq(java.nio.file.StandardCopyOption.REPLACE_EXISTING)))
+                .thenThrow(new AtomicMoveNotSupportedException(file.toString(), null, "no atomic move"));
+
+            long size = codec.writeAtomic(file, List.of(entry));
+
+            assertTrue(size > 0);
+            files.verify(() -> Files.move(
+                Mockito.any(Path.class), Mockito.any(Path.class),
+                Mockito.eq(java.nio.file.StandardCopyOption.ATOMIC_MOVE),
+                Mockito.eq(java.nio.file.StandardCopyOption.REPLACE_EXISTING)));
+            files.verify(() -> Files.move(
+                Mockito.any(Path.class), Mockito.any(Path.class),
+                Mockito.eq(java.nio.file.StandardCopyOption.REPLACE_EXISTING)));
+        }
+    }
+
+    @Test
+    void writeAtomicRejectsEntriesPastMaximumAndEmptyIdentifiers() throws Exception {
+        StorageSignIndexCodec codec = new StorageSignIndexCodec();
+        Path file = temporary.resolve("storage-sign-index.bin");
+        IndexedStorageSign valid = new IndexedStorageSign(
+            new StorageSignPosition(UUID.randomUUID(), 1, 2, 3), "STONE", 4, 5);
+        List<IndexedStorageSign> tooMany = new java.util.AbstractList<>() {
+            @Override public IndexedStorageSign get(int index) { return valid; }
+            @Override public int size() { return 10_000_001; }
+        };
+
+        assertThrows(IOException.class, () -> codec.writeAtomic(file, tooMany));
+    }
+
+    @Test
+    void writeAtomicRejectsOversizedIdentifiers() throws Exception {
+        StorageSignIndexCodec codec = new StorageSignIndexCodec();
+        Path file = temporary.resolve("storage-sign-index.bin");
+        IndexedStorageSign oversized = new IndexedStorageSign(
+            new StorageSignPosition(UUID.randomUUID(), 1, 2, 3), "X".repeat(65_537), 4, 5);
+
+        assertThrows(IOException.class, () -> codec.writeAtomic(file, List.of(oversized)));
+    }
+
+    @Test
+    void validateIdentifierBytesRejectsEmptyAndOversizedArrays() throws Exception {
+        Method method = StorageSignIndexCodec.class.getDeclaredMethod(
+            "validateIdentifierBytes", byte[].class);
+        method.setAccessible(true);
+
+        assertThrows(IOException.class, () -> invokeIdentifierValidator(method, new byte[0]));
+        assertThrows(IOException.class, () -> invokeIdentifierValidator(method, new byte[65_537]));
+        assertDoesNotThrow(() -> method.invoke(null, new byte[] {1}));
+    }
+
     private void assertRejected(StorageSignIndexCodec codec, ByteArrayOutputStream content,
                                 String expectedMessage) throws Exception {
         Path file = temporary.resolve("invalid.bin");
@@ -125,6 +227,17 @@ class StorageSignIndexCodecTest {
         crc.update(content);
         try (DataOutputStream output = new DataOutputStream(Files.newOutputStream(file))) {
             output.write(content); output.writeInt((int) crc.getValue());
+        }
+    }
+
+    private static void invokeIdentifierValidator(Method method, byte[] value) throws IOException {
+        try {
+            method.invoke(null, value);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+        } catch (InvocationTargetException e) {
+            if (e.getCause() instanceof IOException io) throw io;
+            throw new AssertionError(e.getCause());
         }
     }
 }

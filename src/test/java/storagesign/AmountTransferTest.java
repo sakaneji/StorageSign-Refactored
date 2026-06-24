@@ -12,6 +12,8 @@ class AmountTransferTest {
         assertEquals(2, AmountTransfer.accepted(Integer.MAX_VALUE - 2, 64));
         assertEquals(0, AmountTransfer.accepted(Integer.MAX_VALUE, 1));
         assertEquals(0, AmountTransfer.accepted(0, -1));
+        assertEquals(0, AmountTransfer.accepted(-1, 64));
+        assertEquals(0, AmountTransfer.accepted(10, 0));
     }
 
     @Test
@@ -36,5 +38,14 @@ class AmountTransferTest {
             AmountTransfer.dividedPerSign(Integer.MAX_VALUE, 2, Integer.MAX_VALUE));
         assertEquals(345600,
             AmountTransfer.dividedPerSign(Integer.MAX_VALUE, 16, 345600));
+        assertEquals(0, AmountTransfer.dividedPerSign(0, 1, 10));
+        assertEquals(0, AmountTransfer.dividedPerSign(10, 0, 10));
+        assertEquals(0, AmountTransfer.dividedPerSign(1, 2, 10));
+    }
+
+    @Test
+    void dividedPerSignReturnsTheComputedShareWhenOneExists() {
+        assertEquals(50, AmountTransfer.dividedPerSign(100, 1, 1000));
+        assertEquals(20, AmountTransfer.dividedPerSign(60, 2, 1000));
     }
 }

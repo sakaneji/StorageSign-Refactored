@@ -8,6 +8,12 @@ const loggerMode = process.env.LOGGER_MODE ?? 'without-logger'
 const host = process.env.MC_HOST ?? 'server'
 const port = Number(process.env.MC_PORT ?? 25565)
 const timeoutMs = Number(process.env.E2E_TIMEOUT_MS ?? 30000)
+const caseFilter = new Set(
+  (process.env.E2E_CASE_FILTER ?? '')
+    .split(',')
+    .map(name => name.trim())
+    .filter(Boolean)
+)
 
 const bot = mineflayer.createBot({
   host,
@@ -127,6 +133,7 @@ async function activateSign({ sneak = false } = {}) {
 }
 
 async function runCase(name, body) {
+  if (caseFilter.size > 0 && !caseFilter.has(name)) return
   process.stdout.write(`CASE ${name}\n`)
   await body()
   process.stdout.write(`PASS ${name}\n`)
@@ -499,6 +506,25 @@ async function runMainSuite() {
     await reset('restart')
     const state = await inspect('restart')
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
+  })
+
+  await runCase('storage index chunk load scan', async () => {
+    await reset('index-chunk-load')
+    let state = await inspect('index-chunk-load')
+    const baseline = state.indexedSigns
+    assert.ok(baseline >= 0)
+    await command('/sstest chunk-load index-chunk-load', 'SSTEST CHUNKLOAD index-chunk-load')
+    state = await waitForSnapshot(
+      'index-chunk-load',
+      snapshot => snapshot.indexedSigns >= baseline + 1,
+      10000
+    )
+    assert.equal(state.indexedSigns, baseline + 1)
+    await command('/sstest admin true', 'SSTEST ADMIN true')
+    bot.chat('/storagesignsearch item STONE')
+    await waitForMessage(message => message.includes('Searching StorageSign index'))
+    const result = await waitForMessage(message => message.includes("StorageSign search 'STONE'"))
+    assert.match(result, /matches=[1-9][0-9]*/)
   })
 
   await runCase('storage index rebuild search and nearby display', async () => {

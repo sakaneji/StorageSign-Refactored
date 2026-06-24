@@ -89,4 +89,28 @@ class EnchantHelperTest {
         assertNull(StorageSign.fromSignLines(
             new String[] {"StorageSign", "ENCHBOOK:sharp:not-a-level", "1"}));
     }
+
+    @Test
+    void ambiguousPrefixFallsBackToTheFirstRegistryMatch() {
+        Enchantment first = EnchantHelper.fromPrefix("fire_");
+
+        assertNotNull(first);
+        assertTrue(first == Enchantment.FIRE_PROTECTION || first == Enchantment.FIRE_ASPECT);
+    }
+
+    @Test
+    void broadAmbiguousPrefixStillReturnsARegistryMatch() {
+        Enchantment first = EnchantHelper.fromPrefix("a");
+
+        assertNotNull(first);
+        assertTrue(first.getKey().getKey().startsWith("a"));
+    }
+
+    @Test
+    void signAndLoreFormattingUsesTheSameShortKeyAndLevel() {
+        assertEquals("ENCHBOOK:sharp:5",
+            EnchantHelper.toSignText(Enchantment.SHARPNESS, (short) 5));
+        assertEquals("ENCHANTED_BOOK:sharpness:5 12",
+            EnchantHelper.toLoreText(Enchantment.SHARPNESS, (short) 5, 12));
+    }
 }

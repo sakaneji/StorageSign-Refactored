@@ -3,6 +3,7 @@ package storagesign.registry;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.function.Function;
 import org.bukkit.DyeColor;
 import org.bukkit.Material;
 
@@ -18,14 +19,18 @@ public final class DyeRegistry {
     public static final Map<Material, DyeColor> DYE_COLOR_BY_MATERIAL;
 
     static {
+        DYE_COLOR_BY_MATERIAL = Collections.unmodifiableMap(buildDyeMap(Material::matchMaterial));
+    }
+
+    static Map<Material, DyeColor> buildDyeMap(Function<String, Material> matcher) {
         Map<Material, DyeColor> map = new EnumMap<>(Material.class);
         for (DyeColor color : DyeColor.values()) {
-            Material dye = Material.matchMaterial(color.name() + "_DYE");
+            Material dye = matcher.apply(color.name() + "_DYE");
             if (dye != null) {
                 map.put(dye, color);
             }
         }
-        DYE_COLOR_BY_MATERIAL = Collections.unmodifiableMap(map);
+        return map;
     }
 
     public static boolean isDye(Material material) {

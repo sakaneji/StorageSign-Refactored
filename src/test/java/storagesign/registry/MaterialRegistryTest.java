@@ -2,6 +2,7 @@ package storagesign.registry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Set;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
@@ -219,5 +220,11 @@ class MaterialRegistryTest {
             assertFalse(MaterialRegistry.WALL_SIGN_MATERIALS.contains(m),
                 "Material is in both SIGN and WALL_SIGN sets: " + m);
         }
+    }
+
+    @Test
+    void buildWallToSignMapSkipsUnresolvableWallMaterials() {
+        assertTrue(MaterialRegistry.buildWallToSignMap(Set.of(Material.OAK_WALL_SIGN), name -> null)
+            .isEmpty());
     }
 }

@@ -81,8 +81,10 @@ class StorageSignSearchCommandIntegrationTest {
     private String awaitMessage(String expected) throws Exception {
         for (int attempt = 0; attempt < 100; attempt++) {
             server.getScheduler().performOneTick();
-            String message = player.nextMessage();
-            if (message != null && message.contains(expected)) return message;
+            String message;
+            while ((message = player.nextMessage()) != null) {
+                if (message.contains(expected)) return message;
+            }
             Thread.sleep(10);
         }
         throw new AssertionError("Timed out waiting for message containing: " + expected);

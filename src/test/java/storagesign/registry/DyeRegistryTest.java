@@ -2,6 +2,7 @@ package storagesign.registry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Map;
 import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
@@ -100,5 +101,11 @@ class DyeRegistryTest {
             assertEquals(isDye, hasColor,
                 "isDye and getColor disagree for: " + m);
         }
+    }
+
+    @Test
+    void buildDyeMapSkipsMissingMaterials() {
+        Map<Material, DyeColor> map = DyeRegistry.buildDyeMap(name -> null);
+        assertTrue(map.isEmpty());
     }
 }

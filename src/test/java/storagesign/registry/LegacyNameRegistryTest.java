@@ -2,6 +2,7 @@ package storagesign.registry;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.Method;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
@@ -152,5 +153,14 @@ class LegacyNameRegistryTest {
             assertFalse(name.contains("_"),
                 "Generated name contains underscore: " + name);
         }
+    }
+
+    @Test
+    void buildNameSkipsEmptyMaterialNameSegments() throws Exception {
+        Method method = LegacyNameRegistry.class.getDeclaredMethod("buildName", String.class);
+        method.setAccessible(true);
+
+        assertEquals("DarkOakStorageSign", method.invoke(null, "DARK__OAK__SIGN"));
+        assertEquals("StorageSign", method.invoke(null, "__SIGN__"));
     }
 }

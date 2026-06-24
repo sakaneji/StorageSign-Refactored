@@ -2,11 +2,23 @@ package storagesign.item;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Set;
+import java.util.Map;
+import sun.misc.Unsafe;
 import org.bukkit.Material;
 import org.bukkit.potion.PotionType;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import storagesign.ConfigLoader;
 
 class PotionHelperTest {
+
+    @AfterEach
+    void clearPotionAliases() throws Exception {
+        setPotionAliases(Map.of());
+    }
 
     // ── fromSignText (pre-existing) ───────────────────────────────────────────
 
@@ -54,6 +66,12 @@ class PotionHelperTest {
     @Test
     void fromSignText_unknownNameReturnsNull() {
         assertNull(PotionHelper.fromSignText("XXXXX", "0"));
+    }
+
+    @Test
+    void fromSignText_knownNameWithInvalidCodeReturnsNull() {
+        assertNull(PotionHelper.fromSignText("NIGHT", "2"));
+        assertNull(PotionHelper.fromSignText("REGEN", "3"));
     }
 
     // ── getShortName ──────────────────────────────────────────────────────────
@@ -191,6 +209,14 @@ class PotionHelperTest {
             PotionHelper.toSignText(Material.LINGERING_POTION, PotionType.STRONG_SWIFTNESS, (short) 2));
     }
 
+    @Test
+    void toLoreText_formatsMaterialPotionCodeAndAmount() {
+        assertEquals("POTION:HEAL:0 32",
+            PotionHelper.toLoreText(Material.POTION, PotionType.HEALING, (short) 0, 32));
+        assertEquals("SPLASH_POTION:REGEN:1 4",
+            PotionHelper.toLoreText(Material.SPLASH_POTION, PotionType.LONG_REGENERATION, (short) 1, 4));
+    }
+
     // ── Round-trip: getShortName + getEnhanceCode → fromSignText ─────────────
 
     @Test
@@ -248,6 +274,185 @@ class PotionHelperTest {
         }
     }
 
+    @Test
+    void fromIdentifierRejectsNullMalformedAndWrongPrefix() {
+        assertNull(PotionHelper.fromIdentifier(null));
+        assertNull(PotionHelper.fromIdentifier("POTION:bad"));
+        assertNull(PotionHelper.fromIdentifier("XPOTION:minecraft:healing"));
+    }
+
+    @Test
+    void fromIdentifierRejectsStringsWithoutPotionMarker() {
+        assertNull(PotionHelper.fromIdentifier("STONE"));
+    }
+
+    @Test
+    void fromIdentifierUsesConfiguredPotionKeyAlias() throws Exception {
+        setPotionAliases(Map.of("example:removed_healing", "minecraft:healing"));
+
+        PotionHelper.PotionData restored = PotionHelper.fromIdentifier(
+            "POTION:example:removed_healing");
+
+        assertNotNull(restored);
+        assertEquals(Material.POTION, restored.material());
+        assertEquals(PotionType.HEALING, restored.type());
+    }
+
+    @Test
+    void fromIdentifierRejectsAliasChains() throws Exception {
+        setPotionAliases(Map.of(
+            "example:first", "example:second",
+            "example:second", "minecraft:healing"));
+
+        assertNull(PotionHelper.fromIdentifier("POTION:example:first"));
+    }
+
+    @Test
+    void fromIdentifierRejectsAliasTargetsThatCannotBeResolved() throws Exception {
+        setPotionAliases(Map.of("example:missing", "minecraft:not_a_real_potion"));
+
+        assertNull(PotionHelper.fromIdentifier("POTION:example:missing"));
+    }
+
+    @Test
+    void fromIdentifierRejectsUnknownCanonicalPotionKeys() {
+        assertNull(PotionHelper.fromIdentifier("POTION:minecraft:not_a_real_potion"));
+    }
+
+    @Test
+    void fromIdentifierRejectsUnknownNamespacedKeysWithoutAliases() {
+        assertNull(PotionHelper.fromIdentifier("POTION:example:not_a_real_potion"));
+    }
+
+    @Test
+    void resolveRegistryKeyRejectsInvalidNamespacedTargetAliases() throws Exception {
+        setPotionAliases(Map.of("example:bad", "not a key"));
+        Method method = PotionHelper.class.getDeclaredMethod("resolveRegistryKey", String.class);
+        method.setAccessible(true);
+
+        assertNull(method.invoke(null, "example:bad"));
+    }
+
+    @Test
+    void fromIdentifierRejectsLegacyEntriesWithInvalidEnhanceCode() {
+        assertNull(PotionHelper.fromIdentifier("POTION:HEAL:x"));
+    }
+
+    @Test
+    void fromIdentifierRejectsLegacyEntriesWithUnknownShortNames() {
+        assertNull(PotionHelper.fromIdentifier("POTION:XXXXX:0"));
+    }
+
+    @Test
+    void resolveRegistryKeyRejectsInvalidAliasedTargets() throws Exception {
+        setPotionAliases(Map.of("example:bad", "not_a_key"));
+        Method method = PotionHelper.class.getDeclaredMethod("resolveRegistryKey", String.class);
+        method.setAccessible(true);
+
+        assertNull(method.invoke(null, "example:bad"));
+    }
+
+    @Test
+    void fromIdentifierRejectsBlankAndSelfReferentialAliases() throws Exception {
+        setPotionAliases(Map.of(
+            "example:blank", " ",
+            "example:self", "example:self"));
+
+        assertNull(PotionHelper.fromIdentifier("POTION:example:blank"));
+        assertNull(PotionHelper.fromIdentifier("POTION:example:self"));
+    }
+
+    @Test
+    void fromIdentifierUsesCanonicalRegistryKeyDirectly() {
+        PotionHelper.PotionData restored = PotionHelper.fromIdentifier(
+            "POTION:minecraft:healing");
+
+        assertNotNull(restored);
+        assertEquals(Material.POTION, restored.material());
+        assertEquals(PotionType.HEALING, restored.type());
+    }
+
+    @Test
+    void fromIdentifierAcceptsLegacySplashAndLingeringIdentifiers() {
+        PotionHelper.PotionData splash = PotionHelper.fromIdentifier("SPOTION:HEAL:0");
+        PotionHelper.PotionData lingering = PotionHelper.fromIdentifier("LPOTION:SPEED:2");
+
+        assertNotNull(splash);
+        assertEquals(Material.SPLASH_POTION, splash.material());
+        assertEquals(PotionType.HEALING, splash.type());
+
+        assertNotNull(lingering);
+        assertEquals(Material.LINGERING_POTION, lingering.material());
+        assertEquals(PotionType.STRONG_SWIFTNESS, lingering.type());
+    }
+
+    @Test
+    void fromIdentifierParsesLegacyPotionNamesThroughNormalisation() {
+        PotionHelper.PotionData healed = PotionHelper.fromIdentifier("POTION:INSTANT_HEAL:0");
+        PotionHelper.PotionData damaged = PotionHelper.fromIdentifier("SPOTION:INSTANT_DAMAGE:2");
+
+        assertNotNull(healed);
+        assertEquals(Material.POTION, healed.material());
+        assertEquals(PotionType.HEALING, healed.type());
+
+        assertNotNull(damaged);
+        assertEquals(Material.SPLASH_POTION, damaged.material());
+        assertEquals(PotionType.STRONG_HARMING, damaged.type());
+    }
+
+    @Test
+    void fromSignTextRejectsAmbiguousAndUnknownLegacyKeys() {
+        assertNull(PotionHelper.fromSignText("HEAL", "1"));
+        assertNull(PotionHelper.fromSignText("UNKNOWN", "0"));
+    }
+
+    @Test
+    void fromSignTextRejectsEveryAmbiguousLegacyKey() throws Exception {
+        Field field = PotionHelper.class.getDeclaredField("AMBIGUOUS_LEGACY_KEYS");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<String> ambiguous = (Set<String>) field.get(null);
+
+        for (String key : ambiguous) {
+            String[] parts = key.split(":");
+            assertNull(PotionHelper.fromSignText(parts[0], parts[1]));
+        }
+    }
+
+    @Test
+    void buildCompleteLookupMarksSyntheticDuplicateKeysAsAmbiguous() {
+        PotionHelper.LookupTables<String> tables = PotionHelper.buildCompleteLookup(
+            Map.of(), java.util.List.of(new String("first"), new String("second")),
+            ignored -> "SYNTHETIC",
+            ignored -> "0");
+
+        assertTrue(tables.lookup().get("SYNTHETIC").containsKey("0"));
+        assertEquals(1, tables.ambiguousKeys().size());
+        assertTrue(tables.ambiguousKeys().contains("SYNTHETIC:0"));
+    }
+
+    @Test
+    void fromSignTextRejectsAnInjectedAmbiguousLegacyKey() throws Exception {
+        Field field = PotionHelper.class.getDeclaredField("AMBIGUOUS_LEGACY_KEYS");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<String> original = (Set<String>) field.get(null);
+        Set<String> injected = Set.of("XXXXX:0");
+
+        Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        Unsafe unsafe = (Unsafe) unsafeField.get(null);
+        Object base = unsafe.staticFieldBase(field);
+        long offset = unsafe.staticFieldOffset(field);
+
+        try {
+            unsafe.putObject(base, offset, injected);
+            assertNull(PotionHelper.fromSignText("XXXXX", "0"));
+        } finally {
+            unsafe.putObject(base, offset, original);
+        }
+    }
+
     private static int vanillaAsciiWidth(String value) {
         int width = 0;
         for (int i = 0; i < value.length(); i++) {
@@ -260,5 +465,11 @@ class PotionHelperTest {
             width += glyph;
         }
         return width;
+    }
+
+    private static void setPotionAliases(Map<String, String> values) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField("potionKeyAliases");
+        field.setAccessible(true);
+        field.set(null, values);
     }
 }

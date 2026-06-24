@@ -76,6 +76,7 @@ public final class WallHangingSideFacesRule implements SsAdjacencyRule {
     }
 
     private static BlockFace leftOf(BlockFace facing) {
+        if (facing == null) return null;
         return switch (facing) {
             case NORTH -> BlockFace.WEST;
             case SOUTH -> BlockFace.EAST;
@@ -86,6 +87,7 @@ public final class WallHangingSideFacesRule implements SsAdjacencyRule {
     }
 
     private static BlockFace rightOf(BlockFace facing) {
+        if (facing == null) return null;
         return switch (facing) {
             case NORTH -> BlockFace.EAST;
             case SOUTH -> BlockFace.WEST;

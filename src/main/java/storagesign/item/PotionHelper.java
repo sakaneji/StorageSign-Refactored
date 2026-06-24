@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.logging.Level;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -121,22 +122,11 @@ public final class PotionHelper {
         SIGN_LOOKUP    = Collections.unmodifiableMap(signLookup);
         POTION_TO_SHORT = Collections.unmodifiableMap(potionToShort);
 
-        // Build a complete lookup for ALL PotionType values so fromSignText() never has to
-        // iterate PotionType.values() at runtime. Special-case entries already in signLookup
-        // take priority (putIfAbsent); generic entries fill the rest.
-        // This relies on POTION_TO_SHORT being fully assigned above before getShortName() is called.
-        Map<String, Map<String, PotionType>> completeLookup = new HashMap<>();
-        signLookup.forEach((name, values) -> completeLookup.put(name, new HashMap<>(values)));
-        Set<String> ambiguous = new HashSet<>();
-        for (PotionType type : PotionType.values()) {
-            String shortName = getShortName(type);
-            String code      = getEnhanceCode(type);
-            PotionType previous = completeLookup.computeIfAbsent(shortName, k -> new HashMap<>())
-                .putIfAbsent(code, type);
-            if (previous != null && previous != type) ambiguous.add(shortName + ":" + code);
-        }
-        COMPLETE_SIGN_LOOKUP = Collections.unmodifiableMap(completeLookup);
-        AMBIGUOUS_LEGACY_KEYS = Collections.unmodifiableSet(ambiguous);
+        LookupTables<PotionType> lookup = buildCompleteLookup(
+            signLookup, java.util.List.of(PotionType.values()),
+            PotionHelper::getShortName, PotionHelper::getEnhanceCode);
+        COMPLETE_SIGN_LOOKUP = Collections.unmodifiableMap(lookup.lookup());
+        AMBIGUOUS_LEGACY_KEYS = Collections.unmodifiableSet(lookup.ambiguousKeys());
     }
 
     // ── Helper for building the static maps ──────────────────────────────────
@@ -155,6 +145,23 @@ public final class PotionHelper {
             reverseMap.put(type, shortName);
         }
         signLookup.put(shortName, codeMap);
+    }
+
+    static <T> LookupTables<T> buildCompleteLookup(Map<String, Map<String, T>> signLookup,
+                                                   Iterable<T> types,
+                                                   Function<T, String> shortNameFn,
+                                                   Function<T, String> codeFn) {
+        Map<String, Map<String, T>> completeLookup = new HashMap<>();
+        signLookup.forEach((name, values) -> completeLookup.put(name, new HashMap<>(values)));
+        Set<String> ambiguous = new HashSet<>();
+        for (T type : types) {
+            String shortName = shortNameFn.apply(type);
+            String code = codeFn.apply(type);
+            T previous = completeLookup.computeIfAbsent(shortName, k -> new HashMap<>())
+                .putIfAbsent(code, type);
+            if (previous != null && previous != type) ambiguous.add(shortName + ":" + code);
+        }
+        return new LookupTables<>(completeLookup, ambiguous);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -326,4 +333,5 @@ public final class PotionHelper {
     private PotionHelper() {}
 
     public record PotionData(Material material, PotionType type) {}
+    record LookupTables<T>(Map<String, Map<String, T>> lookup, Set<String> ambiguousKeys) {}
 }

@@ -1,5 +1,6 @@
 package storagesign.listener;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.mockbukkit.mockbukkit.MockBukkit;
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
 
@@ -59,6 +61,22 @@ class PlayerInteractDivisionPolicyTest {
         setManualExport(true);
         Fixture fixture = fixture(Material.OAK_SIGN, Material.OAK_SIGN);
         when(fixture.handSign().isUnregistered()).thenReturn(false);
+
+        invoke(fixture);
+
+        verify(fixture.inventory(), never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+        verify(fixture.blockSign(), never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void zeroSizedRegisteredSignStackReturnsBeforeMergeing() throws Exception {
+        setManualExport(true);
+        Fixture fixture = fixture(Material.OAK_SIGN, Material.OAK_SIGN);
+        ItemStack contents = mock(ItemStack.class);
+        when(fixture.handSign().isUnregistered()).thenReturn(false);
+        when(fixture.handSign().getAmount()).thenReturn(0);
+        when(fixture.handSign().getContents(1)).thenReturn(contents);
+        when(fixture.blockSign().isSimilar(contents)).thenReturn(true);
 
         invoke(fixture);
 
@@ -286,6 +304,7 @@ class PlayerInteractDivisionPolicyTest {
         when(player.getInventory()).thenReturn(inventory);
         when(player.isSneaking()).thenReturn(true);
         when(inventory.getHeldItemSlot()).thenReturn(2);
+        when(block.getType()).thenReturn(Material.OAK_SIGN);
         when(blockSign.getAmount()).thenReturn(Integer.MAX_VALUE - 2);
         when(blockSign.isSignAsItem()).thenReturn(true);
         when(blockSign.getMaterial()).thenReturn(Material.OAK_SIGN);
@@ -299,6 +318,325 @@ class PlayerInteractDivisionPolicyTest {
         verify(blockSign).setAmount(Integer.MAX_VALUE);
         verify(remaining).setAmount(3);
         verify(inventory).setItem(2, remaining);
+    }
+
+    @Test
+    void signInSignDivisionStopsWhenStoredTemplateCannotBeRecovered() throws Exception {
+        Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        Block block = mock(Block.class);
+        StorageSign blockSign = mock(StorageSign.class);
+        StorageSign handSign = mock(StorageSign.class);
+        ItemStack hand = mock(ItemStack.class);
+        when(player.getInventory()).thenReturn(inventory);
+        when(player.isSneaking()).thenReturn(false);
+        when(inventory.getContents()).thenReturn(new ItemStack[0]);
+        when(block.getType()).thenReturn(Material.OAK_WALL_SIGN);
+        when(blockSign.getAmount()).thenReturn(10);
+        when(blockSign.isSignAsItem()).thenReturn(true);
+        when(blockSign.getMaterial()).thenReturn(Material.OAK_WALL_SIGN);
+        when(handSign.isUnregistered()).thenReturn(true);
+        when(hand.getType()).thenReturn(Material.OAK_SIGN);
+        when(hand.getAmount()).thenReturn(1);
+        when(blockSign.getContents(1)).thenReturn(null);
+
+        invokeInteraction(player, block, blockSign, hand, handSign);
+
+        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void signInSignDivisionStopsWhenTemplateCannotBeRestored() throws Exception {
+        Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        Block block = mock(Block.class);
+        StorageSign blockSign = mock(StorageSign.class);
+        StorageSign handSign = mock(StorageSign.class);
+        ItemStack hand = mock(ItemStack.class);
+        ItemStack template = mock(ItemStack.class);
+        when(player.getInventory()).thenReturn(inventory);
+        when(player.isSneaking()).thenReturn(false);
+        when(inventory.getContents()).thenReturn(new ItemStack[0]);
+        when(block.getType()).thenReturn(Material.OAK_WALL_SIGN);
+        when(blockSign.getAmount()).thenReturn(10);
+        when(blockSign.isSignAsItem()).thenReturn(true);
+        when(blockSign.getMaterial()).thenReturn(Material.OAK_WALL_SIGN);
+        when(blockSign.getContents(1)).thenReturn(template);
+        when(handSign.isUnregistered()).thenReturn(true);
+        when(hand.getType()).thenReturn(Material.OAK_SIGN);
+        when(hand.getAmount()).thenReturn(1);
+
+        invokeInteraction(player, block, blockSign, hand, handSign);
+
+        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void signInSignDivisionStopsWhenTemplateIsMissing() throws Exception {
+        setManualExport(true);
+        Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        Block block = mock(Block.class);
+        StorageSign blockSign = mock(StorageSign.class);
+        StorageSign handSign = mock(StorageSign.class);
+        ItemStack hand = mock(ItemStack.class);
+        when(player.getInventory()).thenReturn(inventory);
+        when(player.isSneaking()).thenReturn(false);
+        when(inventory.getContents()).thenReturn(new ItemStack[0]);
+        when(block.getType()).thenReturn(Material.OAK_WALL_SIGN);
+        when(blockSign.getAmount()).thenReturn(10);
+        when(blockSign.isSignAsItem()).thenReturn(true);
+        when(blockSign.getMaterial()).thenReturn(Material.OAK_WALL_SIGN);
+        when(blockSign.getContents(1)).thenReturn(null);
+        when(handSign.isUnregistered()).thenReturn(true);
+        when(hand.getType()).thenReturn(Material.OAK_SIGN);
+        when(hand.getAmount()).thenReturn(1);
+
+        invokeInteraction(player, block, blockSign, hand, handSign);
+
+        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void signInSignDivisionCreatesDividedStackAndUpdatesBlock() throws Exception {
+        setManualExport(true);
+        MockBukkit.mock();
+        try {
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            ItemStack hand = mock(ItemStack.class);
+            StorageSign blockSign = StorageSign.fromSignLines(
+                new String[] {StorageSign.HEADER_LINE, "OakStorageSign", "10"});
+            StorageSign handSign = StorageSign.fromSignLines(
+                new String[] {StorageSign.HEADER_LINE, StorageSign.EMPTY_MARKER, "1"});
+            ItemStack created = mock(ItemStack.class);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.isSneaking()).thenReturn(false);
+            when(inventory.getContents()).thenReturn(new ItemStack[0]);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getAmount()).thenReturn(1);
+            try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+                signs.when(() -> StorageSign.createStorageSignItem(
+                    org.mockito.ArgumentMatchers.eq(Material.OAK_SIGN),
+                    org.mockito.ArgumentMatchers.any(StorageSign.class),
+                    org.mockito.ArgumentMatchers.eq(1)))
+                    .thenReturn(created);
+
+                invokeInteraction(player, block, blockSign, hand, handSign);
+            }
+
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void signInSignDivisionStopsWhenComputedShareWouldBeZero() throws Exception {
+        setManualExport(true);
+        int original = getStaticInt("divideLimit");
+        try {
+            setStaticInt("divideLimit", 0);
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = mock(StorageSign.class);
+            StorageSign handSign = mock(StorageSign.class);
+            StorageSign divided = mock(StorageSign.class);
+            ItemStack hand = mock(ItemStack.class);
+            ItemStack template = mock(ItemStack.class);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.isSneaking()).thenReturn(false);
+            when(inventory.getContents()).thenReturn(new ItemStack[0]);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
+            when(blockSign.getAmount()).thenReturn(10);
+            when(blockSign.isSignAsItem()).thenReturn(true);
+            when(blockSign.getMaterial()).thenReturn(Material.OAK_SIGN);
+            when(blockSign.getContents(1)).thenReturn(template);
+            when(handSign.isUnregistered()).thenReturn(true);
+            when(hand.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getAmount()).thenReturn(1);
+
+            try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+                signs.when(() -> StorageSign.fromStoredItem(template)).thenReturn(divided);
+
+                invokeInteraction(player, block, blockSign, hand, handSign);
+            }
+
+            verify(divided, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+            verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+            verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+        } finally {
+            setStaticInt("divideLimit", original);
+        }
+    }
+
+    @Test
+    void signInSignDivisionUsesConfiguredDivideLimitWhenNotSneaking() throws Exception {
+        setManualExport(true);
+        int original = getStaticInt("divideLimit");
+        Field manualImport = ConfigLoader.class.getDeclaredField("manualImport");
+        manualImport.setAccessible(true);
+        MockBukkit.mock();
+        try {
+            setStaticInt("divideLimit", 0);
+            manualImport.setBoolean(null, false);
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = StorageSign.fromStoredItem(new ItemStack(Material.OAK_SIGN));
+            blockSign.setAmount(10);
+            StorageSign handSign = mock(StorageSign.class);
+            ItemStack hand = mock(ItemStack.class);
+            ItemStack template = blockSign.getContents(1);
+            StorageSign divided = StorageSign.fromStoredItem(template);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.isSneaking()).thenReturn(false);
+            when(inventory.getContents()).thenReturn(new ItemStack[0]);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getAmount()).thenReturn(1);
+
+            try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+                signs.when(() -> StorageSign.fromItemStack(hand)).thenReturn(handSign);
+                signs.when(() -> StorageSign.fromStoredItem(template)).thenReturn(divided);
+
+                when(handSign.isUnregistered()).thenReturn(true);
+                invokeInteraction(player, block, blockSign, hand, handSign);
+            }
+
+            verify(inventory).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+            assertEquals(5, blockSign.getAmount());
+        } finally {
+            manualImport.setBoolean(null, true);
+            setStaticInt("divideLimit", original);
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void signInSignDivisionUsesConfiguredSneakDivideLimitWhenSneaking() throws Exception {
+        setManualExport(true);
+        int originalDivide = getStaticInt("divideLimit");
+        int originalSneak = getStaticInt("sneakDivideLimit");
+        Field manualImport = ConfigLoader.class.getDeclaredField("manualImport");
+        manualImport.setAccessible(true);
+        MockBukkit.mock();
+        try {
+            setStaticInt("divideLimit", 0);
+            setStaticInt("sneakDivideLimit", 2);
+            manualImport.setBoolean(null, false);
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = StorageSign.fromStoredItem(new ItemStack(Material.OAK_SIGN));
+            blockSign.setAmount(10);
+            StorageSign handSign = mock(StorageSign.class);
+            ItemStack hand = mock(ItemStack.class);
+            ItemStack template = blockSign.getContents(1);
+            StorageSign divided = StorageSign.fromStoredItem(template);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.isSneaking()).thenReturn(true);
+            when(inventory.getContents()).thenReturn(new ItemStack[0]);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getType()).thenReturn(Material.OAK_SIGN);
+            when(hand.getAmount()).thenReturn(1);
+
+            try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+                signs.when(() -> StorageSign.fromItemStack(hand)).thenReturn(handSign);
+                signs.when(() -> StorageSign.fromStoredItem(template)).thenReturn(divided);
+
+                when(handSign.isUnregistered()).thenReturn(true);
+                invokeInteraction(player, block, blockSign, hand, handSign);
+            }
+
+            verify(inventory).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+            assertEquals(8, blockSign.getAmount());
+        } finally {
+            manualImport.setBoolean(null, true);
+            setStaticInt("divideLimit", originalDivide);
+            setStaticInt("sneakDivideLimit", originalSneak);
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void signInSignImportLoopHandlesNullMismatchedAndZeroSizedEntries() throws Exception {
+        setManualExport(true);
+        Field field = ConfigLoader.class.getDeclaredField("manualImport");
+        field.setAccessible(true);
+        field.setBoolean(null, true);
+
+        Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        Block block = mock(Block.class);
+        StorageSign blockSign = mock(StorageSign.class);
+        StorageSign handSign = mock(StorageSign.class);
+        ItemStack hand = mock(ItemStack.class);
+        ItemStack wrongType = mock(ItemStack.class);
+        ItemStack zeroSized = mock(ItemStack.class);
+        StorageSign itemSign = mock(StorageSign.class);
+        when(player.getInventory()).thenReturn(inventory);
+        when(player.isSneaking()).thenReturn(false);
+        when(inventory.getContents()).thenReturn(new ItemStack[] {null, wrongType, zeroSized});
+        when(blockSign.getAmount()).thenReturn(3);
+        when(blockSign.isSignAsItem()).thenReturn(true);
+        when(blockSign.getMaterial()).thenReturn(Material.OAK_SIGN);
+        when(handSign.isUnregistered()).thenReturn(true);
+        when(hand.getType()).thenReturn(Material.OAK_SIGN);
+        when(wrongType.getType()).thenReturn(Material.STONE);
+        when(zeroSized.getType()).thenReturn(Material.OAK_SIGN);
+        when(zeroSized.getAmount()).thenReturn(0);
+        when(itemSign.isUnregistered()).thenReturn(true);
+        when(blockSign.isSimilar(zeroSized)).thenReturn(true);
+
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromItemStack(zeroSized)).thenReturn(itemSign);
+            invokeInteraction(player, block, blockSign, hand, handSign);
+        }
+
+        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void signInSignImportLoopSkipsAlreadyRegisteredInventoryItems() throws Exception {
+        setManualExport(true);
+        Field field = ConfigLoader.class.getDeclaredField("manualImport");
+        field.setAccessible(true);
+        field.setBoolean(null, true);
+
+        Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        Block block = mock(Block.class);
+        StorageSign blockSign = mock(StorageSign.class);
+        StorageSign handSign = mock(StorageSign.class);
+        ItemStack hand = mock(ItemStack.class);
+        ItemStack item = mock(ItemStack.class);
+        StorageSign registered = mock(StorageSign.class);
+        when(player.getInventory()).thenReturn(inventory);
+        when(player.isSneaking()).thenReturn(false);
+        when(inventory.getContents()).thenReturn(new ItemStack[] { item });
+        when(blockSign.getAmount()).thenReturn(3);
+        when(blockSign.isSignAsItem()).thenReturn(true);
+        when(blockSign.getMaterial()).thenReturn(Material.OAK_SIGN);
+        when(handSign.isUnregistered()).thenReturn(true);
+        when(hand.getType()).thenReturn(Material.OAK_SIGN);
+        when(item.getType()).thenReturn(Material.OAK_SIGN);
+        when(item.getAmount()).thenReturn(3);
+        when(registered.isUnregistered()).thenReturn(false);
+
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromItemStack(item)).thenReturn(registered);
+            invokeInteraction(player, block, blockSign, hand, handSign);
+        }
+
+        verify(blockSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+        verify(inventory, never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -365,6 +703,18 @@ class PlayerInteractDivisionPolicyTest {
         Field field = ConfigLoader.class.getDeclaredField("manualExport");
         field.setAccessible(true);
         field.setBoolean(null, value);
+    }
+
+    private static void setStaticInt(String fieldName, int value) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.setInt(null, value);
+    }
+
+    private static int getStaticInt(String fieldName) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getInt(null);
     }
 
     private record Fixture(Player player, PlayerInventory inventory, Block block,

@@ -153,6 +153,24 @@ class ConfigLoaderTest {
         assertEquals(2, ConfigLoader.getAdminSearchMaxConcurrent());
     }
 
+    @Test
+    void nearbyDisplayIsEffectivelyDisabledWhenEitherGateIsOff() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        FileConfiguration config = mock(FileConfiguration.class);
+        when(plugin.getConfig()).thenReturn(config);
+        when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
+        when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("virtual-item-identifiers")).thenReturn(null);
+        when(config.getBoolean("storage-index.enabled", true)).thenReturn(true);
+        when(config.getBoolean("nearby-display.enabled", true)).thenReturn(false);
+
+        ConfigLoader.load(plugin);
+
+        assertFalse(ConfigLoader.getNearbyDisplayEnabled());
+        assertFalse(ConfigLoader.getEffectiveNearbyDisplayEnabled());
+    }
+
     private static ConfigurationSection section(Set<String> keys, Map<String, String> values) {
         ConfigurationSection section = mock(ConfigurationSection.class);
         when(section.getKeys(false)).thenReturn(keys);

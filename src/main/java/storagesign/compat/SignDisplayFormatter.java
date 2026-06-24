@@ -22,7 +22,10 @@ public final class SignDisplayFormatter {
             compact.append(':').append(words[words.length - 1]).append(suffix);
             if (width(compact.toString()) <= MAX_VANILLA_WIDTH) return compact.toString();
         }
+        return truncate(identifier);
+    }
 
+    public static String truncate(String identifier) {
         StringBuilder truncated = new StringBuilder();
         for (int i = 0; i < identifier.length(); i++) {
             if (width(truncated + String.valueOf(identifier.charAt(i)) + "...")

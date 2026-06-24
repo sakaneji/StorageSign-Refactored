@@ -1,6 +1,8 @@
 package storagesign.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -16,6 +18,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -56,6 +59,61 @@ class PlayerInteractModePolicyTest {
 
         verify(player, never()).hasPermission("storagesign.use");
         verify(storageSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void signBlockWithoutStorageSignIsIgnoredBeforePermissionCheck() {
+        PlayerInteractEvent event = mock(PlayerInteractEvent.class);
+        Player player = mock(Player.class);
+        Block block = mock(Block.class);
+        when(event.getPlayer()).thenReturn(player);
+        when(player.getGameMode()).thenReturn(GameMode.SURVIVAL);
+        when(event.getClickedBlock()).thenReturn(block);
+        when(block.getType()).thenReturn(Material.OAK_SIGN);
+        when(event.getAction()).thenReturn(Action.RIGHT_CLICK_BLOCK);
+        when(event.getHand()).thenReturn(EquipmentSlot.HAND);
+
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromBlock(block)).thenReturn(null);
+            new PlayerInteractListener(null).onPlayerInteract(event);
+        }
+
+        verify(player, never()).hasPermission("storagesign.use");
+    }
+
+    @Test
+    void missingMainHandIsTreatedAsAirBeforeFallbackProcessing() {
+        org.mockbukkit.mockbukkit.MockBukkit.mock();
+        try {
+            PlayerInteractEvent event = mock(PlayerInteractEvent.class);
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign storageSign = mock(StorageSign.class);
+            when(event.getPlayer()).thenReturn(player);
+            when(player.getGameMode()).thenReturn(GameMode.SURVIVAL);
+            when(event.getClickedBlock()).thenReturn(block);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
+            when(event.getAction()).thenReturn(Action.RIGHT_CLICK_BLOCK);
+            when(event.getHand()).thenReturn(EquipmentSlot.HAND);
+            when(player.hasPermission("storagesign.use")).thenReturn(true);
+            when(player.getInventory()).thenReturn(inventory);
+            when(inventory.getItemInMainHand()).thenReturn(null);
+            when(storageSign.isUnregistered()).thenReturn(false);
+
+            try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class);
+                 MockedStatic<ConfigLoader> config = Mockito.mockStatic(ConfigLoader.class)) {
+                signs.when(() -> StorageSign.fromBlock(block)).thenReturn(storageSign);
+                signs.when(() -> StorageSign.fromItemStack(Mockito.any(ItemStack.class)))
+                    .thenReturn(null);
+                config.when(ConfigLoader::getManualExport).thenReturn(false);
+                new PlayerInteractListener(null).onPlayerInteract(event);
+            }
+
+            verify(player).hasPermission("storagesign.use");
+        } finally {
+            org.mockbukkit.mockbukkit.MockBukkit.unmock();
+        }
     }
 
     @Test
@@ -161,5 +219,18 @@ class PlayerInteractModePolicyTest {
         verify(event).setUseItemInHand(Result.ALLOW);
         verify(event).setUseInteractedBlock(Result.ALLOW);
         verify(storageSign, never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void sacHelpersRecognizeInkVariants() throws Exception {
+        Method isSac = PlayerInteractListener.class.getDeclaredMethod("isSac", Material.class);
+        isSac.setAccessible(true);
+        Method isGlowSac = PlayerInteractListener.class.getDeclaredMethod("isGlowSac", Material.class);
+        isGlowSac.setAccessible(true);
+
+        assertTrue((boolean) isSac.invoke(null, Material.INK_SAC));
+        assertTrue((boolean) isSac.invoke(null, Material.GLOW_INK_SAC));
+        assertFalse((boolean) isGlowSac.invoke(null, Material.INK_SAC));
+        assertTrue((boolean) isGlowSac.invoke(null, Material.GLOW_INK_SAC));
     }
 }

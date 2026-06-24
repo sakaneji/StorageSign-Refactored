@@ -3,8 +3,11 @@ package storagesign;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionType;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.when;
+import org.mockbukkit.mockbukkit.MockBukkit;
 
 /**
  * Unit tests for {@link StorageSign} parsing, serialisation, and mutation logic.
@@ -350,6 +353,56 @@ class StorageSignTest {
             new String[]{"StorageSign", "OMINOUS_BOTTLE:3", "10", "0LC 0s 10"});
         assertNotNull(ss);
         assertEquals("OMINOUS_BOTTLE:3", ss.getIdentifier());
+    }
+
+    @Test
+    void parseEnchantedBookIdentifierExposesStoredEnchantment() {
+        StorageSign ss = StorageSign.fromSignLines(
+            new String[]{"StorageSign", "ENCHBOOK:sharp:5", "2", "0LC 0s 2"});
+        assertNotNull(ss);
+        assertEquals(org.bukkit.Material.ENCHANTED_BOOK, ss.getMaterial());
+        assertNotNull(ss.getEnchantment());
+        assertTrue(ss.toString().contains("ENCHANTED_BOOK"));
+    }
+
+    @Test
+    void toStringIncludesIdentifierAndAmount() {
+        StorageSign ss = StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE", "9", "0LC 0s 9"});
+        assertNotNull(ss);
+        String text = ss.toString();
+        assertTrue(text.contains("material=STONE"));
+        assertTrue(text.contains("amount=9"));
+        assertTrue(text.contains("identifier=STONE"));
+    }
+
+    @Test
+    void fromBlockRejectsNullAndNonSignBlocks() {
+        assertNull(StorageSign.fromBlock(null));
+        org.bukkit.block.Block block = org.mockito.Mockito.mock(org.bukkit.block.Block.class);
+        when(block.getType()).thenReturn(Material.STONE);
+        assertNull(StorageSign.fromBlock(block));
+    }
+
+    @Test
+    void isStorageSignRecognizesStoredSignItemsOnly() {
+        MockBukkit.mock();
+        try {
+            ItemStack sign = StorageSign.createStorageSignItem(Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1);
+            assertTrue(StorageSign.isStorageSign(sign));
+            assertFalse(StorageSign.isStorageSign((ItemStack) new ItemStack(Material.OAK_SIGN)));
+            assertFalse(StorageSign.isStorageSign((ItemStack) null));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void isSignAsItemRejectsNonSignItems() {
+        StorageSign stone = StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE", "1", "0LC 0s 1"});
+        assertNotNull(stone);
+        assertFalse(stone.isSignAsItem());
     }
 
     // ── static empty() ────────────────────────────────────────────────────────

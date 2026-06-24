@@ -6,6 +6,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.bukkit.Material;
 
 /**
@@ -59,15 +60,8 @@ public final class MaterialRegistry {
         WALL_SIGN_MATERIALS = Collections.unmodifiableSet(wallSignMats);
         SHULKER_BOX_MATERIALS = Collections.unmodifiableSet(shulkerMats);
 
-        Map<Material, Material> wallToSign = new EnumMap<>(Material.class);
-        for (Material wall : WALL_SIGN_MATERIALS) {
-            String standingName = toStandingSignName(wall.name());
-            Material standing = Material.matchMaterial(standingName);
-            if (standing != null) {
-                wallToSign.put(wall, standing);
-            }
-        }
-        WALL_TO_SIGN = Collections.unmodifiableMap(wallToSign);
+        WALL_TO_SIGN = Collections.unmodifiableMap(
+            buildWallToSignMap(WALL_SIGN_MATERIALS, Material::matchMaterial));
     }
 
     /** Returns true if the material is any kind of sign block (standing or wall-mounted). */
@@ -79,6 +73,19 @@ public final class MaterialRegistry {
     public static Material toItemSignMaterial(Material material) {
         if (material == null) return null;
         return WALL_TO_SIGN.getOrDefault(material, material);
+    }
+
+    static Map<Material, Material> buildWallToSignMap(Set<Material> wallMaterials,
+                                                      Function<String, Material> matcher) {
+        Map<Material, Material> wallToSign = new EnumMap<>(Material.class);
+        for (Material wall : wallMaterials) {
+            String standingName = toStandingSignName(wall.name());
+            Material standing = matcher.apply(standingName);
+            if (standing != null) {
+                wallToSign.put(wall, standing);
+            }
+        }
+        return wallToSign;
     }
 
     private static String toStandingSignName(String wallName) {

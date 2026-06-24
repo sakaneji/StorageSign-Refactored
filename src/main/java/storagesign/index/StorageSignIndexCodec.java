@@ -93,9 +93,7 @@ public final class StorageSignIndexCodec {
                 output.writeInt(entry.amount());
                 output.writeLong(entry.verifiedAtEpochMillis());
                 byte[] identifier = entry.identifier().getBytes(StandardCharsets.UTF_8);
-                if (identifier.length == 0 || identifier.length > MAX_IDENTIFIER_BYTES) {
-                    throw new IOException("Identifier is too long");
-                }
+                validateIdentifierBytes(identifier);
                 output.writeInt(identifier.length);
                 output.write(identifier);
             }
@@ -121,5 +119,11 @@ public final class StorageSignIndexCodec {
         int offset = bytes.length - Integer.BYTES;
         return ((bytes[offset] & 0xff) << 24) | ((bytes[offset + 1] & 0xff) << 16)
             | ((bytes[offset + 2] & 0xff) << 8) | (bytes[offset + 3] & 0xff);
+    }
+
+    private static void validateIdentifierBytes(byte[] identifier) throws IOException {
+        if (identifier.length == 0 || identifier.length > MAX_IDENTIFIER_BYTES) {
+            throw new IOException("Identifier is too long");
+        }
     }
 }

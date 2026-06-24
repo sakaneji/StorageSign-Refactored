@@ -6,7 +6,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.logging.Logger;
+import org.junit.jupiter.api.Assertions;
 import org.bukkit.Material;
+import org.bukkit.Server;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.FallingBlock;
@@ -16,17 +20,37 @@ import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
+import storagesign.index.StorageSignIndex;
+import storagesign.logging.PluginLogger;
 
 class EntityListenerTest {
 
+    @BeforeEach
+    void enableTraceLogging() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Server server = mock(Server.class);
+        PluginManager manager = mock(PluginManager.class);
+        Logger jul = Logger.getLogger("EntityListenerTest.trace");
+        jul.setUseParentHandlers(false);
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(manager);
+        when(manager.getPlugin("Logger")).thenReturn(null);
+        when(plugin.getLogger()).thenReturn(jul);
+        PluginLogger.initialize(plugin, "TRACE");
+    }
+
     @AfterEach
     void restoreFlags() throws Exception {
+        PluginLogger.shutdown();
         setFlag("autocollect", true);
         setFlag("fallingBlockItemSS", false);
     }
@@ -215,6 +239,31 @@ class EntityListenerTest {
     }
 
     @Test
+    void autoCollectToHandReturnsNullWhenStoredItemDoesNotMatchPickedStack() throws Exception {
+        setFlag("autocollect", true);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        ItemStack hand = mock(ItemStack.class);
+        ItemStack picked = mock(ItemStack.class);
+        StorageSign ss = mock(StorageSign.class);
+        EntityPickupItemEvent event = mock(EntityPickupItemEvent.class);
+        when(hand.getAmount()).thenReturn(1);
+        when(picked.getAmount()).thenReturn(8);
+        when(picked.getMaxStackSize()).thenReturn(64);
+        when(inventory.containsAtLeast(picked, 64)).thenReturn(true);
+        when(ss.isUnregistered()).thenReturn(false);
+        when(ss.isSimilar(picked)).thenReturn(false);
+
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromItemStack(hand)).thenReturn(ss);
+            Method method = EntityListener.class.getDeclaredMethod(
+                "autoCollectToHand", ItemStack.class, ItemStack.class, PlayerInventory.class,
+                EntityPickupItemEvent.class);
+            method.setAccessible(true);
+            Assertions.assertNull(method.invoke(null, hand, picked, inventory, event));
+        }
+    }
+
+    @Test
     void nonPlayerCannotPickUpStorageSignItem() {
         EntityPickupItemEvent event = mock(EntityPickupItemEvent.class);
         Item entityItem = mock(Item.class);
@@ -257,6 +306,22 @@ class EntityListenerTest {
         try (MockedStatic<BlockEventListener> blocks = Mockito.mockStatic(BlockEventListener.class)) {
             new EntityListener().onEntityChangeBlock(event);
             blocks.verify(() -> BlockEventListener.dropAttachedStorageSignsByAdjacency(block));
+        }
+    }
+
+    @Test
+    void enabledFallingHandlingUsesIndexedDropPathWhenIndexExists() throws Exception {
+        setFlag("fallingBlockItemSS", true);
+        EntityChangeBlockEvent event = mock(EntityChangeBlockEvent.class);
+        FallingBlock falling = mock(FallingBlock.class);
+        Block block = mock(Block.class);
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        when(event.getEntity()).thenReturn(falling);
+        when(event.getBlock()).thenReturn(block);
+
+        try (MockedStatic<BlockEventListener> blocks = Mockito.mockStatic(BlockEventListener.class)) {
+            new EntityListener(index).onEntityChangeBlock(event);
+            blocks.verify(() -> BlockEventListener.dropAttachedStorageSignsByAdjacency(block, index));
         }
     }
 
