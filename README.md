@@ -265,8 +265,8 @@ python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 | `banner-debug` | `false` | TRACE時にメインハンドで右クリックしたアイテムの生ItemMetaを出力する |
 | `storage-index.enabled` | `true` | ロード済みチャンクのStorageSign位置索引を維持する |
 | `storage-index.rebuild-chunks-per-tick` | `8` | 初回・手動再構築で1tickに走査するチャンク数。0以下なら既定値へ戻す |
-| `nearby-display.enabled` | `true` | 停止時に前方のStorageSignへ完全な格納識別子を浮遊表示する |
-| `nearby-display.distance` | `6.0` | 前方検索距離。0以下なら既定値へ戻す |
+| `nearby-display.enabled` | `true` | 停止時に、短縮されるStorageSignの完全な格納識別子を浮遊表示する |
+| `nearby-display.distance` | `3.0` | 前方検索距離。0以下なら既定値へ戻す |
 | `nearby-display.field-of-view-degrees` | `90.0` | 前方検索の視野角。1～360度に丸める |
 | `nearby-display.idle-delay-ticks` | `10` | 移動と視点変更が止まってから検索するまでのtick数。0以下なら既定値へ戻す |
 | `nearby-display.monitor-interval-ticks` | `5` | 位置と視点を比較する間隔。0以下なら既定値へ戻す |

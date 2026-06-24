@@ -327,6 +327,12 @@ class StorageSignItemMetaIntegrationTest {
     }
 
     @Test
+    void createStorageSignItemUsesStorageSignDisplayName() {
+        ItemStack item = StorageSign.createStorageSignItem(Material.OAK_SIGN, "STONE 1", 1);
+        assertEquals("StorageSign", item.getItemMeta().getDisplayName());
+    }
+
+    @Test
     void createStorageSignItemWithContentsReturnsRawItemWhenMetaUnavailable() {
         StorageSign potion = StorageSign.fromSignLines(new String[]{
             StorageSign.HEADER_LINE, "POTION:HEAL:0", "1"});

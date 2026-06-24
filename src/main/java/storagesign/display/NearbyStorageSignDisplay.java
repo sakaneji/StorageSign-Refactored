@@ -24,6 +24,7 @@ import org.bukkit.util.Vector;
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
 import storagesign.StorageSignPlugin;
+import storagesign.compat.SignDisplayFormatter;
 import storagesign.index.StorageSignIndex;
 import storagesign.index.StorageSignPosition;
 
@@ -97,7 +98,9 @@ public final class NearbyStorageSignDisplay {
                 continue;
             }
             state.stableTicks += interval;
-            if (state.searched && state.indexRevision != index.revision(player.getWorld())) {
+            if (state.searched && (
+                state.indexRevision != index.revision(player.getWorld())
+                    || state.contentRevision != index.contentRevision(player.getWorld()))) {
                 state.searched = false;
             }
             if (!state.searched && state.stableTicks >= ConfigLoader.getNearbyDisplayIdleTicks()) {
@@ -130,6 +133,7 @@ public final class NearbyStorageSignDisplay {
             state.desired = select(player);
             state.searched = true;
             state.indexRevision = index.revision(player.getWorld());
+            state.contentRevision = index.contentRevision(player.getWorld());
             if (!applyDesired(player, state)) allocationPending.add(playerId);
         }
     }
@@ -218,6 +222,7 @@ public final class NearbyStorageSignDisplay {
             index.unregister(position);
             return null;
         }
+        if (!shouldDisplay(storageSign)) return null;
         Location location = new Location(world, position.x() + 0.5, position.y() + 1.25, position.z() + 0.5);
         TextDisplay display = world.spawn(location, TextDisplay.class, entity -> {
             entity.setPersistent(false);
@@ -245,6 +250,8 @@ public final class NearbyStorageSignDisplay {
             if (storageSign == null) {
                 removeLabel(position, label, true);
                 index.unregister(position);
+            } else if (!shouldDisplay(storageSign)) {
+                removeLabel(position, label, false);
             } else {
                 label.display.setText(labelText(storageSign));
             }
@@ -309,7 +316,12 @@ public final class NearbyStorageSignDisplay {
     }
 
     private static String labelText(StorageSign storageSign) {
-        return wrap(storageSign.getIdentifier()) + "\n× " + storageSign.getAmount();
+        return wrap(storageSign.getIdentifier());
+    }
+
+    private static boolean shouldDisplay(StorageSign storageSign) {
+        if (storageSign == null || storageSign.isUnregistered()) return false;
+        return !storageSign.getIdentifier().equals(SignDisplayFormatter.fit(storageSign.getIdentifier()));
     }
 
     static String wrap(String value) {
@@ -332,6 +344,7 @@ public final class NearbyStorageSignDisplay {
         private int stableTicks;
         private boolean searched;
         private long indexRevision;
+        private long contentRevision;
         private List<StorageSignPosition> desired = List.of();
         private final Set<StorageSignPosition> visible = new HashSet<>();
     }

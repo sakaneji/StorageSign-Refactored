@@ -45,11 +45,12 @@ storage-index:
   enabled: true
   rebuild-chunks-per-tick: 8
 
-# Show full stored identifiers near players after they stop moving and looking around.
+# Show full stored identifiers near players after they stop moving and looking around,
+# but only when the sign label would otherwise be shortened.
 # This feature is automatically disabled when storage-index.enabled is false.
 nearby-display:
   enabled: true
-  distance: 6.0
+  distance: 3.0
   field-of-view-degrees: 90.0
   idle-delay-ticks: 10
   monitor-interval-ticks: 5

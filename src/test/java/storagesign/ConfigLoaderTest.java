@@ -48,7 +48,7 @@ class ConfigLoaderTest {
         when(config.getBoolean("storage-index.enabled", true)).thenReturn(false);
         when(config.getInt("storage-index.rebuild-chunks-per-tick", 8)).thenReturn(4);
         when(config.getBoolean("nearby-display.enabled", true)).thenReturn(true);
-        when(config.getDouble("nearby-display.distance", 6.0)).thenReturn(8.0);
+        when(config.getDouble("nearby-display.distance", 3.0)).thenReturn(8.0);
         when(config.getDouble("nearby-display.field-of-view-degrees", 90.0)).thenReturn(120.0);
         when(config.getInt("nearby-display.idle-delay-ticks", 10)).thenReturn(20);
         when(config.getInt("nearby-display.monitor-interval-ticks", 5)).thenReturn(2);
@@ -129,7 +129,7 @@ class ConfigLoaderTest {
         when(config.getInt("storage-index.rebuild-chunks-per-tick", 8)).thenReturn(0);
         when(config.getBoolean("storage-index.enabled", true)).thenReturn(true);
         when(config.getBoolean("nearby-display.enabled", true)).thenReturn(true);
-        when(config.getDouble("nearby-display.distance", 6.0)).thenReturn(-1.0);
+        when(config.getDouble("nearby-display.distance", 3.0)).thenReturn(-1.0);
         when(config.getDouble("nearby-display.field-of-view-degrees", 90.0)).thenReturn(Double.NaN);
         when(config.getInt("nearby-display.idle-delay-ticks", 10)).thenReturn(-5);
         when(config.getInt("nearby-display.monitor-interval-ticks", 5)).thenReturn(0);
@@ -142,7 +142,7 @@ class ConfigLoaderTest {
         ConfigLoader.load(plugin);
 
         assertEquals(8, ConfigLoader.getIndexChunksPerTick());
-        assertEquals(6.0, ConfigLoader.getNearbyDisplayDistance());
+        assertEquals(3.0, ConfigLoader.getNearbyDisplayDistance());
         assertEquals(1.0, ConfigLoader.getNearbyDisplayFov());
         assertEquals(10, ConfigLoader.getNearbyDisplayIdleTicks());
         assertEquals(5, ConfigLoader.getNearbyDisplayIntervalTicks());

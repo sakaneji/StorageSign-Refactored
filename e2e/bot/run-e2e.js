@@ -96,6 +96,12 @@ async function placeStorageSign(scenario, identifier, amount) {
   bot.chat(`/ssgive ${identifier} ${amount} OAK_SIGN`)
   await waitForMessage(message => message.includes('StorageSign を付与しました'))
   await equip('oak_sign')
+  const heldState = await inspect(scenario)
+  assert.equal(
+    heldState.heldDisplayName,
+    'StorageSign',
+    `Expected StorageSign display name, got ${heldState.heldDisplayName}`
+  )
   const support = bot.blockAt(new Vec3(0, 64, 0))
   assert.ok(support, 'Missing sign support block')
   process.stdout.write(`placing from ${bot.entity.position} with ${bot.heldItem?.name}\n`)
@@ -160,6 +166,18 @@ function assertBannerMetadata(state) {
   assert.equal(state.bannerTooltipHidden, true)
 }
 
+function wrapLabel(value) {
+  const columns = 28
+  let wrapped = ''
+  for (let index = 0; index < value.length; index++) {
+    wrapped += value[index]
+    if ((index + 1) % columns === 0 && index + 1 < value.length) {
+      wrapped += '\n'
+    }
+  }
+  return wrapped
+}
+
 async function assertLoggerEnvironment() {
   const state = await inspect('environment')
   const expected = loggerMode === 'with-logger'
@@ -175,6 +193,23 @@ async function runMainSuite() {
   await runCase('client placement', async () => {
     const state = await placeStorageSign('client', 'STONE', 128)
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '128'])
+    await sleep(3000)
+    const nearby = await inspect('client')
+    assert.equal(nearby.textDisplayCount, 0)
+  })
+
+  await runCase('long identifier placement', async () => {
+    const state = await placeStorageSign('long-identifier', 'NETHERITE_UPGRADE_SMITHING_TEMPLATE', 1)
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'NUS:TEMPLATE', '1'])
+    const nearby = await waitForSnapshot(
+      'long-identifier',
+      snapshot => snapshot.textDisplayCount >= 1,
+      30000
+    )
+    assert.ok(
+      nearby.textDisplayTexts.some(text => text === wrapLabel('NETHERITE_UPGRADE_SMITHING_TEMPLATE')),
+      `Expected wrapped long identifier in nearby TextDisplay, got ${nearby.textDisplayTexts}`
+    )
   })
 
   await runCase('manual export', async () => {
@@ -527,7 +562,8 @@ async function runMainSuite() {
     assert.match(result, /matches=[1-9][0-9]*/)
   })
 
-  await runCase('storage index rebuild search and nearby display', async () => {
+  await runCase('storage index rebuild search and short identifiers stay hidden', async () => {
+    await reset('restart')
     await command('/sstest admin true', 'SSTEST ADMIN true')
     bot.chat('/storagesignindex rebuild all')
     await waitForMessage(message => message.includes('rebuild started'))
@@ -538,12 +574,11 @@ async function runMainSuite() {
     await waitForMessage(message => message.includes('Searching StorageSign index'))
     const result = await waitForMessage(message => message.includes("StorageSign search 'STONE'"))
     assert.match(result, /matches=[1-9][0-9]*/)
-    let state = await waitForSnapshot('restart', snapshot => snapshot.textDisplayCount >= 1, 15000)
-    assert.ok(state.textDisplayCount >= 1, `Expected nearby TextDisplay, got ${state.textDisplayCount}`)
-    assert.ok(state.textDisplayTexts.some(text => text.includes('STONE')),
-      `Expected nearby TextDisplay text to include identifier, got ${state.textDisplayTexts}`)
+    await sleep(3000)
+    let state = await inspect('restart')
+    assert.equal(state.textDisplayCount, 0)
     await command('/sstest move true', 'SSTEST MOVED true')
-    state = await waitForSnapshot('restart', snapshot => snapshot.textDisplayCount === 0, 10000)
+    state = await inspect('restart')
     assert.equal(state.textDisplayCount, 0)
   })
 }

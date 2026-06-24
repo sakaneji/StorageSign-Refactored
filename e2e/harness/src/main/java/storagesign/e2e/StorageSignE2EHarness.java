@@ -175,7 +175,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         lastEditLines = List.of();
 
         switch (scenario) {
-            case "client", "special-potion", "special-banner" ->
+            case "client", "long-identifier", "special-potion", "special-banner" ->
                 world.getBlockAt(0, BASE_Y - 1, 0).setType(Material.STONE);
             case "banner-upgrade-seed" -> {
                 world.getBlockAt(0, BASE_Y - 1, 0).setType(Material.STONE);
@@ -603,6 +603,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"textDisplayCount\":" + textDisplayCount + ","
             + "\"textDisplayTexts\":" + jsonArray(textDisplayTexts) + ","
             + "\"heldType\":\"" + player.getInventory().getItemInMainHand().getType().name() + "\","
+            + "\"heldDisplayName\":\"" + escape(heldDisplayName(player)) + "\","
             + "\"storageSignAcceptsHeld\":" + storageSignAcceptsHeld(player) + ","
             + "\"canPlace\":" + player.hasPermission("storagesign.place") + ","
             + "\"breakCancelled\":" + lastBreakCancelled + ","
@@ -964,6 +965,15 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         ItemStack held = player.getInventory().getItemInMainHand();
         if (held == null || !held.hasItemMeta() || held.getItemMeta().getLore() == null) return "";
         return String.join("|", held.getItemMeta().getLore());
+    }
+
+    @SuppressWarnings("deprecation")
+    private static String heldDisplayName(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        if (held == null || !held.hasItemMeta()) return "";
+        ItemMeta meta = held.getItemMeta();
+        if (meta == null) return "";
+        return meta.getDisplayName();
     }
 
     private static String jsonArray(List<String> values) {

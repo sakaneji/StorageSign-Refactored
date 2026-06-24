@@ -120,7 +120,7 @@ public final class ConfigLoader {
         storageIndexEnabled = cfg.getBoolean(KEY_STORAGE_INDEX_ENABLED, true);
         indexChunksPerTick = positive(cfg.getInt(KEY_INDEX_CHUNKS_PER_TICK, 8), 8);
         nearbyDisplayEnabled = cfg.getBoolean(KEY_NEARBY_DISPLAY_ENABLED, true);
-        nearbyDisplayDistance = positive(cfg.getDouble(KEY_DISPLAY_DISTANCE, 6.0), 6.0);
+        nearbyDisplayDistance = positive(cfg.getDouble(KEY_DISPLAY_DISTANCE, 3.0), 3.0);
         nearbyDisplayFov = clamp(cfg.getDouble(KEY_DISPLAY_FOV, 90.0), 1.0, 360.0);
         nearbyDisplayIdleTicks = positive(cfg.getInt(KEY_DISPLAY_IDLE_TICKS, 10), 10);
         nearbyDisplayIntervalTicks = positive(cfg.getInt(KEY_DISPLAY_INTERVAL_TICKS, 5), 5);

@@ -326,6 +326,14 @@ class NearbyStorageSignDisplayTest {
             loaded.getChunkAt(0, 0).load();
             assertEquals(null, method.invoke(display,
                 new StorageSignPosition(loaded.getUID(), 1, 64, 1)));
+
+            Block block = loaded.getBlockAt(2, 64, 2);
+            block.setType(org.bukkit.Material.OAK_SIGN);
+            org.bukkit.block.Sign sign = (org.bukkit.block.Sign) block.getState();
+            storagesign.StorageSign.fromSignLines(
+                new String[] {"StorageSign", "STONE", "7"}).applyToSign(sign);
+            assertEquals(null, method.invoke(display,
+                new StorageSignPosition(loaded.getUID(), 2, 64, 2)));
         } finally {
             MockBukkit.unmock();
         }
@@ -372,18 +380,17 @@ class NearbyStorageSignDisplayTest {
     }
 
     @Test
-    void labelTextUsesWrappedIdentifierAndAmountSuffix() throws Exception {
+    void labelTextUsesWrappedIdentifierOnly() throws Exception {
         MockBukkit.mock();
         try {
             StorageSign sign = mock(StorageSign.class);
             when(sign.getIdentifier()).thenReturn(
                 "NETHERITE_UPGRADE_SMITHING_TEMPLATE_WITH_EXTRA_SUFFIX");
-            when(sign.getAmount()).thenReturn(3);
             Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("labelText", StorageSign.class);
             method.setAccessible(true);
             String text = (String) method.invoke(null, sign);
 
-            assertTrue(text.contains("\n× 3"));
+            assertTrue(text.contains("\n"));
             assertTrue(text.replace("\n", "").contains("NETHERITE_UPGRADE_SMITHING_TEMPLATE_WITH_EXTRA_SUFFIX"));
         } finally {
             MockBukkit.unmock();

@@ -40,6 +40,8 @@ import storagesign.index.StorageSignIndex;
 
 @Tag("integration")
 class NearbyStorageSignDisplayIntegrationTest {
+    private static final String LONG_IDENTIFIER = "NETHERITE_UPGRADE_SMITHING_TEMPLATE";
+
     private ServerMock server;
     private StorageSignPlugin plugin;
 
@@ -55,10 +57,10 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
-    void stationaryPlayerGetsOneSharedLabelAndMovementRemovesIt() {
-        var world = server.addSimpleWorld("nearby-display");
+    void shortIdentifierDoesNotCreateNearbyLabel() {
+        var world = server.addSimpleWorld("short-identifier-display");
         world.getChunkAt(0, 0).load();
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
         StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
@@ -70,13 +72,66 @@ class NearbyStorageSignDisplayIntegrationTest {
 
         try {
             display.start();
+            server.getScheduler().performTicks(20);
+            assertEquals(0, display.activeLabelCount());
+            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+        } finally {
+            display.shutdown();
+        }
+    }
+
+    @Test
+    void longIdentifierPlayerGetsOneSharedLabelAndMovementRemovesIt() {
+        var world = server.addSimpleWorld("nearby-display");
+        world.getChunkAt(0, 0).load();
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+
+        try {
+            display.start();
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
             TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
-            assertEquals("STONE\n× 12", label.getText());
+            assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
 
             player.teleport(new Location(world, 1.5, 64, 0.5, 0, 0));
             server.getScheduler().performTicks(6);
+            assertEquals(0, display.activeLabelCount());
+            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+        } finally {
+            display.shutdown();
+        }
+    }
+
+    @Test
+    void labelTextRefreshesAfterSignContentsChange() {
+        var world = server.addSimpleWorld("refresh-display");
+        world.getChunkAt(0, 0).load();
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+
+        try {
+            display.start();
+            server.getScheduler().performTicks(16);
+            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
+
+            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "34"}).applyToSign(sign);
+            server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
             assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
         } finally {
@@ -91,10 +146,10 @@ class NearbyStorageSignDisplayIntegrationTest {
         int originalLimit = getNearbyDisplayGlobalLimit();
         try {
             setNearbyDisplayGlobalLimit(0);
-            Block block = world.getBlockAt(0, 65, 3);
+            Block block = world.getBlockAt(0, 65, 2);
             block.setType(Material.OAK_SIGN);
             Sign sign = (Sign) block.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
             index.register(block);
             PlayerMock player = server.addPlayer();
@@ -118,10 +173,10 @@ class NearbyStorageSignDisplayIntegrationTest {
     void twoPlayersShareOnePrivateNonPersistentLabelUntilBothMove() {
         var world = server.addSimpleWorld("shared-display");
         world.getChunkAt(0, 0).load();
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         index.register(block);
         PlayerMock first = server.addPlayer();
@@ -135,7 +190,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
             TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
-            assertEquals("STONE\n× 12", label.getText());
+            assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
             assertFalse(label.isPersistent());
             assertFalse(label.hasGravity());
             assertFalse(label.isVisibleByDefault());
@@ -161,11 +216,11 @@ class NearbyStorageSignDisplayIntegrationTest {
         try {
             setNearbyDisplayMaxPerPlayer(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            for (int z = 3; z <= 6; z++) {
+            for (int z = 1; z <= 2; z++) {
                 Block block = world.getBlockAt(0, 65, z);
                 block.setType(Material.OAK_SIGN);
                 Sign sign = (Sign) block.getState();
-                StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", String.valueOf(z)})
+                StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, String.valueOf(z)})
                     .applyToSign(sign);
                 index.register(block);
             }
@@ -191,10 +246,10 @@ class NearbyStorageSignDisplayIntegrationTest {
     void blockedLineOfSightPreventsLabelCreation() throws Exception {
         var world = server.addSimpleWorld("blocked-display");
         world.getChunkAt(0, 0).load();
-        Block target = world.getBlockAt(0, 65, 3);
+        Block target = world.getBlockAt(0, 65, 2);
         target.setType(Material.OAK_SIGN);
         Sign targetSign = (Sign) target.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(targetSign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(targetSign);
         world.getBlockAt(0, 65, 2).setType(Material.STONE);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         index.register(target);
@@ -221,11 +276,11 @@ class NearbyStorageSignDisplayIntegrationTest {
         try {
             setNearbyDisplayGlobalLimit(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            for (int z = 3; z <= 4; z++) {
+            for (int z = 1; z <= 2; z++) {
                 Block block = world.getBlockAt(0, 65, z);
                 block.setType(Material.OAK_SIGN);
                 Sign sign = (Sign) block.getState();
-                StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", String.valueOf(z)})
+                StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, String.valueOf(z)})
                     .applyToSign(sign);
                 index.register(block);
             }
@@ -240,7 +295,7 @@ class NearbyStorageSignDisplayIntegrationTest {
                 assertEquals(1, display.activeLabelCount());
                 assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
                 assertTrue(world.getEntitiesByClass(TextDisplay.class).iterator().next().getText()
-                    .contains("STONE"));
+                    .contains(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER)));
             } finally {
                 display.shutdown();
             }
@@ -257,15 +312,15 @@ class NearbyStorageSignDisplayIntegrationTest {
         try {
             setNearbyDisplayGlobalLimit(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
             index.register(first);
-            Block second = world.getBlockAt(0, 65, 4);
+            Block second = world.getBlockAt(0, 65, 1);
             second.setType(Material.OAK_SIGN);
             Sign secondSign = (Sign) second.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "4"}).applyToSign(secondSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "4"}).applyToSign(secondSign);
             index.register(second);
             PlayerMock player = server.addPlayer();
             player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
@@ -275,14 +330,14 @@ class NearbyStorageSignDisplayIntegrationTest {
                 display.start();
                 server.getScheduler().performTicks(16);
                 assertEquals(1, display.activeLabelCount());
-                assertEquals("STONE\n× 3",
+                assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER),
                     world.getEntitiesByClass(TextDisplay.class).iterator().next().getText());
 
                 first.setType(Material.AIR);
                 server.getScheduler().performTicks(20);
 
                 assertEquals(1, display.activeLabelCount());
-                assertEquals("STONE\n× 4",
+                assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER),
                     world.getEntitiesByClass(TextDisplay.class).iterator().next().getText());
             } finally {
                 display.shutdown();
@@ -296,10 +351,10 @@ class NearbyStorageSignDisplayIntegrationTest {
     void disabledNearbyDisplayDoesNotScheduleLabels() throws Exception {
         var world = server.addSimpleWorld("disabled-display");
         world.getChunkAt(0, 0).load();
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         index.register(block);
         PlayerMock player = server.addPlayer();
@@ -340,10 +395,10 @@ class NearbyStorageSignDisplayIntegrationTest {
     void startWhileAlreadyRunningDoesNotScheduleDuplicateTasks() throws Exception {
         var world = server.addSimpleWorld("duplicate-start-display");
         world.getChunkAt(0, 0).load();
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         index.register(block);
         PlayerMock player = server.addPlayer();
@@ -374,7 +429,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         Object state = newPlayerState();
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(state, "visible", new HashSet<>(java.util.List.of(position)));
         setField(state, "desired", java.util.List.of(position));
         setField(label, "viewers", new HashSet<>(java.util.List.of(viewer)));
@@ -405,7 +460,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         Object state = newPlayerState();
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(state, "visible", new HashSet<>(java.util.List.of(position)));
         setField(state, "desired", java.util.List.of(position));
         setField(state, "searched", true);
@@ -432,15 +487,15 @@ class NearbyStorageSignDisplayIntegrationTest {
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
 
-        Block validBlock = world.getBlockAt(0, 65, 3);
+        Block validBlock = world.getBlockAt(0, 65, 2);
         validBlock.setType(Material.OAK_SIGN);
         Sign validSign = (Sign) validBlock.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "7"}).applyToSign(validSign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "7"}).applyToSign(validSign);
 
         Object validLabel = newLabel(mock(TextDisplay.class));
         Object missingLabel = newLabel(mock(TextDisplay.class));
-        var validPosition = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
-        var missingPosition = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
+        var validPosition = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
+        var missingPosition = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
         setField(validLabel, "viewers", new HashSet<>());
         setField(missingLabel, "viewers", new HashSet<>());
         putMap(display, "labels", validPosition, validLabel);
@@ -451,17 +506,18 @@ class NearbyStorageSignDisplayIntegrationTest {
         method.invoke(display);
 
         assertEquals(1, display.activeLabelCount());
-        verify((TextDisplay) getField(validLabel, "display")).setText("STONE\n× 7");
+        verify((TextDisplay) getField(validLabel, "display"))
+            .setText(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER));
     }
 
     @Test
     void queuedSearchSkipsMovedPlayerAndEventuallyReaddsAfterRescan() throws Exception {
         var world = server.addSimpleWorld("queue-display");
         world.getChunkAt(0, 0).load();
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "12"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         index.register(block);
         PlayerMock player = server.addPlayer();
@@ -593,10 +649,10 @@ class NearbyStorageSignDisplayIntegrationTest {
             setNearbyDisplayGlobalLimit(0);
             setNearbyDisplaySearchesPerTick(10);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            Block tracked = world.getBlockAt(0, 65, 3);
+            Block tracked = world.getBlockAt(0, 65, 2);
             tracked.setType(Material.OAK_SIGN);
             Sign trackedSign = (Sign) tracked.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"})
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"})
                 .applyToSign(trackedSign);
             index.register(tracked);
             NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
@@ -652,12 +708,12 @@ class NearbyStorageSignDisplayIntegrationTest {
         try {
             setNearbyDisplayGlobalLimit(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
             index.register(first);
-            Block second = world.getBlockAt(0, 65, 4);
+            Block second = world.getBlockAt(0, 65, 1);
             second.setType(Material.OAK_SIGN);
             Sign secondSign = (Sign) second.getState();
             StorageSign.fromSignLines(new String[] {"StorageSign", "DIRT", "4"}).applyToSign(secondSign);
@@ -668,8 +724,8 @@ class NearbyStorageSignDisplayIntegrationTest {
             Object state = newPlayerState();
             setField(state, "searched", true);
             setField(state, "desired", java.util.List.of(
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3),
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4)));
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2),
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1)));
             putMap(display, "players", viewer, state);
             setField(display, "labels", new java.util.LinkedHashMap<>());
             java.util.LinkedHashSet<UUID> pending = new java.util.LinkedHashSet<>();
@@ -700,10 +756,10 @@ class NearbyStorageSignDisplayIntegrationTest {
             setNearbyDisplayMaxPerPlayer(1);
             setNearbyDisplaySearchesPerTick(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
             index.register(first);
 
             NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
@@ -743,10 +799,10 @@ class NearbyStorageSignDisplayIntegrationTest {
             setNearbyDisplayMaxPerPlayer(1);
             setNearbyDisplaySearchesPerTick(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
             index.register(first);
 
             NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
@@ -789,9 +845,9 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID viewer = server.addPlayer().getUniqueId();
         Object state = newPlayerState();
         storagesign.index.StorageSignPosition stale =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         storagesign.index.StorageSignPosition desired =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
         setField(state, "visible", new HashSet<>(java.util.List.of(stale, desired)));
         setField(state, "desired", java.util.List.of(desired));
         TextDisplay staleDisplay = mock(TextDisplay.class);
@@ -828,7 +884,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             UUID viewer = server.addPlayer().getUniqueId();
             Object state = newPlayerState();
             storagesign.index.StorageSignPosition desired =
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
             setField(state, "visible", new HashSet<>());
             setField(state, "desired", java.util.List.of(desired));
             putMap(display, "players", viewer, state);
@@ -854,7 +910,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID viewer = server.addPlayer().getUniqueId();
         Object state = newPlayerState();
         storagesign.index.StorageSignPosition desired =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
         setField(state, "visible", new HashSet<>());
         setField(state, "desired", java.util.List.of(desired));
         putMap(display, "players", viewer, state);
@@ -878,7 +934,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
         UUID viewer = server.addPlayer().getUniqueId();
         Object state = newPlayerState();
-        var desired = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
+        var desired = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
         setField(state, "visible", new HashSet<>());
         setField(state, "desired", java.util.List.of(desired));
         TextDisplay textDisplay = mock(TextDisplay.class);
@@ -907,17 +963,17 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID worldId = UUID.randomUUID();
         when(world.getUID()).thenReturn(worldId);
         when(world.isChunkLoaded(0, 0)).thenReturn(true);
-        when(world.getBlockAt(0, 65, 3)).thenReturn(block);
+        when(world.getBlockAt(0, 65, 2)).thenReturn(block);
         when(block.getX()).thenReturn(0);
         when(block.getY()).thenReturn(65);
         when(block.getZ()).thenReturn(3);
         when(block.getLocation()).thenReturn(new Location(world, 0.5, 65, 3.5));
         TextDisplay textDisplay = mock(TextDisplay.class);
         StorageSign resolved = StorageSign.fromSignLines(
-            new String[] {"StorageSign", "STONE", "7"});
+            new String[] {"StorageSign", LONG_IDENTIFIER, "7"});
         Object state = newPlayerState();
         UUID viewer = server.addPlayer().getUniqueId();
-        var desired = new storagesign.index.StorageSignPosition(worldId, 0, 65, 3);
+        var desired = new storagesign.index.StorageSignPosition(worldId, 0, 65, 2);
         setField(state, "visible", new HashSet<>());
         setField(state, "desired", java.util.List.of(desired));
         putMap(display, "players", viewer, state);
@@ -956,11 +1012,11 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID viewer = server.addPlayer().getUniqueId();
         Object state = newPlayerState();
         storagesign.index.StorageSignPosition desired =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4);
-        Block block = world.getBlockAt(0, 65, 4);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1);
+        Block block = world.getBlockAt(0, 65, 1);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "4"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "4"}).applyToSign(sign);
         setField(state, "visible", new HashSet<>());
         setField(state, "desired", java.util.List.of(desired));
         putMap(display, "players", viewer, state);
@@ -984,26 +1040,26 @@ class NearbyStorageSignDisplayIntegrationTest {
         Object state = newPlayerState();
         UUID viewer = java.util.UUID.randomUUID();
         setField(state, "visible", new HashSet<>(java.util.List.of(
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3))));
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2))));
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
         setField(label, "viewers", new HashSet<>(java.util.List.of(viewer)));
         putMap(display, "players", viewer, state);
-        putMap(display, "labels", new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3), label);
+        putMap(display, "labels", new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2), label);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod(
             "hide", UUID.class, org.bukkit.entity.Player.class, state.getClass(),
             storagesign.index.StorageSignPosition.class);
         method.setAccessible(true);
         method.invoke(display, viewer, null, state,
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3));
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2));
 
         Method wrapper = NearbyStorageSignDisplay.class.getDeclaredMethod(
             "hide", org.bukkit.entity.Player.class, state.getClass(),
             storagesign.index.StorageSignPosition.class);
         wrapper.setAccessible(true);
         wrapper.invoke(display, null, state,
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3));
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2));
 
         assertTrue(((java.util.Set<?>) getField(state, "visible")).isEmpty());
         verify(textDisplay).remove();
@@ -1018,7 +1074,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         PlayerMock player = server.addPlayer();
         Object state = newPlayerState();
         UUID viewer = player.getUniqueId();
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(state, "visible", new HashSet<>(java.util.List.of(position)));
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
@@ -1045,7 +1101,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         PlayerMock player = server.addPlayer();
         Object state = newPlayerState();
         UUID viewer = player.getUniqueId();
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(state, "visible", new HashSet<>(java.util.List.of(position)));
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
@@ -1070,7 +1126,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
         Object state = newPlayerState();
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(state, "visible", new HashSet<>(java.util.List.of(position)));
         setField(state, "desired", java.util.List.of(position));
         putMap(display, "players", java.util.UUID.randomUUID(), state);
@@ -1092,7 +1148,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
         Object state = newPlayerState();
         UUID viewer = UUID.randomUUID();
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
         setField(label, "viewers", new HashSet<>(java.util.List.of(viewer)));
@@ -1115,7 +1171,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
         Object label = newLabel(mock(TextDisplay.class));
         storagesign.index.StorageSignPosition position =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         putMap(display, "labels", position, label);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("refreshLabels");
@@ -1137,7 +1193,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
         storagesign.index.StorageSignPosition position =
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         putMap(display, "labels", position, label);
         putMap(display, "players", java.util.UUID.randomUUID(), newPlayerState());
 
@@ -1196,7 +1252,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID offlineId = UUID.randomUUID();
         Object offlineState = newPlayerState();
         setField(offlineState, "visible", new HashSet<>(java.util.List.of(
-            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3))));
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2))));
         setField(offlineState, "desired", java.util.List.of());
         setField(offlineState, "searched", true);
 
@@ -1206,7 +1262,7 @@ class NearbyStorageSignDisplayIntegrationTest {
 
         putMap(display, "players", online.getUniqueId(), onlineState);
         putMap(display, "players", offlineId, offlineState);
-        putMap(display, "labels", new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3), offlineLabel);
+        putMap(display, "labels", new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2), offlineLabel);
         setField(display, "queued", new HashSet<UUID>(java.util.List.of(offlineId)));
         setField(display, "allocationPending", new java.util.LinkedHashSet<UUID>(java.util.List.of(offlineId)));
 
@@ -1227,10 +1283,10 @@ class NearbyStorageSignDisplayIntegrationTest {
         var world = server.addSimpleWorld("monitor-revision-display");
         world.getChunkAt(0, 0).load();
         StorageSignIndex index = new StorageSignIndex(plugin, true);
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "7"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "7"}).applyToSign(sign);
         index.register(block);
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
         PlayerMock player = server.addPlayer();
@@ -1240,6 +1296,35 @@ class NearbyStorageSignDisplayIntegrationTest {
         setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
         setField(state, "searched", true);
         setField(state, "indexRevision", 0L);
+        putMap(display, "players", player.getUniqueId(), state);
+
+        Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("monitorPlayers");
+        method.setAccessible(true);
+        method.invoke(display);
+
+        assertFalse((boolean) getField(state, "searched"));
+        assertEquals(1, ((java.util.ArrayDeque<?>) getField(display, "searchQueue")).size());
+    }
+
+    @Test
+    void monitorPlayersResetsSearchedStateWhenContentRevisionChanges() throws Exception {
+        var world = server.addSimpleWorld("monitor-content-display");
+        world.getChunkAt(0, 0).load();
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "7"}).applyToSign(sign);
+        index.register(block);
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        Object state = newPlayerState();
+        setField(state, "last", player.getEyeLocation().clone());
+        setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+        setField(state, "searched", true);
+        setField(state, "indexRevision", index.revision(world));
+        setField(state, "contentRevision", index.contentRevision(world) - 1);
         putMap(display, "players", player.getUniqueId(), state);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("monitorPlayers");
@@ -1263,6 +1348,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         setField(state, "searched", true);
         setField(state, "indexRevision", index.revision(world));
+        setField(state, "contentRevision", index.contentRevision(world));
         putMap(display, "players", player.getUniqueId(), state);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("monitorPlayers");
@@ -1288,13 +1374,13 @@ class NearbyStorageSignDisplayIntegrationTest {
         putMap(display, "players", player.getUniqueId(), state);
         TextDisplay textDisplay = mock(TextDisplay.class);
         Object label = newLabel(textDisplay);
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
         setField(label, "viewers", new HashSet<>());
         putMap(display, "labels", position, label);
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "7"}).applyToSign(sign);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "7"}).applyToSign(sign);
         setField(display, "monitorTicks", ConfigLoader.getNearbyDisplayIntervalTicks() - 1);
         setField(display, "refreshTicks", 19);
 
@@ -1302,7 +1388,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         method.setAccessible(true);
         method.invoke(display);
 
-        verify(textDisplay).setText("STONE\n× 7");
+        verify(textDisplay).setText(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER));
         assertEquals(0, getField(display, "monitorTicks"));
         assertEquals(0, getField(display, "refreshTicks"));
     }
@@ -1313,11 +1399,11 @@ class NearbyStorageSignDisplayIntegrationTest {
         world.getChunkAt(0, 0).load();
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
-        Block block = world.getBlockAt(0, 65, 3);
+        Block block = world.getBlockAt(0, 65, 2);
         block.setType(Material.OAK_SIGN);
         Sign sign = (Sign) block.getState();
-        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "7"}).applyToSign(sign);
-        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3);
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "7"}).applyToSign(sign);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod(
             "createLabel", storagesign.index.StorageSignPosition.class);
@@ -1325,7 +1411,8 @@ class NearbyStorageSignDisplayIntegrationTest {
         Object label = method.invoke(display, position);
 
         assertNotNull(label);
-        assertEquals("STONE\n× 7", ((TextDisplay) getField(label, "display")).getText());
+        assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER),
+            ((TextDisplay) getField(label, "display")).getText());
 
         block.setType(Material.AIR);
         assertNull(method.invoke(display, position));
@@ -1346,14 +1433,14 @@ class NearbyStorageSignDisplayIntegrationTest {
         when(block.getLocation()).thenReturn(new Location(world, 0.5, 65, 3.5));
         org.bukkit.entity.TextDisplay textDisplay = mock(org.bukkit.entity.TextDisplay.class);
         StorageSign resolved = StorageSign.fromSignLines(
-            new String[] {"StorageSign", "STONE", "7"});
+            new String[] {"StorageSign", LONG_IDENTIFIER, "7"});
         storagesign.index.StorageSignPosition position =
-            new storagesign.index.StorageSignPosition(worldId, 0, 65, 3);
+            new storagesign.index.StorageSignPosition(worldId, 0, 65, 2);
 
         try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class);
              MockedStatic<StorageSign> mockedSigns = org.mockito.Mockito.mockStatic(StorageSign.class)) {
             mockedBukkit.when(() -> Bukkit.getWorld(worldId)).thenReturn(world);
-            when(world.getBlockAt(0, 65, 3)).thenReturn(block);
+            when(world.getBlockAt(0, 65, 2)).thenReturn(block);
             mockedSigns.when(() -> StorageSign.fromBlock(block)).thenReturn(resolved);
             org.mockito.Mockito.doAnswer(invocation -> {
                 @SuppressWarnings("unchecked")
@@ -1387,7 +1474,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         method.setAccessible(true);
 
         assertNull(method.invoke(display,
-            new storagesign.index.StorageSignPosition(UUID.randomUUID(), 0, 65, 3)));
+            new storagesign.index.StorageSignPosition(UUID.randomUUID(), 0, 65, 2)));
         assertNull(method.invoke(display,
             new storagesign.index.StorageSignPosition(world.getUID(), 32, 65, 32)));
     }
@@ -1524,17 +1611,17 @@ class NearbyStorageSignDisplayIntegrationTest {
             Object state = newPlayerState();
             setField(state, "searched", true);
             setField(state, "desired", java.util.List.of(
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3),
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4)));
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2),
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1)));
             putMap(display, "players", viewer, state);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
-            Block second = world.getBlockAt(0, 65, 4);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
+            Block second = world.getBlockAt(0, 65, 1);
             second.setType(Material.OAK_SIGN);
             Sign secondSign = (Sign) second.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "4"}).applyToSign(secondSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "4"}).applyToSign(secondSign);
             java.util.LinkedHashSet<UUID> pending = new java.util.LinkedHashSet<>();
             pending.add(viewer);
             setField(display, "allocationPending", pending);
@@ -1575,17 +1662,17 @@ class NearbyStorageSignDisplayIntegrationTest {
             Object state = newPlayerState();
             setField(state, "searched", true);
             setField(state, "desired", java.util.List.of(
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 3),
-                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 4)));
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2),
+                new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 1)));
             putMap(display, "players", viewer, state);
-            Block first = world.getBlockAt(0, 65, 3);
+            Block first = world.getBlockAt(0, 65, 2);
             first.setType(Material.OAK_SIGN);
             Sign firstSign = (Sign) first.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "3"}).applyToSign(firstSign);
-            Block second = world.getBlockAt(0, 65, 4);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "3"}).applyToSign(firstSign);
+            Block second = world.getBlockAt(0, 65, 1);
             second.setType(Material.OAK_SIGN);
             Sign secondSign = (Sign) second.getState();
-            StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "4"}).applyToSign(secondSign);
+            StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "4"}).applyToSign(secondSign);
             java.util.LinkedHashSet<UUID> pending = new java.util.LinkedHashSet<>();
             pending.add(viewer);
             setField(display, "allocationPending", pending);
