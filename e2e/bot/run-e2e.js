@@ -238,7 +238,7 @@ async function runMainSuite() {
     assert.equal(state.playerStone, 6)
   })
 
-  await runCase('partial StorageSign merge preserves registered remainder', async () => {
+  await runCase('partial StorageSign merge returns empty and reduced stacks', async () => {
     await reset('merge-partial')
     await equip('oak_sign')
     await activateSign()
@@ -246,12 +246,13 @@ async function runMainSuite() {
     assert.equal(state.lines[2], '2147483647')
     assert.equal(state.playerRegisteredStorageSigns, 1)
     assert.equal(state.playerEmptyStorageSigns, 1)
+    assert.equal(state.playerReducedStorageSigns, 1)
     assert.equal(state.droppedStone, 0)
     assert.equal(state.droppedStorageSigns, 0)
     assert.ok(state.heldLore.includes('STONE 10'), `Expected remainder lore, got ${state.heldLore}`)
   })
 
-  await runCase('full inventory drops only emptied sign after partial merge', async () => {
+  await runCase('full inventory drops empty before reduced sign after partial merge', async () => {
     await reset('merge-partial-full')
     await equip('oak_sign')
     await activateSign()
@@ -260,6 +261,8 @@ async function runMainSuite() {
     assert.equal(state.playerRegisteredStorageSigns, 1)
     assert.equal(state.playerEmptyStorageSigns, 0)
     assert.equal(state.droppedEmptyStorageSigns, 1)
+    assert.equal(state.droppedReducedStorageSigns, 1)
+    assert.equal(state.playerReducedStorageSigns, 0)
     assert.equal(state.droppedStone, 0)
     assert.ok(state.heldLore.includes('STONE 10'), `Expected remainder lore, got ${state.heldLore}`)
   })

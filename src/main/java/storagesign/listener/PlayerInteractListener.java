@@ -151,14 +151,23 @@ public final class PlayerInteractListener implements Listener {
             ItemStack handContents = handSS.getContents(1);
             if (handContents != null && blockSS.isSimilar(handContents)) {
                 int perItem = handSS.getAmount();
-                int mergeableItems = perItem <= 0 ? 0 : Math.min(
-                    Math.max(1, handItem.getAmount()),
-                    (Integer.MAX_VALUE - blockSS.getAmount()) / perItem
-                );
-                if (mergeableItems > 0) {
-                    long add = (long) perItem * mergeableItems;
+                int handCount = Math.max(1, handItem.getAmount());
+                long capacity = (long) Integer.MAX_VALUE - blockSS.getAmount();
+                int mergedItems = 0;
+                int partialMergedAmount = 0;
+                if (perItem > 0 && capacity > 0) {
+                    mergedItems = (int) Math.min(handCount, capacity / perItem);
+                    if (mergedItems < handCount) {
+                        long remainingCapacity = capacity - ((long) mergedItems * perItem);
+                        if (remainingCapacity > 0) {
+                            partialMergedAmount = (int) Math.min(remainingCapacity, (long) perItem);
+                        }
+                    }
+                }
+                if (mergedItems > 0 || partialMergedAmount > 0) {
+                    long add = (long) perItem * mergedItems + partialMergedAmount;
                     blockSS.setAmount((int) (blockSS.getAmount() + add));
-                    applyMergedStorageSigns(player, handItem, handSS, mergeableItems);
+                    applyMergedStorageSigns(player, handItem, handSS, mergedItems, partialMergedAmount);
                     applyToBlock(block, blockSS);
                     LOG.debug("processStorageSignItemInteraction", () -> "merged=" + add
                               + ", sign=" + block.getLocation()
@@ -305,26 +314,53 @@ public final class PlayerInteractListener implements Listener {
         return mat == INK_SAC || mat == GLOW_INK_SAC;  // インクサックか光るインクサックであれば次
     }
 
-    private static ItemStack remainingMergedStack(ItemStack original, StorageSign contents, int mergedItems) {
-        ItemStack remaining = original.clone();
-        int remainingAmount = original.getAmount() - mergedItems;
-        remaining.setAmount(remainingAmount);
-        return StorageSign.createStorageSignItem(remaining.getType(), contents, remainingAmount);
+    private static ItemStack remainingMergedStack(ItemStack original, StorageSign contents, int remainingAmount) {
+        return StorageSign.createStorageSignItem(original.getType(), contents, remainingAmount);
     }
 
     private static void applyMergedStorageSigns(Player player, ItemStack original,
-                                                StorageSign contents, int mergedItems) {
-        if (mergedItems == original.getAmount()) {
-            player.getInventory().setItemInMainHand(StorageSign.createStorageSignItem(
-                original.getType(), StorageSign.EMPTY_MARKER, mergedItems));
+                                                StorageSign contents, int mergedItems,
+                                                int partialMergedAmount) {
+        int totalConsumedItems = mergedItems + (partialMergedAmount > 0 ? 1 : 0);
+        int remainingItems = original.getAmount() - totalConsumedItems;
+        ItemStack emptied = mergedItems > 0 ? StorageSign.createStorageSignItem(
+            original.getType(), StorageSign.EMPTY_MARKER, mergedItems) : null;
+        ItemStack partial = partialMergedAmount > 0 ? partialMergedStack(
+            original, contents, partialMergedAmount) : null;
+
+        if (remainingItems > 0) {
+            player.getInventory().setItemInMainHand(
+                remainingMergedStack(original, contents, remainingItems));
+            addOrDrop(player, emptied);
+            addOrDrop(player, partial);
             return;
         }
 
-        player.getInventory().setItemInMainHand(
-            remainingMergedStack(original, contents, mergedItems));
-        ItemStack emptied = StorageSign.createStorageSignItem(
-            original.getType(), StorageSign.EMPTY_MARKER, mergedItems);
-        for (ItemStack leftover : player.getInventory().addItem(emptied).values()) {
+        if (partial != null) {
+            player.getInventory().setItemInMainHand(partial);
+            addOrDrop(player, emptied);
+            return;
+        }
+
+        if (emptied != null) {
+            player.getInventory().setItemInMainHand(emptied);
+            return;
+        }
+    }
+
+    private static ItemStack partialMergedStack(ItemStack original, StorageSign contents, int remainingAmount) {
+        StorageSign partialContents = StorageSign.fromSignLines(new String[] {
+            StorageSign.HEADER_LINE,
+            contents.getIdentifier(),
+            Integer.toString(remainingAmount)
+        });
+        if (partialContents == null) return null;
+        return StorageSign.createStorageSignItem(original.getType(), partialContents, 1);
+    }
+
+    private static void addOrDrop(Player player, ItemStack stack) {
+        if (stack == null) return;
+        for (ItemStack leftover : player.getInventory().addItem(stack).values()) {
             player.getWorld().dropItemNaturally(player.getLocation(), leftover);
         }
     }
