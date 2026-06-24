@@ -47,10 +47,12 @@ public class StorageSignPlugin extends JavaPlugin {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(StorageSignPlugin.class);
     private static final long OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS = 1L;
+    private static final long OMINOUS_BANNER_RETRY_PERIOD_TICKS = 20L * 5L;
     private static final OminousBannerCodec OMINOUS_BANNER_CODEC = new OminousBannerCodec();
     private static final ItemMetaDecorationAdapter ITEM_META_DECORATOR = new ItemMetaDecorationAdapter();
 
     private BukkitTask ominousBannerRetryTask;
+    private boolean ominousBannerRetryWarningLogged = false;
     private boolean ominousBannerNameAvailable = true;
     private boolean ominousBannerTooltipAvailable = true;
     private Function<Boolean, BannerMeta> ominousBannerMetaFactory = this::createOminousBannerMetaByApi;
@@ -159,26 +161,12 @@ public class StorageSignPlugin extends JavaPlugin {
     private void scheduleOminousBannerRetry() {
         if (ominousBannerRetryTask != null) return;
 
-        ominousBannerRetryTask = Bukkit.getScheduler().runTaskLater(
+        ominousBannerRetryWarningLogged = false;
+        ominousBannerRetryTask = Bukkit.getScheduler().runTaskTimer(
             this,
-            () -> {
-                ominousBannerRetryTask = null;
-                // 実物の不吉な旗を未登録 SS に登録して先に復旧した場合も終了する。
-                if (getOminousBannerMeta() != null) return;
-
-                BannerMeta recovered = ominousBannerMetaFactory.apply(false);
-                if (recovered == null) {
-                    LOG.warning("retryOminousBanner",
-                        "不吉な旗の生成APIが利用できないため、旗の搬出だけを無効化しました");
-                    return;
-                }
-
-                setOminousBannerMeta(recovered);
-                LOG.info("retryOminousBanner",
-                    "レイドバナーメタを API で次tickに復旧しました");
-                logDegradedBannerDecorations();
-            },
-            OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS
+            this::retryOminousBanner,
+            OMINOUS_BANNER_FIRST_RETRY_DELAY_TICKS,
+            OMINOUS_BANNER_RETRY_PERIOD_TICKS
         );
     }
 
@@ -186,6 +174,33 @@ public class StorageSignPlugin extends JavaPlugin {
         BukkitTask task = ominousBannerRetryTask;
         ominousBannerRetryTask = null;
         if (task != null) task.cancel();
+    }
+
+    private void retryOminousBanner() {
+        // 実物の不吉な旗を未登録 SS に登録して先に復旧した場合も終了する。
+        if (getOminousBannerMeta() != null) {
+            cancelOminousBannerRetry();
+            return;
+        }
+
+        BannerMeta recovered = ominousBannerMetaFactory.apply(false);
+        if (recovered == null) {
+            if (!ominousBannerRetryWarningLogged) {
+                LOG.warning("retryOminousBanner",
+                    "不吉な旗の生成APIが利用できないため、旗の搬出だけを無効化し、5秒間隔で復旧を再試行します");
+                ominousBannerRetryWarningLogged = true;
+            } else {
+                LOG.debug("retryOminousBanner",
+                    () -> "不吉な旗の生成APIがまだ利用できないため、復旧を継続します");
+            }
+            return;
+        }
+
+        setOminousBannerMeta(recovered);
+        LOG.info("retryOminousBanner",
+            "レイドバナーメタを API で復旧しました");
+        logDegradedBannerDecorations();
+        cancelOminousBannerRetry();
     }
 
     /**

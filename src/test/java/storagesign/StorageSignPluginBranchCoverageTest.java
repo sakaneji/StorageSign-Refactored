@@ -172,7 +172,8 @@ class StorageSignPluginBranchCoverageTest {
         StorageSignPlugin plugin = mock(StorageSignPlugin.class, Mockito.CALLS_REAL_METHODS);
         BukkitScheduler scheduler = mock(BukkitScheduler.class);
         BukkitTask task = mock(BukkitTask.class);
-        when(scheduler.runTaskLater(Mockito.eq(plugin), Mockito.any(Runnable.class), Mockito.eq(1L)))
+        when(scheduler.runTaskTimer(
+            Mockito.eq(plugin), Mockito.any(Runnable.class), Mockito.eq(1L), Mockito.eq(100L)))
             .thenReturn(task);
         setField(plugin, "ominousBannerMetaFactory",
             (Function<Boolean, BannerMeta>) ignored -> null);
@@ -184,7 +185,8 @@ class StorageSignPluginBranchCoverageTest {
             method.invoke(plugin);
         }
 
-        verify(scheduler).runTaskLater(Mockito.eq(plugin), Mockito.any(Runnable.class), Mockito.eq(1L));
+        verify(scheduler).runTaskTimer(
+            Mockito.eq(plugin), Mockito.any(Runnable.class), Mockito.eq(1L), Mockito.eq(100L));
     }
 
     @Test
