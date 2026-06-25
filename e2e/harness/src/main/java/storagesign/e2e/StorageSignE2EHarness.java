@@ -249,6 +249,31 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                 createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
             case "storage-sign-items" ->
                 createStorageSign(world, 0, BASE_Y, 0, "OakStorageSign", 2);
+            case "legacy-storage-sign-items" -> {
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "OakStorageSign", 2);
+            }
+            case "legacy-empty-sign-block" ->
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "EmptySign", 3);
+            case "legacy-sign-block" ->
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "SIGN", 4);
+            case "legacy-spruce-sign-block" ->
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "SpruceStorageSign", 5);
+            case "legacy-dark-oak-sign-block" ->
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "DarkOakStorageSign", 6);
+            case "legacy-horse-egg-block" ->
+                createLegacyStorageSign(world, 0, BASE_Y, 0, "HorseEgg", 3);
+            case "legacy-empty-sign-item-merge" -> {
+                createStorageSign(world, 0, BASE_Y, 0, "OakStorageSign", 2);
+                giveRegisteredStorageSigns(player, "EmptySign", 2, 1);
+            }
+            case "legacy-spruce-sign-item" -> {
+                createStorageSign(world, 0, BASE_Y, 0, "SpruceStorageSign", 2);
+                giveRegisteredStorageSigns(player, "SpruceStorageSign", 2, 1);
+            }
+            case "legacy-dark-oak-sign-item" -> {
+                createStorageSign(world, 0, BASE_Y, 0, "DarkOakStorageSign", 2);
+                giveRegisteredStorageSigns(player, "DarkOakStorageSign", 2, 1);
+            }
             case "divide" -> {
                 createStorageSign(world, 0, BASE_Y, 0, "STONE", 100);
                 giveEmptyStorageSigns(player, 2);
@@ -336,6 +361,20 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         front.setLine(1, identifier);
         front.setLine(2, Integer.toString(amount));
         front.setLine(3, summary(amount));
+        sign.update(true, false);
+    }
+
+    private static void createLegacyStorageSign(World world, int x, int y, int z,
+                                                String identifier, int amount) {
+        Block support = world.getBlockAt(x, y - 1, z);
+        support.setType(Material.STONE);
+        Block block = world.getBlockAt(x, y, z);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        var front = sign.getSide(Side.FRONT);
+        front.setLine(0, "StorageSign");
+        front.setLine(1, identifier);
+        front.setLine(2, Integer.toString(amount));
         sign.update(true, false);
     }
 
@@ -540,6 +579,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         int indexedSigns = indexedSigns();
         int playerStone = count(player.getInventory().getContents(), Material.STONE);
         int playerSigns = count(player.getInventory().getContents(), Material.OAK_SIGN);
+        int playerLegacyMarkerItems = count(player.getInventory().getContents(), Material.GHAST_SPAWN_EGG);
         int playerEmptyStorageSigns = countStorageSignsWithLore(
             player.getInventory().getContents(), "Empty");
         int playerRegisteredStorageSigns = countStorageSignsWithLore(
@@ -580,6 +620,7 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"indexedSigns\":" + indexedSigns + ","
             + "\"playerStone\":" + playerStone + ","
             + "\"playerSigns\":" + playerSigns + ","
+            + "\"playerLegacyMarkerItems\":" + playerLegacyMarkerItems + ","
             + "\"playerEmptyStorageSigns\":" + playerEmptyStorageSigns + ","
             + "\"playerRegisteredStorageSigns\":" + playerRegisteredStorageSigns + ","
             + "\"playerReducedStorageSigns\":" + playerReducedStorageSigns + ","
@@ -817,10 +858,17 @@ public final class StorageSignE2EHarness extends JavaPlugin {
     }
 
     private static boolean hasStorageSignLore(ItemStack item, String expectedLore) {
-        if (item == null || item.getType() != Material.OAK_SIGN || !item.hasItemMeta()) return false;
+        if (item == null || !isSignMaterial(item.getType())
+            || !item.hasItemMeta()) return false;
         ItemMeta meta = item.getItemMeta();
         return meta != null && meta.hasLore() && meta.getLore() != null
             && !meta.getLore().isEmpty() && expectedLore.equals(meta.getLore().get(0));
+    }
+
+    private static boolean isSignMaterial(Material material) {
+        if (material == null) return false;
+        String name = material.name();
+        return name.endsWith("_SIGN") && !name.contains("_WALL_");
     }
 
     private static ItemStack findOminousBanner(ItemStack[] items) {
