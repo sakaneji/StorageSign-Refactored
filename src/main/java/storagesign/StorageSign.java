@@ -185,8 +185,8 @@ public final class StorageSign {
      */
     // ── プライベートコンストラクタ ──────────────────────────────────────────────────
 
-    private StorageSign(Material material, short damage, int amount,
-                        PotionType potionType, Enchantment enchantment, boolean isUnregistered) {
+    StorageSign(Material material, short damage, int amount,
+               PotionType potionType, Enchantment enchantment, boolean isUnregistered) {
         this.material    = material;
         this.damage      = damage;
         this.amount      = amount;
@@ -356,6 +356,75 @@ public final class StorageSign {
      */
     public static StorageSign fromStoredItem(ItemStack item) {
         return StorageSignItemCodec.fromStoredItem(item);
+    }
+
+    static StorageSign parseIdentifier(String identifier, int amount) {
+        return StorageSignIdentifierCodec.parseIdentifier(identifier, amount);
+    }
+
+    static StorageSign parseVirtualIdentifier(String identifier, int amount) {
+        return StorageSignIdentifierCodec.parseVirtualIdentifier(identifier, amount);
+    }
+
+    static Material resolveMaterialFromIdentifierToken(String token) {
+        return StorageSignIdentifierCodec.resolveMaterialFromIdentifierToken(token);
+    }
+
+    static String resolveVirtualIdentifier(Material material, short damage) {
+        return StorageSignIdentifierCodec.resolveVirtualIdentifier(material, damage);
+    }
+
+    static Integer parseStoredAmount(String value) {
+        return StorageSignIdentifierCodec.parseStoredAmount(value);
+    }
+
+    private static boolean matchesVirtualSpec(Material material, short damage, String spec) {
+        if (spec == null || spec.isBlank()) return false;
+        String[] specParts = spec.split(":", 2);
+        Material specMaterial = Material.matchMaterial(specParts[0].trim());
+        if (specMaterial == null || specMaterial != material) return false;
+
+        short specDamage = 0;
+        if (specParts.length >= 2) {
+            try {
+                specDamage = Short.parseShort(specParts[1].trim());
+            } catch (NumberFormatException ignored) {
+                specDamage = 0;
+            }
+        }
+        return specDamage == damage;
+    }
+
+    private static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
+        ItemMeta originalMeta = original.getItemMeta();
+        if (originalMeta != null
+            && (originalMeta.hasDisplayName() || originalMeta.hasLore()
+                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty())) {
+            return null;
+        }
+        ItemStack restored = candidate.getContents(1);
+        if (restored == null) return null;
+        ItemStack one = original.clone();
+        one.setAmount(1);
+        return restored.isSimilar(one) ? candidate : null;
+    }
+
+    private static ItemStack createLegacyMarkerItem(int amount, String markerName) {
+        ItemStack markerItem = new ItemStack(LEGACY_MARKER_ITEM_MATERIAL, Math.max(1, amount));
+        ItemMeta meta = markerItem.getItemMeta();
+        if (meta == null) return markerItem;
+        meta.setDisplayName(markerName);
+        meta.setLore(List.of(EMPTY_MARKER));
+        markerItem.setItemMeta(meta);
+        return markerItem;
+    }
+
+    private static void applyConfiguredMaxStack(ItemMeta meta) {
+        if (SET_MAX_STACK_SIZE == null) return;
+        int configured = Math.max(1, ConfigLoader.getMaxStackSize());
+        try {
+            SET_MAX_STACK_SIZE.invoke(meta, (Integer) configured);
+        } catch (Throwable ignored) {}
     }
 
     @Override

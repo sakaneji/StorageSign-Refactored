@@ -188,7 +188,7 @@ final class StorageSignInteractionFlow {
                   + ", remaining=" + ss.getAmount());
     }
 
-    private static boolean isSac(Material mat) {
+    static boolean isSac(Material mat) {
         return mat == Material.INK_SAC || mat == Material.GLOW_INK_SAC;
     }
 

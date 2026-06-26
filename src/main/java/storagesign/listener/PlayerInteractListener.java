@@ -145,4 +145,12 @@ public final class PlayerInteractListener implements Listener {
     private void exportItems(Player player, Block block, StorageSign ss) {
         StorageSignInteractionFlow.exportItems(LOG, player, block, ss);
     }
+
+    private static boolean isSac(Material mat) {
+        return StorageSignInteractionFlow.isSac(mat);
+    }
+
+    private static boolean isGlowSac(Material mat) {
+        return mat == GLOW_INK_SAC;
+    }
 }
