@@ -1,36 +1,20 @@
 package storagesign;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.logging.Level;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
-import org.bukkit.block.ShulkerBox;
-import org.bukkit.block.Beehive;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.BannerMeta;
-import org.bukkit.inventory.meta.BlockStateMeta;
-import org.bukkit.inventory.meta.Damageable;
-import org.bukkit.inventory.meta.EnchantmentStorageMeta;
-import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionType;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.sign.Side;
 
-import storagesign.item.EnchantHelper;
 import storagesign.compat.SignDisplayFormatter;
-import storagesign.item.SpecialCaseItemSupport;
 import storagesign.item.PotionHelper;
 import storagesign.registry.LegacyNameRegistry;
 import storagesign.registry.MaterialRegistry;
@@ -72,7 +56,7 @@ import storagesign.logging.PluginLogger;
  */
 public final class StorageSign {
 
-    private static final PluginLogger LOG = PluginLogger.getLogger(StorageSign.class);
+    static final PluginLogger LOG = PluginLogger.getLogger(StorageSign.class);
 
     public static final String HEADER_LINE  = "StorageSign";
     public static final String EMPTY_MARKER = "Empty";
@@ -86,7 +70,7 @@ public final class StorageSign {
     static final short DAMAGE_FIREWORK_ZERO = 0;  // firework power=1 を damage=0 として保管
 
     // ── 互換性デフォルト（config.yml で上書き可能）──────────────────────────────────
-    private static final Map<String, String> DEFAULT_IDENTIFIER_ALIASES = Map.ofEntries(
+    static final Map<String, String> DEFAULT_IDENTIFIER_ALIASES = Map.ofEntries(
         Map.entry("SIGN", "OAK_SIGN"),
         Map.entry("ROSE_RED", "RED_DYE"),
         Map.entry("DANDELION_YELLOW", "YELLOW_DYE"),
@@ -98,12 +82,12 @@ public final class StorageSign {
         Map.entry("STONE_SLAB", "SMOOTH_STONE_SLAB") // MC 1.13→1.14 migration
     );
 
-    private static final Map<String, String> DEFAULT_VIRTUAL_IDENTIFIERS = Map.ofEntries(
+    static final Map<String, String> DEFAULT_VIRTUAL_IDENTIFIERS = Map.ofEntries(
         Map.entry("EmptySign", "OAK_SIGN:1"),
         Map.entry("HorseEgg", "END_PORTAL:1")
     );
 
-    private static final Material LEGACY_MARKER_ITEM_MATERIAL = Material.GHAST_SPAWN_EGG;
+    static final Material LEGACY_MARKER_ITEM_MATERIAL = Material.GHAST_SPAWN_EGG;
 
     // ── Fields ────────────────────────────────────────────────────────────────
 
@@ -122,19 +106,19 @@ public final class StorageSign {
      * null = このサーバーでは API が利用できない（API 未対応の Spigot ビルド等）。
      * JIT コンパイル後は MethodHandle.invoke() は直接仮想呼び出しと同等の速度になる。
      */
-    private static final MethodHandle SET_MAX_STACK_SIZE;
+    static final java.lang.invoke.MethodHandle SET_MAX_STACK_SIZE;
     static {
-        MethodHandle h = null;
+        java.lang.invoke.MethodHandle h = null;
         try {
             // ボックス化 Integer（Paper API）を先に試み、失敗したらプリミティブ int にフォールバック。
-            h = MethodHandles.publicLookup().findVirtual(
+            h = java.lang.invoke.MethodHandles.publicLookup().findVirtual(
                     org.bukkit.inventory.meta.ItemMeta.class, "setMaxStackSize",
-                    MethodType.methodType(void.class, Integer.class));
+                    java.lang.invoke.MethodType.methodType(void.class, Integer.class));
         } catch (NoSuchMethodException | IllegalAccessException e1) {
             try {
-                h = MethodHandles.publicLookup().findVirtual(
+                h = java.lang.invoke.MethodHandles.publicLookup().findVirtual(
                         org.bukkit.inventory.meta.ItemMeta.class, "setMaxStackSize",
-                        MethodType.methodType(void.class, int.class));
+                        java.lang.invoke.MethodType.methodType(void.class, int.class));
             } catch (NoSuchMethodException | IllegalAccessException ignored) {}
         }
         SET_MAX_STACK_SIZE = h;
@@ -152,19 +136,7 @@ public final class StorageSign {
      * @return パース結果。有効な StorageSign でない場合は {@code null}。
      */
     public static StorageSign fromSignLines(String[] lines) {
-        if (lines == null || lines.length < 3) return null;
-        if (!HEADER_LINE.equals(lines[0]))     return null;
-
-        String identifier = lines[1].trim();
-        // 行 1 が空白（旧版では残量 0 時に "" を書き込む）または "Empty"（新形式）なら空 SS
-        if (identifier.isBlank() || EMPTY_MARKER.equals(identifier)) {
-            return empty();
-        }
-
-        Integer amount = parseStoredAmount(lines[2]);
-        if (amount == null) return null;
-
-        return parseIdentifier(identifier, amount);
+        return StorageSignIdentifierCodec.fromSignLines(lines);
     }
 
     /**
@@ -186,19 +158,7 @@ public final class StorageSign {
      * @return パース結果。有効な StorageSign でない場合は {@code null}。
      */
     public static StorageSign fromSign(Sign sign) {
-        if (sign == null) return null;
-        String[] lines = sign.getSide(Side.FRONT).getLines();
-        if (lines.length < 3 || !HEADER_LINE.equals(lines[0])) return null;
-        Integer amount = parseStoredAmount(lines[2]);
-        if (amount == null) return null;
-        String canonical = sign.getPersistentDataContainer().get(
-            CANONICAL_IDENTIFIER_KEY, PersistentDataType.STRING);
-        if (canonical == null || canonical.isBlank()) {
-            canonical = sign.getPersistentDataContainer().get(
-                POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
-        }
-        if (canonical != null) return parseIdentifier(canonical, amount);
-        return fromSignLines(lines);
+        return StorageSignIdentifierCodec.fromSign(sign);
     }
 
     /**
@@ -207,42 +167,7 @@ public final class StorageSign {
      * @return パース結果。StorageSign アイテムでない場合は {@code null}。
      */
     public static StorageSign fromItemStack(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR) return null;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return null;
-        if (!HEADER_LINE.equals(meta.getDisplayName())) return null;
-
-        List<String> lore = meta.getLore();
-        if (lore == null || lore.isEmpty()) return null;
-
-        String loreLine = lore.get(0).trim();
-        if (EMPTY_MARKER.equals(loreLine)) {
-            return empty();
-        }
-
-        // Lore 形式: "{識別子} {数量}"
-        int sep = loreLine.lastIndexOf(' ');
-        if (sep < 0) return null;
-
-        String identifier = loreLine.substring(0, sep).trim();
-        Integer amount = parseStoredAmount(loreLine.substring(sep + 1));
-        if (amount == null) return null;
-
-        String canonical = meta.getPersistentDataContainer().get(
-            POTION_IDENTIFIER_KEY, PersistentDataType.STRING);
-        if (canonical != null) return parseIdentifier(canonical, amount);
-
-        return parseIdentifier(identifier, amount);
-    }
-
-    private static Integer parseStoredAmount(String value) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            int parsed = Integer.parseInt(value.trim());
-            return parsed < 0 ? null : parsed;
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
+        return StorageSignIdentifierCodec.fromItemStack(item);
     }
 
     // ── Static factory helpers ─────────────────────────────────────────────────
@@ -258,83 +183,6 @@ public final class StorageSign {
      * アイテム識別子文字列を StorageSign インスタンスに変換する。
      * これがデシリアライズの中核メソッド。
      */
-    private static StorageSign parseIdentifier(String identifier, int amount) {
-        if (identifier == null || identifier.isBlank()) return null;
-
-        // ── 看板アイテム: "OakStorageSign", "SpruceStorageSign" など ───────────
-        Material signMat = LegacyNameRegistry.NAME_TO_MATERIAL.get(identifier);
-        if (signMat != null) {
-            return new StorageSign(signMat, DAMAGE_SS_ITEM, amount, null, null, false);
-        }
-
-        // ── 仮想識別子（config / デフォルト互換テーブル）────────────────────────────
-        StorageSign virtualSign = parseVirtualIdentifier(identifier, amount);
-        if (virtualSign != null) {
-            return virtualSign;
-        }
-
-        // ── 特殊アイテム（現時点では不吉なビン）──────────────────────────────────────
-        // OMINOUS_BOTTLE はバニラアイテムだが、識別子/アンプリファイア形式に
-        // 専用の互換ロジックが必要なためここで処理する。
-        Material specialMaterial = SpecialCaseItemSupport.materialFromIdentifier(identifier);
-        if (specialMaterial != null) {
-            short specialDamage = SpecialCaseItemSupport.parseDamageFromIdentifier(identifier);
-            return new StorageSign(specialMaterial, specialDamage, amount, null, null, false);
-        }
-
-        // ── エンチャント本（新形式）: "ENCHBOOK:sharp:5" ──────────────────────────
-        if (identifier.startsWith("ENCHBOOK:")) {
-            String[] parts = identifier.split(":");
-            if (parts.length < 3) return null;
-            Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
-            if (ench == null) return null;
-            short level;
-            try { level = Short.parseShort(parts[2]); }
-            catch (NumberFormatException e) {
-                LOG.log(Level.WARNING, "parseIdentifier", "エンチャントレベルが不正: {0}", identifier);
-                return null;
-            }
-            return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
-        }
-
-        // ── ポーション: "POTION:HEAL:0", "SPOTION:REGEN:1", "LPOTION:HEAL:2" ───
-        if (identifier.contains("POTION:")) {
-            PotionHelper.PotionData potion = PotionHelper.fromIdentifier(identifier);
-            if (potion == null) return null;
-            short damage = (short) (PotionHelper.getEnhanceCode(potion.type()).charAt(0) - '0');
-            return new StorageSign(potion.material(), damage, amount, potion.type(), null, false);
-        }
-
-        // ── 通常アイテム: "STONE", "STONE:0"（レガシー名前解決あり）──────────────
-        String[] parts = identifier.split(":");
-        String matName = parts[0].toUpperCase();
-        short damage = 0;
-        if (parts.length >= 2) {
-            try { damage = Short.parseShort(parts[1]); }
-            catch (NumberFormatException e) {
-                // parts[1] が数値でない → 旧形式 "ENCHANTED_BOOK:fire_protection:3" の可能性
-                if (matName.equals("ENCHANTED_BOOK") && parts.length >= 3) {
-                    Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
-                    if (ench == null) return null;
-                    short level;
-                    try { level = Short.parseShort(parts[2]); }
-                    catch (NumberFormatException ignored2) { return null; }
-                    return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
-                }
-                // 未知の非数値サブタイプ → damage を 0 として扱う
-            }
-        }
-
-        // config / デフォルトテーブルのエイリアスを解決してからマテリアル直接検索。
-        Material mat = resolveMaterialFromIdentifierToken(matName);
-        if (mat == null) {
-            LOG.log(Level.WARNING, "parseIdentifier", "StorageSign 識別子に未知のマテリアル: {0}", identifier);
-            return null;
-        }
-
-        return new StorageSign(mat, damage, amount, null, null, false);
-    }
-
     // ── プライベートコンストラクタ ──────────────────────────────────────────────────
 
     private StorageSign(Material material, short damage, int amount,
@@ -363,7 +211,6 @@ public final class StorageSign {
         this.amount = amount;
         if (amount <= 0) {
             this.amount = 0;
-            // 設定で unregister-on-empty が有効な場合、数量 0 で登録解除状態に移行する
             if (ConfigLoader.getUnregisterOnEmpty()) {
                 this.unregistered = true;
             }
@@ -376,33 +223,7 @@ public final class StorageSign {
      * アイテム識別子文字列を返す。看板の行 1 またはアイテム Lore に保存される値。
      */
     public String getIdentifier() {
-        if (unregistered) return EMPTY_MARKER;
-
-        // 看板アイテム（sign-in-sign）
-        String signName = LegacyNameRegistry.MATERIAL_TO_NAME.get(material);
-        if (signName != null && damage == DAMAGE_SS_ITEM) return signName;
-
-        // 仮想識別子（レガシー / 管理者定義の互換マーカー）
-        String virtualIdentifier = resolveVirtualIdentifier(material, damage);
-        if (virtualIdentifier != null) return virtualIdentifier;
-
-        // 特殊アイテム
-        String specialIdentifier = SpecialCaseItemSupport.toIdentifier(material, damage);
-        if (specialIdentifier != null) return specialIdentifier;
-
-        // エンチャント本
-        if (material == Material.ENCHANTED_BOOK && enchantment != null) {
-            return "ENCHBOOK:" + EnchantHelper.toShortKey(enchantment) + ":" + damage;
-        }
-
-        // ポーション
-        if (MaterialRegistry.POTION_MATERIALS.contains(material) && potionType != null) {
-            return PotionHelper.toDisplayIdentifier(material, potionType);
-        }
-
-        // 通常アイテム
-        if (damage != 0) return material + ":" + damage;
-        return material.toString();
+        return StorageSignIdentifierCodec.getIdentifier(this);
     }
 
     /** Physical-sign label. The complete identifier is persisted in the sign PDC. */
@@ -444,37 +265,12 @@ public final class StorageSign {
      * インベントリドロップ・出力用の StorageSign アイテム（表示名 + Lore）を生成する。
      */
     public static ItemStack createStorageSignItem(Material signMaterial, String loreText, int amount) {
-        ItemStack ssItem = new ItemStack(signMaterial, Math.max(1, amount));
-        ItemMeta meta = ssItem.getItemMeta();
-        if (meta == null) return ssItem;
-
-        meta.setDisplayName(HEADER_LINE);
-        meta.setLore(List.of(loreText));
-        applyConfiguredMaxStack(meta);
-        ssItem.setItemMeta(meta);
-        return ssItem;
+        return StorageSignItemCodec.createStorageSignItem(signMaterial, loreText, amount);
     }
 
     /** StorageSignモデルからLoreと正規Potion PDCを同時に生成する。 */
     public static ItemStack createStorageSignItem(Material signMaterial, StorageSign contents, int amount) {
-        ItemStack item = createStorageSignItem(signMaterial, contents.getLoreText(), amount);
-        String canonical = contents.getCanonicalPotionIdentifier();
-        if (canonical == null) return item;
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return item;
-        meta.getPersistentDataContainer().set(
-            POTION_IDENTIFIER_KEY, PersistentDataType.STRING, canonical);
-        item.setItemMeta(meta);
-        return item;
-    }
-
-    private static void applyConfiguredMaxStack(ItemMeta meta) {
-        if (SET_MAX_STACK_SIZE == null) return;
-        // JIT 後は MethodHandle.invoke() は実質的な直接呼び出しと同等 — リフレクションのオーバーヘッドなし。
-        int configured = Math.max(1, ConfigLoader.getMaxStackSize());
-        try {
-            SET_MAX_STACK_SIZE.invoke(meta, (Integer) configured);
-        } catch (Throwable ignored) {}
+        return StorageSignItemCodec.createStorageSignItem(signMaterial, contents, amount);
     }
 
     /**
@@ -519,86 +315,7 @@ public final class StorageSign {
      * @return 対応する ItemStack。マテリアルが不明な場合は {@code null}。
      */
     public ItemStack getContents(int requestedAmount) {
-        if (unregistered || material == null || material == Material.AIR) return null;
-
-        // ── レガシー END_PORTAL マーカーアイテム ──────────────────────────────────
-        if (material == Material.END_PORTAL) {
-            if (damage == DAMAGE_SS_ITEM) {
-                String markerName = resolveVirtualIdentifier(material, damage);
-                if (markerName == null) markerName = "HorseEgg";
-                return createLegacyMarkerItem(Math.min(requestedAmount, 1), markerName);
-            }
-            return createStorageSignItem(Material.OAK_SIGN, EMPTY_MARKER, Math.min(requestedAmount, 1));
-        }
-
-        // ── 看板マテリアル ────────────────────────────────────────────────────────
-        if (MaterialRegistry.SIGN_MATERIALS.contains(material)) {
-            if (damage == DAMAGE_SS_ITEM) {
-                return createStorageSignItem(material, EMPTY_MARKER, Math.min(requestedAmount, material.getMaxStackSize()));
-            }
-            return new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-        }
-
-        // ── 特殊アイテム ──────────────────────────────────────────────────────────
-        ItemStack specialItem = SpecialCaseItemSupport.toContents(material, damage, requestedAmount);
-        if (specialItem != null) {
-            return specialItem;
-        }
-
-        // ── エンチャント本 ─────────────────────────────────────────────────────────
-        if (material == Material.ENCHANTED_BOOK && enchantment != null) {
-            ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-            EnchantmentStorageMeta meta = (EnchantmentStorageMeta) item.getItemMeta();
-            if (meta != null) {
-                meta.addStoredEnchant(enchantment, damage, true);
-                item.setItemMeta(meta);
-            }
-            return item;
-        }
-
-        // ── ポーション ─────────────────────────────────────────────────────────────
-        if (MaterialRegistry.POTION_MATERIALS.contains(material) && potionType != null) {
-            ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-            PotionMeta meta = (PotionMeta) item.getItemMeta();
-            if (meta != null) {
-                meta.setBasePotionType(potionType);
-                item.setItemMeta(meta);
-            }
-            return item;
-        }
-
-        // ── 白バナー（レイドバナー — 特殊 NBT が必要）──────────────────────────────
-        if (material == Material.WHITE_BANNER && damage == 8) {
-            BannerMeta bannerMeta = StorageSignPlugin.getOminousBannerMeta();
-            if (bannerMeta != null) {
-                ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-                if (!item.setItemMeta(bannerMeta.clone())) {
-                    LOG.warning("getContents", "不吉なバナーのメタを ItemStack に適用できませんでした");
-                    return null;
-                }
-                return item;
-            }
-            return null;
-        }
-
-        // ── 打ち上げ花火（power を damage に保管; power=1 → damage=0）────────────
-        if (material == Material.FIREWORK_ROCKET) {
-            ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-            // damage フィールドに花火 power を保管し、既存データ互換のため power=1 は 0 のまま保持。
-            if (damage > 1 && item.getItemMeta() instanceof FireworkMeta fireworkMeta) {
-                fireworkMeta.setPower(damage);
-                item.setItemMeta(fireworkMeta);
-            }
-            return item;
-        }
-
-        // ── 通常アイテム ──────────────────────────────────────────────────────────
-        ItemStack item = new ItemStack(material, Math.min(requestedAmount, material.getMaxStackSize()));
-        if (damage != 0 && item.getItemMeta() instanceof Damageable damageable) {
-            damageable.setDamage(damage);
-            item.setItemMeta(damageable);
-        }
-        return item;
+        return StorageSignItemCodec.getContents(this, requestedAmount);
     }
 
     // ── 静的ヘルパー ──────────────────────────────────────────────────────────────
@@ -626,79 +343,8 @@ public final class StorageSign {
      * </ul>
      */
     public boolean isSimilar(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR) return false;
-
-        // HorseEgg レガシーマーカー
-        if (material == Material.END_PORTAL && damage == DAMAGE_SS_ITEM) {
-            ItemMeta horseMeta = item.getItemMeta();
-            String markerName = resolveVirtualIdentifier(material, damage);
-            if (markerName == null) markerName = "HorseEgg";
-            return item.getType() == LEGACY_MARKER_ITEM_MATERIAL
-                && horseMeta != null
-                && markerName.equals(horseMeta.getDisplayName())
-                && horseMeta.hasLore();
-        }
-
-        if (item.getType() != material) return false;
-
-        ItemMeta meta = item.getItemMeta();
-
-        // BEE_NEST / BEEHIVE — マテリアルのみで比較
-        if (MaterialRegistry.BLOCK_ENTITY_DATA_MATERIALS.contains(material)) return true;
-
-        // 特殊アイテム
-        Boolean specialSimilarity = SpecialCaseItemSupport.isSimilar(material, meta, damage);
-        if (specialSimilarity != null) {
-            return specialSimilarity;
-        }
-
-        // エンチャント本
-        if (material == Material.ENCHANTED_BOOK) {
-            if (!(meta instanceof EnchantmentStorageMeta esm)) return false;
-            if (enchantment == null) return false;
-            return esm.hasStoredEnchant(enchantment) && esm.getStoredEnchantLevel(enchantment) == damage;
-        }
-
-        // ポーション
-        if (MaterialRegistry.POTION_MATERIALS.contains(material)) {
-            if (!(meta instanceof PotionMeta pm)) return false;
-            return potionType != null && potionType.equals(pm.getBasePotionType());
-        }
-
-        // 白バナー（レイドバナー）
-        if (material == Material.WHITE_BANNER && damage == 8) {
-            if (!(meta instanceof BannerMeta bm)) return false;
-            BannerMeta ominous = StorageSignPlugin.getOminousBannerMeta();
-            if (ominous != null && bm.equals(ominous)) return true;
-            // テンプレート生成が縮退中でも、標準レジストリキーの8模様なら受け入れる。
-            return StorageSignPlugin.isOminousBannerMeta(bm);
-        }
-
-        // 看板アイテム: damage=1 のときは看板マテリアルのみ対象とし、ダメージ値が偶然
-        // 1 になるツール・防具・STONE_SLAB 等との誤検出を防ぐ。
-        if (damage == DAMAGE_SS_ITEM && MaterialRegistry.SIGN_MATERIALS.contains(material)) {
-            // 旧版の動作: 同種看板の空 StorageSign アイテムのみ受け入れる。
-            StorageSign itemSS = fromItemStack(item);
-            return itemSS != null && itemSS.isUnregistered();
-        }
-
-        // 空のシュルカーボックスはマテリアル等価の空状態で比較する。
-        if (MaterialRegistry.SHULKER_BOX_MATERIALS.contains(material)
-            && meta instanceof BlockStateMeta bsm
-            && bsm.getBlockState() instanceof ShulkerBox shulker
-            && shulker.getInventory().isEmpty()) {
-            item = new ItemStack(item.getType());
-        }
-
-        // 耐久値は ItemStack 実装差に依存せず明示比較する。
-        if (meta instanceof Damageable damageable && damageable.getDamage() != damage) {
-            return false;
-        }
-
-        // 通常アイテム — Bukkit の isSimilar に委譲。
-        // 遅延キャッシュを使い、呼び出しのたびに ItemStack を確保するのを避ける。
         if (cachedReference == null) cachedReference = getContents(1);
-        return cachedReference != null && cachedReference.isSimilar(item);
+        return StorageSignItemCodec.isSimilar(this, item, cachedReference);
     }
 
     /**
@@ -709,206 +355,20 @@ public final class StorageSign {
      * @return amount=0 の新規 StorageSign。保管できないアイテム種別の場合は {@code null}。
      */
     public static StorageSign fromStoredItem(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR) return null;
-        Material mat = item.getType();
-        ItemMeta meta = item.getItemMeta();
-
-        // StorageSign アイテム（sign-in-sign）
-        if (isStorageSign(item) && MaterialRegistry.SIGN_MATERIALS.contains(mat)) {
-            return new StorageSign(mat, DAMAGE_SS_ITEM, 0, null, null, false);
-        }
-
-        // レガシーマーカーアイテム（デフォルト: HorseEgg）→ 仮想識別子のバッキングマテリアル
-        if (mat == LEGACY_MARKER_ITEM_MATERIAL && meta != null && meta.hasLore()) {
-            String markerName = meta.getDisplayName();
-            if (markerName == null || markerName.isBlank()) return null;
-            StorageSign parsed = parseVirtualIdentifier(markerName, 0);
-            if (parsed == null) return null;
-            if (parsed.material != Material.END_PORTAL || parsed.damage != DAMAGE_SS_ITEM) return null;
-            return new StorageSign(Material.END_PORTAL, DAMAGE_SS_ITEM, 0, null, null, false);
-        }
-
-        // 特殊アイテム
-        Short specialDamage = SpecialCaseItemSupport.fromStoredItem(mat, meta);
-        if (specialDamage != null) {
-            return ifExactlyRestorable(item,
-                new StorageSign(mat, specialDamage, 0, null, null, false));
-        }
-
-        // エンチャント本
-        if (mat == Material.ENCHANTED_BOOK && meta instanceof EnchantmentStorageMeta esm) {
-            Map<Enchantment, Integer> stored = esm.getStoredEnchants();
-            if (stored.size() != 1) return null;  // エンチャントが複数付いている本は保管不可
-            Map.Entry<Enchantment, Integer> entry = stored.entrySet().iterator().next();
-            Enchantment ench = entry.getKey();
-            short level = entry.getValue().shortValue();
-            return ifExactlyRestorable(item,
-                new StorageSign(mat, level, 0, null, ench, false));
-        }
-
-        // ポーション
-        if (MaterialRegistry.POTION_MATERIALS.contains(mat) && meta instanceof PotionMeta pm) {
-            if (pm.hasCustomEffects()) return null;
-            PotionType pot = pm.getBasePotionType();
-            short damage = (short) (PotionHelper.getEnhanceCode(pot).charAt(0) - '0');
-            return ifExactlyRestorable(item,
-                new StorageSign(mat, damage, 0, pot, null, false));
-        }
-
-        // 白バナー（レイドバナー）
-        if (mat == Material.WHITE_BANNER) {
-            // WHITE_BANNER でメタ自体を取得できない場合は、無地の白旗として
-            // 誤登録せず fail closed にする。
-            if (!(meta instanceof BannerMeta bm)) return null;
-            if (StorageSignPlugin.isOminousBannerMeta(bm)) {
-                StorageSignPlugin.setOminousBannerMeta((BannerMeta) bm.clone());
-                return new StorageSign(mat, (short) 8, 0, null, null, false);
-            }
-        }
-
-        // 打ち上げ花火（power を damage に保管、power=1 は互換のため 0）
-        if (mat == Material.FIREWORK_ROCKET && meta instanceof FireworkMeta fireworkMeta) {
-            if (!fireworkMeta.getEffects().isEmpty()) return null;
-            int power = fireworkMeta.getPower();
-            short encoded = (short) (power > 1 ? power : DAMAGE_FIREWORK_ZERO);
-            return ifExactlyRestorable(item,
-                new StorageSign(mat, encoded, 0, null, null, false));
-        }
-
-        // シュルカーボックスは中身を識別子へ保存できないため、空のものだけ受け入れる。
-        if (MaterialRegistry.SHULKER_BOX_MATERIALS.contains(mat)) {
-            if (!(meta instanceof BlockStateMeta blockMeta)
-                || !(blockMeta.getBlockState() instanceof ShulkerBox shulker)
-                || !shulker.getInventory().isEmpty()) {
-                return null;
-            }
-        }
-
-        if (MaterialRegistry.BLOCK_ENTITY_DATA_MATERIALS.contains(mat)
-            && meta instanceof BlockStateMeta blockMeta
-            && blockMeta.getBlockState() instanceof Beehive beehive
-            && beehive.getEntityCount() > 0) {
-            return null;
-        }
-
-        // 耐久値を持つ通常アイテム（耐久値を保持する）
-        if (meta instanceof Damageable damageable) {
-            return ifExactlyRestorable(item,
-                new StorageSign(mat, (short) damageable.getDamage(), 0, null, null, false));
-        }
-
-        // その他の通常アイテム
-        return ifExactlyRestorable(item,
-            new StorageSign(mat, (short) 0, 0, null, null, false));
-    }
-
-    /** 保存形式から完全に復元できない ItemMeta を fail closed で拒否する。 */
-    private static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
-        ItemMeta originalMeta = original.getItemMeta();
-        if (originalMeta != null
-            && (originalMeta.hasDisplayName() || originalMeta.hasLore()
-                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty())) {
-            return null;
-        }
-        ItemStack restored = candidate.getContents(1);
-        if (restored == null) return null;
-        ItemStack one = original.clone();
-        one.setAmount(1);
-        return restored.isSimilar(one) ? candidate : null;
-    }
-
-    private static ItemStack createLegacyMarkerItem(int amount, String markerName) {
-        ItemStack markerItem = new ItemStack(LEGACY_MARKER_ITEM_MATERIAL, Math.max(1, amount));
-        ItemMeta meta = markerItem.getItemMeta();
-        if (meta == null) return markerItem;
-        meta.setDisplayName(markerName);
-        meta.setLore(List.of(EMPTY_MARKER));
-        markerItem.setItemMeta(meta);
-        return markerItem;
-    }
-
-    private static StorageSign parseVirtualIdentifier(String identifier, int amount) {
-        String spec = ConfigLoader.getVirtualItemIdentifiers().get(identifier);
-        if (spec == null) {
-            spec = DEFAULT_VIRTUAL_IDENTIFIERS.get(identifier);
-        }
-        if (spec == null || spec.isBlank()) return null;
-
-        String[] specParts = spec.split(":", 2);
-        String materialToken = specParts[0].trim();
-        Material specMaterial = Material.matchMaterial(materialToken);
-        if (specMaterial == null) return null;
-
-        short specDamage = 0;
-        if (specParts.length >= 2) {
-            try {
-                specDamage = Short.parseShort(specParts[1].trim());
-            } catch (NumberFormatException ignored) {
-                specDamage = 0;
-            }
-        }
-
-        return new StorageSign(specMaterial, specDamage, amount, null, null, false);
-    }
-
-    private static Material resolveMaterialFromIdentifierToken(String token) {
-        if (token == null || token.isBlank()) return null;
-
-        String normalized = token.trim().toUpperCase();
-
-        String configuredAlias = ConfigLoader.getIdentifierAliases().get(normalized);
-        if (configuredAlias == null) {
-            configuredAlias = ConfigLoader.getIdentifierAliases().get(token.trim());
-        }
-        if (configuredAlias != null && !configuredAlias.isBlank()) {
-            Material configured = Material.matchMaterial(configuredAlias.trim());
-            if (configured != null) return configured;
-        }
-
-        String defaultAlias = DEFAULT_IDENTIFIER_ALIASES.get(normalized);
-        if (defaultAlias != null) {
-            Material legacy = Material.matchMaterial(defaultAlias);
-            if (legacy != null) return legacy;
-        }
-
-        return Material.matchMaterial(normalized);
-    }
-
-    private static String resolveVirtualIdentifier(Material material, short damage) {
-        for (Entry<String, String> entry : ConfigLoader.getVirtualItemIdentifiers().entrySet()) {
-            if (matchesVirtualSpec(material, damage, entry.getValue())) {
-                return entry.getKey();
-            }
-        }
-
-        for (Entry<String, String> entry : DEFAULT_VIRTUAL_IDENTIFIERS.entrySet()) {
-            if (matchesVirtualSpec(material, damage, entry.getValue())) {
-                return entry.getKey();
-            }
-        }
-        return null;
-    }
-
-    private static boolean matchesVirtualSpec(Material material, short damage, String spec) {
-        if (spec == null || spec.isBlank()) return false;
-        String[] specParts = spec.split(":", 2);
-        Material specMaterial = Material.matchMaterial(specParts[0].trim());
-        if (specMaterial == null || specMaterial != material) return false;
-
-        short specDamage = 0;
-        if (specParts.length >= 2) {
-            try {
-                specDamage = Short.parseShort(specParts[1].trim());
-            } catch (NumberFormatException ignored) {
-                specDamage = 0;
-            }
-        }
-        return specDamage == damage;
+        return StorageSignItemCodec.fromStoredItem(item);
     }
 
     @Override
     public String toString() {
         return "StorageSign{material=" + material + ", damage=" + damage
                + ", amount=" + amount + ", identifier=" + getIdentifier() + "}";
+    }
+
+    static NamespacedKey potionIdentifierKey() {
+        return POTION_IDENTIFIER_KEY;
+    }
+
+    static NamespacedKey canonicalPotionIdentifierKey() {
+        return CANONICAL_IDENTIFIER_KEY;
     }
 }
