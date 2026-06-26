@@ -225,7 +225,7 @@ final class StorageSignIdentifierCodec {
         }
     }
 
-    private static boolean matchesVirtualSpec(Material material, short damage, String spec) {
+    static boolean matchesVirtualSpec(Material material, short damage, String spec) {
         if (spec == null || spec.isBlank()) return false;
         String[] specParts = spec.split(":", 2);
         Material specMaterial = Material.matchMaterial(specParts[0].trim());

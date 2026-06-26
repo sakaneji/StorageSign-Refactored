@@ -1,8 +1,6 @@
 package storagesign;
 
-import java.util.List;
 import java.util.Map;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
@@ -11,14 +9,12 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionType;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.block.sign.Side;
 
 import storagesign.compat.SignDisplayFormatter;
 import storagesign.item.PotionHelper;
 import storagesign.registry.LegacyNameRegistry;
 import storagesign.registry.MaterialRegistry;
-import storagesign.event.StorageSignUpdatedEvent;
 import storagesign.logging.PluginLogger;
 
 /**
@@ -351,52 +347,19 @@ public final class StorageSign {
     }
 
     private static boolean matchesVirtualSpec(Material material, short damage, String spec) {
-        if (spec == null || spec.isBlank()) return false;
-        String[] specParts = spec.split(":", 2);
-        Material specMaterial = Material.matchMaterial(specParts[0].trim());
-        if (specMaterial == null || specMaterial != material) return false;
-
-        short specDamage = 0;
-        if (specParts.length >= 2) {
-            try {
-                specDamage = Short.parseShort(specParts[1].trim());
-            } catch (NumberFormatException ignored) {
-                specDamage = 0;
-            }
-        }
-        return specDamage == damage;
+        return StorageSignIdentifierCodec.matchesVirtualSpec(material, damage, spec);
     }
 
     private static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
-        ItemMeta originalMeta = original.getItemMeta();
-        if (originalMeta != null
-            && (originalMeta.hasDisplayName() || originalMeta.hasLore()
-                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty())) {
-            return null;
-        }
-        ItemStack restored = candidate.getContents(1);
-        if (restored == null) return null;
-        ItemStack one = original.clone();
-        one.setAmount(1);
-        return restored.isSimilar(one) ? candidate : null;
+        return StorageSignItemCodec.ifExactlyRestorable(original, candidate);
     }
 
     private static ItemStack createLegacyMarkerItem(int amount, String markerName) {
-        ItemStack markerItem = new ItemStack(LEGACY_MARKER_ITEM_MATERIAL, Math.max(1, amount));
-        ItemMeta meta = markerItem.getItemMeta();
-        if (meta == null) return markerItem;
-        meta.setDisplayName(markerName);
-        meta.setLore(List.of(EMPTY_MARKER));
-        markerItem.setItemMeta(meta);
-        return markerItem;
+        return StorageSignItemCodec.createLegacyMarkerItem(amount, markerName);
     }
 
     private static void applyConfiguredMaxStack(ItemMeta meta) {
-        if (SET_MAX_STACK_SIZE == null) return;
-        int configured = Math.max(1, ConfigLoader.getMaxStackSize());
-        try {
-            SET_MAX_STACK_SIZE.invoke(meta, (Integer) configured);
-        } catch (Throwable ignored) {}
+        StorageSignItemCodec.applyConfiguredMaxStack(meta);
     }
 
     @Override

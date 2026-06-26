@@ -1,11 +1,9 @@
 package storagesign;
 
 import java.util.List;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Beehive;
 import org.bukkit.block.ShulkerBox;
-import org.bukkit.block.Sign;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BannerMeta;
@@ -254,7 +252,7 @@ final class StorageSignItemCodec {
         return ifExactlyRestorable(item, new StorageSign(mat, (short) 0, 0, null, null, false));
     }
 
-    private static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
+    static StorageSign ifExactlyRestorable(ItemStack original, StorageSign candidate) {
         ItemMeta originalMeta = original.getItemMeta();
         if (originalMeta != null
             && (originalMeta.hasDisplayName() || originalMeta.hasLore()
@@ -268,7 +266,7 @@ final class StorageSignItemCodec {
         return restored.isSimilar(one) ? candidate : null;
     }
 
-    private static ItemStack createLegacyMarkerItem(int amount, String markerName) {
+    static ItemStack createLegacyMarkerItem(int amount, String markerName) {
         ItemStack markerItem = new ItemStack(StorageSign.LEGACY_MARKER_ITEM_MATERIAL, Math.max(1, amount));
         ItemMeta meta = markerItem.getItemMeta();
         if (meta == null) return markerItem;
@@ -278,7 +276,7 @@ final class StorageSignItemCodec {
         return markerItem;
     }
 
-    private static void applyConfiguredMaxStack(ItemMeta meta) {
+    static void applyConfiguredMaxStack(ItemMeta meta) {
         if (StorageSign.SET_MAX_STACK_SIZE == null) return;
         int configured = Math.max(1, ConfigLoader.getMaxStackSize());
         try {
