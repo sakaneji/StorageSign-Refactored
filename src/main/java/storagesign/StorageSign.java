@@ -277,35 +277,7 @@ public final class StorageSign {
      * この StorageSign のデータを既存の看板ブロックに書き込む。
      */
     public void applyToSign(Sign sign) {
-        // getSignLines() をインライン展開し、看板書き込みのたびに String[] を確保しない。
-        String identifier = getDisplayIdentifier();
-        int lc = amount / 3456;
-        int rem = amount % 3456;
-        int stacks = rem / 64;
-        int singles = rem % 64;
-        var front = sign.getSide(Side.FRONT);
-        front.setLine(0, HEADER_LINE);
-        front.setLine(1, identifier);
-        front.setLine(2, String.valueOf(amount));
-        front.setLine(3, lc + "LC " + stacks + "s " + singles);
-        if (unregistered) {
-            sign.getPersistentDataContainer().remove(CANONICAL_IDENTIFIER_KEY);
-        } else {
-            sign.getPersistentDataContainer().set(
-                CANONICAL_IDENTIFIER_KEY, PersistentDataType.STRING, getIdentifier());
-        }
-        String canonical = getCanonicalPotionIdentifier();
-        if (canonical == null) {
-            sign.getPersistentDataContainer().remove(POTION_IDENTIFIER_KEY);
-        } else {
-            sign.getPersistentDataContainer().set(
-                POTION_IDENTIFIER_KEY, PersistentDataType.STRING, canonical);
-        }
-        sign.update();
-        if (Bukkit.getServer() != null) {
-            Bukkit.getPluginManager().callEvent(
-                new StorageSignUpdatedEvent(sign, unregistered ? "" : getIdentifier(), amount, !unregistered));
-        }
+        StorageSignBlockWriter.applyToSign(this, sign);
     }
 
     /**
