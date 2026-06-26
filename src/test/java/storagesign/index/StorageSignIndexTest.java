@@ -865,14 +865,17 @@ class StorageSignIndexTest {
         world.getChunkAt(0, 0).load();
         createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
-        Method enqueue = StorageSignIndex.class.getDeclaredMethod("enqueueChunkRescan", org.bukkit.Chunk.class);
+        Field schedulerField = StorageSignIndex.class.getDeclaredField("chunkRescanScheduler");
+        schedulerField.setAccessible(true);
+        Object scheduler = schedulerField.get(index);
+        Method enqueue = scheduler.getClass().getDeclaredMethod("enqueue", org.bukkit.Chunk.class);
         enqueue.setAccessible(true);
-        Method process = StorageSignIndex.class.getDeclaredMethod("processChunkRescanQueue");
+        Method process = scheduler.getClass().getDeclaredMethod("process");
         process.setAccessible(true);
 
-        enqueue.invoke(index, world.getChunkAt(0, 0));
+        enqueue.invoke(scheduler, world.getChunkAt(0, 0));
         assertEquals(1, pendingChunkRescanCount(index));
-        process.invoke(index);
+        process.invoke(scheduler);
 
         assertEquals(1, index.size());
     }
@@ -899,8 +902,11 @@ class StorageSignIndexTest {
     }
 
     private static int pendingChunkRescanCount(StorageSignIndex index) throws Exception {
-        Field field = StorageSignIndex.class.getDeclaredField("chunkRescanQueue");
+        Field field = StorageSignIndex.class.getDeclaredField("chunkRescanScheduler");
         field.setAccessible(true);
-        return ((java.util.ArrayDeque<?>) field.get(index)).size();
+        Object scheduler = field.get(index);
+        Method size = scheduler.getClass().getDeclaredMethod("size");
+        size.setAccessible(true);
+        return (Integer) size.invoke(scheduler);
     }
 }

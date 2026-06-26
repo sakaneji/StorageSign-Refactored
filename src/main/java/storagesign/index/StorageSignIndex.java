@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,10 +54,8 @@ public final class StorageSignIndex implements Listener {
     private final Map<String, Set<StorageSignPosition>> byIdentifier = new HashMap<>();
     private final Map<UUID, Long> structureRevisions = new HashMap<>();
     private final Map<UUID, Long> contentRevisions = new HashMap<>();
-    private final ArrayDeque<ChunkRescanRequest> chunkRescanQueue = new ArrayDeque<>();
-    private final Set<ChunkRescanRequest> chunkRescanQueued = new HashSet<>();
+    private final StorageSignChunkRescanScheduler chunkRescanScheduler;
     private BukkitTask rebuildTask;
-    private BukkitTask chunkRescanTask;
     private int rebuildRemaining;
     private volatile boolean saving;
     private volatile long lastSavedAt;
@@ -70,6 +67,9 @@ public final class StorageSignIndex implements Listener {
     public StorageSignIndex(StorageSignPlugin plugin, boolean enabled) {
         this.plugin = plugin;
         this.enabled = enabled;
+        this.chunkRescanScheduler = new StorageSignChunkRescanScheduler(
+            plugin, () -> this.enabled, ConfigLoader::getIndexChunksPerTick,
+            ConfigLoader::getIndexChunkRescanQueueCap, this::scanChunk);
     }
 
     public boolean isEnabled() { return enabled; }
@@ -212,7 +212,7 @@ public final class StorageSignIndex implements Listener {
         Path path = indexPath();
         long started = System.nanoTime();
         try {
-            clearChunkRescanQueue();
+            chunkRescanScheduler.clear();
             List<IndexedStorageSign> loaded = codec.read(path);
             clearEntries();
             for (IndexedStorageSign entry : loaded) putLoaded(entry);
@@ -261,7 +261,7 @@ public final class StorageSignIndex implements Listener {
     public boolean rebuild(Collection<World> worlds, Consumer<RebuildResult> completion) {
         requirePrimaryThread();
         if (!enabled || rebuildTask != null) return false;
-        clearChunkRescanQueue();
+        chunkRescanScheduler.clear();
         ArrayDeque<Chunk> queue = new ArrayDeque<>();
         for (World world : worlds) for (Chunk chunk : world.getLoadedChunks()) queue.add(chunk);
         int total = queue.size();
@@ -291,14 +291,14 @@ public final class StorageSignIndex implements Listener {
         if (rebuildTask != null) rebuildTask.cancel();
         rebuildTask = null;
         rebuildRemaining = 0;
-        clearChunkRescanQueue();
+        chunkRescanScheduler.clear();
         clearEntries();
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkLoad(ChunkLoadEvent event) {
         if (!enabled) return;
-        enqueueChunkRescan(event.getChunk());
+        chunkRescanScheduler.enqueue(event.getChunk());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -329,47 +329,6 @@ public final class StorageSignIndex implements Listener {
         for (BlockState state : chunk.getTileEntities()) {
             if (state instanceof Sign sign) register(sign.getBlock());
         }
-    }
-
-    private void enqueueChunkRescan(Chunk chunk) {
-        requirePrimaryThread();
-        if (!enabled || chunk == null || !chunk.isLoaded()) return;
-        ChunkRescanRequest request = new ChunkRescanRequest(
-            chunk.getWorld().getUID(), chunk.getX(), chunk.getZ());
-        if (!chunkRescanQueued.add(request)) return;
-        if (chunkRescanQueued.size() > ConfigLoader.getIndexChunkRescanQueueCap()) {
-            chunkRescanQueued.remove(request);
-            return;
-        }
-        chunkRescanQueue.addLast(request);
-        startChunkRescanTask();
-    }
-
-    private void startChunkRescanTask() {
-        if (chunkRescanTask != null || chunkRescanQueue.isEmpty()) return;
-        chunkRescanTask = Bukkit.getScheduler().runTaskTimer(plugin, this::processChunkRescanQueue, 1L, 1L);
-    }
-
-    private void processChunkRescanQueue() {
-        int maximum = ConfigLoader.getIndexChunksPerTick();
-        for (int i = 0; i < maximum && !chunkRescanQueue.isEmpty(); i++) {
-            ChunkRescanRequest request = chunkRescanQueue.removeFirst();
-            chunkRescanQueued.remove(request);
-            World world = Bukkit.getWorld(request.worldId());
-            if (world == null || !world.isChunkLoaded(request.chunkX(), request.chunkZ())) continue;
-            scanChunk(world.getChunkAt(request.chunkX(), request.chunkZ()));
-        }
-        if (!chunkRescanQueue.isEmpty()) return;
-        BukkitTask completed = chunkRescanTask;
-        chunkRescanTask = null;
-        if (completed != null) completed.cancel();
-    }
-
-    private void clearChunkRescanQueue() {
-        if (chunkRescanTask != null) chunkRescanTask.cancel();
-        chunkRescanTask = null;
-        chunkRescanQueue.clear();
-        chunkRescanQueued.clear();
     }
 
     private void removeChunk(UUID worldId, int chunkX, int chunkZ) {
@@ -469,5 +428,4 @@ public final class StorageSignIndex implements Listener {
     public record RebuildResult(int chunksScanned, int countBefore, int countAfter) {}
     public record LoadResult(boolean success, int count, String status) {}
     public record SaveResult(boolean success, int count, long bytes, String message) {}
-    private record ChunkRescanRequest(UUID worldId, int chunkX, int chunkZ) {}
 }
