@@ -268,6 +268,7 @@ python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 | `banner-debug` | `false` | TRACE時にメインハンドで右クリックしたアイテムの生ItemMetaを出力する |
 | `storage-index.enabled` | `true` | ロード済みチャンクのStorageSign位置索引を維持する |
 | `storage-index.rebuild-chunks-per-tick` | `8` | 初回・手動再構築で1tickに走査するチャンク数。0以下なら既定値へ戻す |
+| `storage-index.chunk-rescan-queue-cap` | `512` | チャンク読込時の再スキャン待ちキュー上限。高速移動で大量ロードする環境では増やす |
 | `nearby-display.enabled` | `true` | 停止時に、短縮されるStorageSignの完全な格納識別子を浮遊表示する |
 | `nearby-display.distance` | `3.0` | 前方検索距離。0以下なら既定値へ戻す |
 | `nearby-display.field-of-view-degrees` | `90.0` | 前方検索の視野角。1～360度に丸める |
@@ -292,6 +293,7 @@ python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 - `storage-sign-index.bin` は壊れても本体データを失いません。削除または再構築で復旧できます。
 - プラグイン本体はロード済みチャンクの索引を維持し、保存済み索引の検索・集計・出力は外部 CLI、表示は独立 viewer が担当します。
 - `storage-index.enabled: false` のときは近接表示も自動で無効になります。
+- `storage-index.chunk-rescan-queue-cap` は、移動やテレポートで大量のチャンクが短時間に読み込まれる環境向けの逃げ道です。まずは既定値のままにして、負荷が気になる場合だけ増やしてください。
 - Spigot は製品保証およびリリース試験の対象外です。
 - 26.x は検証保留のため、対応状況は更新時に確認してください。
 

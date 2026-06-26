@@ -144,7 +144,7 @@ class StorageSignIndexTest {
     }
 
     @Test
-    void onChunkLoadScansLoadedChunkAfterSchedulerTick() {
+    void onChunkLoadScansLoadedChunkAfterSchedulerTick() throws Exception {
         var world = server.addSimpleWorld("index-on-chunk-load");
         world.getChunkAt(0, 0).load();
         Block sign = createSign(world.getBlockAt(1, 64, 1), "STONE", 4);
@@ -153,9 +153,40 @@ class StorageSignIndexTest {
         when(event.getChunk()).thenReturn(world.getChunkAt(0, 0));
 
         index.onChunkLoad(event);
+        assertEquals(0, index.size());
+        assertEquals(1, pendingChunkRescanCount(index));
         server.getScheduler().performTicks(3);
 
         assertEquals(1, index.findNearby(sign.getLocation(), 6.0).size());
+        assertEquals(0, pendingChunkRescanCount(index));
+    }
+
+    @Test
+    void chunkRescanQueueDropsEntriesBeyondConfiguredCap() throws Exception {
+        var world = server.addSimpleWorld("index-on-chunk-load-cap");
+        world.getChunkAt(0, 0).load();
+        world.getChunkAt(1, 0).load();
+        createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
+        createSign(world.getBlockAt(17, 64, 1), "DIRT", 1);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        ChunkLoadEvent first = mock(ChunkLoadEvent.class);
+        ChunkLoadEvent second = mock(ChunkLoadEvent.class);
+        when(first.getChunk()).thenReturn(world.getChunkAt(0, 0));
+        when(second.getChunk()).thenReturn(world.getChunkAt(1, 0));
+
+        setStaticInt("indexChunkRescanQueueCap", 1);
+        try {
+            index.onChunkLoad(first);
+            index.onChunkLoad(second);
+            assertEquals(1, pendingChunkRescanCount(index));
+            server.getScheduler().performTicks(3);
+        } finally {
+            setStaticInt("indexChunkRescanQueueCap", 512);
+        }
+
+        assertEquals(1, index.findByIdentifierExact("STONE").size());
+        assertTrue(index.findByIdentifierExact("DIRT").isEmpty());
+        assertEquals(0, pendingChunkRescanCount(index));
     }
 
     @Test
@@ -812,7 +843,7 @@ class StorageSignIndexTest {
     }
 
     @Test
-    void onChunkLoadSchedulesALoadedChunkScan() {
+    void onChunkLoadSchedulesALoadedChunkScan() throws Exception {
         var world = server.addSimpleWorld("index-chunk-load-success");
         world.getChunkAt(0, 0).load();
         createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
@@ -820,16 +851,10 @@ class StorageSignIndexTest {
         ChunkLoadEvent event = mock(ChunkLoadEvent.class);
         when(event.getChunk()).thenReturn(world.getChunkAt(0, 0));
 
-        org.bukkit.scheduler.BukkitScheduler scheduler = mock(org.bukkit.scheduler.BukkitScheduler.class);
-        try (var mocked = Mockito.mockStatic(Bukkit.class)) {
-            mocked.when(Bukkit::getScheduler).thenReturn(scheduler);
-            when(scheduler.runTask(Mockito.eq(plugin), Mockito.any(Runnable.class)))
-                .thenAnswer(invocation -> {
-                    ((Runnable) invocation.getArgument(1)).run();
-                    return mock(org.bukkit.scheduler.BukkitTask.class);
-                });
-            index.onChunkLoad(event);
-        }
+        index.onChunkLoad(event);
+        assertEquals(1, pendingChunkRescanCount(index));
+        assertEquals(0, index.size());
+        server.getScheduler().performTicks(3);
 
         assertEquals(1, index.size());
     }
@@ -840,17 +865,14 @@ class StorageSignIndexTest {
         world.getChunkAt(0, 0).load();
         createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
         StorageSignIndex index = new StorageSignIndex(plugin, true);
-        ChunkLoadEvent event = mock(ChunkLoadEvent.class);
-        when(event.getChunk()).thenReturn(world.getChunkAt(0, 0));
+        Method enqueue = StorageSignIndex.class.getDeclaredMethod("enqueueChunkRescan", org.bukkit.Chunk.class);
+        enqueue.setAccessible(true);
+        Method process = StorageSignIndex.class.getDeclaredMethod("processChunkRescanQueue");
+        process.setAccessible(true);
 
-        for (Method method : StorageSignIndex.class.getDeclaredMethods()) {
-            if (!method.getName().contains("lambda$onChunkLoad")) continue;
-            method.setAccessible(true);
-            if (method.getParameterCount() == 1) {
-                method.invoke(index, event);
-                break;
-            }
-        }
+        enqueue.invoke(index, world.getChunkAt(0, 0));
+        assertEquals(1, pendingChunkRescanCount(index));
+        process.invoke(index);
 
         assertEquals(1, index.size());
     }
@@ -874,5 +896,11 @@ class StorageSignIndexTest {
         Field field = ConfigLoader.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.setInt(null, value);
+    }
+
+    private static int pendingChunkRescanCount(StorageSignIndex index) throws Exception {
+        Field field = StorageSignIndex.class.getDeclaredField("chunkRescanQueue");
+        field.setAccessible(true);
+        return ((java.util.ArrayDeque<?>) field.get(index)).size();
     }
 }

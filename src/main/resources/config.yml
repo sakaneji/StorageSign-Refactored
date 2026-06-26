@@ -44,6 +44,7 @@ banner-debug: false
 storage-index:
   enabled: true
   rebuild-chunks-per-tick: 8
+  chunk-rescan-queue-cap: 512
 
 # Show full stored identifiers near players after they stop moving and looking around,
 # but only when the sign label would otherwise be shortened.

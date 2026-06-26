@@ -47,6 +47,7 @@ class ConfigLoaderTest {
         when(config.getBoolean("banner-debug", false)).thenReturn(true);
         when(config.getBoolean("storage-index.enabled", true)).thenReturn(false);
         when(config.getInt("storage-index.rebuild-chunks-per-tick", 8)).thenReturn(4);
+        when(config.getInt("storage-index.chunk-rescan-queue-cap", 512)).thenReturn(256);
         when(config.getBoolean("nearby-display.enabled", true)).thenReturn(true);
         when(config.getDouble("nearby-display.distance", 3.0)).thenReturn(8.0);
         when(config.getDouble("nearby-display.field-of-view-degrees", 90.0)).thenReturn(120.0);
@@ -84,6 +85,7 @@ class ConfigLoaderTest {
         assertTrue(ConfigLoader.getBannerDebug());
         assertFalse(ConfigLoader.getStorageIndexEnabled());
         assertEquals(4, ConfigLoader.getIndexChunksPerTick());
+        assertEquals(256, ConfigLoader.getIndexChunkRescanQueueCap());
         assertTrue(ConfigLoader.getNearbyDisplayEnabled());
         assertFalse(ConfigLoader.getEffectiveNearbyDisplayEnabled());
         assertEquals(8.0, ConfigLoader.getNearbyDisplayDistance());
@@ -127,6 +129,7 @@ class ConfigLoaderTest {
         when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
         when(config.getConfigurationSection("virtual-item-identifiers")).thenReturn(null);
         when(config.getInt("storage-index.rebuild-chunks-per-tick", 8)).thenReturn(0);
+        when(config.getInt("storage-index.chunk-rescan-queue-cap", 512)).thenReturn(0);
         when(config.getBoolean("storage-index.enabled", true)).thenReturn(true);
         when(config.getBoolean("nearby-display.enabled", true)).thenReturn(true);
         when(config.getDouble("nearby-display.distance", 3.0)).thenReturn(-1.0);
@@ -142,6 +145,7 @@ class ConfigLoaderTest {
         ConfigLoader.load(plugin);
 
         assertEquals(8, ConfigLoader.getIndexChunksPerTick());
+        assertEquals(512, ConfigLoader.getIndexChunkRescanQueueCap());
         assertEquals(3.0, ConfigLoader.getNearbyDisplayDistance());
         assertEquals(1.0, ConfigLoader.getNearbyDisplayFov());
         assertEquals(10, ConfigLoader.getNearbyDisplayIdleTicks());
