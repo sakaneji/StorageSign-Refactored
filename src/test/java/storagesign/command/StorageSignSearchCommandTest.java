@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,11 +15,13 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.UUID;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import storagesign.ConfigLoader;
 import storagesign.StorageSignPlugin;
@@ -199,6 +203,72 @@ class StorageSignSearchCommandTest {
             assertTrue((Boolean) contains.invoke(parsed));
             assertEquals(world.getUID(), worldId.invoke(parsed));
             assertEquals(2, page.invoke(parsed));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void parseRejectsConflictingCoordinateModes() throws Exception {
+        ServerMock server = MockBukkit.mock();
+        try {
+            CommandSender sender = mock(CommandSender.class);
+            StorageSignSearchCommand command = new StorageSignSearchCommand(
+                new StorageSignIndex(null, true), new StorageSignQueryService(null, new StorageSignIndex(null, true)));
+            Method parse = StorageSignSearchCommand.class.getDeclaredMethod(
+                "parse", CommandSender.class, String[].class);
+            parse.setAccessible(true);
+
+            Object parsed = parse.invoke(command, sender, new String[] {"item", "STONE", "--coords", "--front"});
+
+            assertTrue(parsed == null);
+            verify(sender).sendMessage(contains("cannot be combined"));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void coordinateModesUseThePublicCommandPathWithoutSummary() {
+        ServerMock server = MockBukkit.mock();
+        try {
+            var world = server.addSimpleWorld("search-path");
+            CommandSender coordsSender = mock(CommandSender.class);
+            CommandSender frontSender = mock(CommandSender.class);
+            when(coordsSender.hasPermission("storagesign.search.admin")).thenReturn(true);
+            when(frontSender.hasPermission("storagesign.search.admin")).thenReturn(true);
+
+            StorageSignIndex index = new StorageSignIndex(null, true);
+            IndexedStorageSign coordsEntry = new IndexedStorageSign(
+                new StorageSignPosition(world.getUID(), 10, 64, -3), "STONE", 2, 1L);
+            IndexedStorageSign frontEntry = new IndexedStorageSign(
+                new StorageSignPosition(world.getUID(), 10, 64, -3), "STONE", 2, 1L, BlockFace.SOUTH);
+            StorageSignSearchResult coordsResult = new StorageSignSearchResult(List.of(coordsEntry), 2);
+            StorageSignSearchResult frontResult = new StorageSignSearchResult(List.of(frontEntry), 2);
+
+            StorageSignQueryService coordsQueries = mock(StorageSignQueryService.class);
+            when(coordsQueries.search(any(), any(), any())).thenReturn(true);
+            StorageSignSearchCommand coordsCommand = new StorageSignSearchCommand(index, coordsQueries);
+            assertTrue(coordsCommand.onCommand(coordsSender, mock(Command.class), "sssearch",
+                new String[] {"item", "STONE", "--coords"}));
+            ArgumentCaptor<java.util.function.Consumer<StorageSignSearchResult>> coordsCaptor =
+                ArgumentCaptor.forClass(java.util.function.Consumer.class);
+            verify(coordsQueries).search(any(), coordsCaptor.capture(), any());
+            coordsCaptor.getValue().accept(coordsResult);
+            verify(coordsSender, never()).sendMessage(contains("matches="));
+            verify(coordsSender).sendMessage(contains("|10|64|-3"));
+
+            StorageSignQueryService frontQueries = mock(StorageSignQueryService.class);
+            when(frontQueries.search(any(), any(), any())).thenReturn(true);
+            StorageSignSearchCommand frontCommand = new StorageSignSearchCommand(index, frontQueries);
+            assertTrue(frontCommand.onCommand(frontSender, mock(Command.class), "sssearch",
+                new String[] {"item", "STONE", "--front"}));
+            ArgumentCaptor<java.util.function.Consumer<StorageSignSearchResult>> frontCaptor =
+                ArgumentCaptor.forClass(java.util.function.Consumer.class);
+            verify(frontQueries).search(any(), frontCaptor.capture(), any());
+            frontCaptor.getValue().accept(frontResult);
+            verify(frontSender, never()).sendMessage(contains("matches="));
+            verify(frontSender).sendMessage(contains("|10|64|-2"));
         } finally {
             MockBukkit.unmock();
         }

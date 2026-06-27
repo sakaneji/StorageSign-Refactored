@@ -18,6 +18,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Sign;
@@ -33,6 +34,7 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import storagesign.ConfigLoader;
 import storagesign.StorageSign;
+import storagesign.StorageSignFacingSupport;
 import storagesign.StorageSignPlugin;
 import storagesign.event.StorageSignUpdatedEvent;
 import storagesign.logging.PluginLogger;
@@ -156,14 +158,22 @@ public final class StorageSignIndex implements Listener {
         if (!enabled || block == null) return;
         StorageSign sign = StorageSign.fromBlock(block);
         if (sign == null || sign.isUnregistered()) return;
+        Sign state = block.getState() instanceof Sign signState ? signState : null;
         upsert(new StorageSignPosition(block.getWorld().getUID(), block.getX(), block.getY(), block.getZ()),
-            sign.getIdentifier(), sign.getAmount(), System.currentTimeMillis());
+            sign.getIdentifier(), sign.getAmount(), System.currentTimeMillis(),
+            StorageSignFacingSupport.resolveFrontFacing(state));
     }
 
     public void upsert(StorageSignPosition position, String identifier, int amount, long verifiedAt) {
+        upsert(position, identifier, amount, verifiedAt, null);
+    }
+
+    public void upsert(StorageSignPosition position, String identifier, int amount, long verifiedAt,
+                       BlockFace frontFacing) {
         requirePrimaryThread();
         if (!enabled || position == null || identifier == null || identifier.isBlank()) return;
-        IndexedStorageSign replacement = new IndexedStorageSign(position, identifier, Math.max(0, amount), verifiedAt);
+        IndexedStorageSign replacement = new IndexedStorageSign(
+            position, identifier, Math.max(0, amount), verifiedAt, frontFacing);
         Map<StorageSignPosition, IndexedStorageSign> bucket = entries
             .computeIfAbsent(position.worldId(), ignored -> new HashMap<>())
             .computeIfAbsent(position.chunkKey(), ignored -> new HashMap<>());
@@ -316,7 +326,8 @@ public final class StorageSignIndex implements Listener {
             return;
         }
         upsert(new StorageSignPosition(sign.getWorld().getUID(), sign.getX(), sign.getY(), sign.getZ()),
-            event.getIdentifier(), event.getAmount(), System.currentTimeMillis());
+            event.getIdentifier(), event.getAmount(), System.currentTimeMillis(),
+            StorageSignFacingSupport.resolveFrontFacing(sign));
     }
 
     private void scanChunk(Chunk chunk) {

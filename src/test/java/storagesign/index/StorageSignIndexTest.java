@@ -25,6 +25,8 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Directional;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -473,7 +475,14 @@ class StorageSignIndexTest {
         Path file = plugin.getDataFolder().toPath().resolve("storage-sign-index.bin");
         Files.deleteIfExists(file);
         StorageSignIndex writer = new StorageSignIndex(plugin, true);
-        writer.upsert(new StorageSignPosition(world.getUID(), -4, 70, 9), "STONE", 123, 456L);
+        Block block = world.getBlockAt(-4, 70, 9);
+        block.setType(Material.OAK_WALL_SIGN);
+        Directional data = (Directional) block.getBlockData();
+        data.setFacing(BlockFace.SOUTH);
+        block.setBlockData(data);
+        StorageSign.fromSignLines(new String[] {StorageSign.HEADER_LINE, "STONE", "123"}).applyToSign(
+            (Sign) block.getState());
+        writer.register(block);
 
         StorageSignIndex.SaveResult saved = writer.saveSync();
         StorageSignIndex reader = new StorageSignIndex(plugin, true);
@@ -484,6 +493,7 @@ class StorageSignIndexTest {
         assertTrue(loaded.success());
         assertEquals(1, loaded.count());
         assertEquals(123, reader.findByIdentifierExact("stone").getFirst().amount());
+        assertEquals(BlockFace.NORTH, reader.findByIdentifierExact("stone").getFirst().frontFacing());
     }
 
     @Test

@@ -213,10 +213,12 @@ World名を指定してください。0以下の設定値は既定値へ戻し�
 /storagesignsearch item STONE
 /storagesignsearch item POTION --contains
 /storagesignsearch item STONE --world world --page 2
+/storagesignsearch item STONE --coords
+/storagesignsearch item STONE --front
 ```
 
-通常は大文字小文字を無視した完全一致、`--contains`指定時は部分一致です。結果は10件ずつ、
-World、座標、数量、ロード状態とともに表示します。結果順は `World UUID -> X -> Y -> Z` の昇順で、`--page` は 1 始まりです。`--world` は現在ロード中のWorld名のみ受け付けます。
+通常は大文字小文字を無視した完全一致、`--contains`指定時は部分一致です。`--coords` は `world|x|y|z`、`--front` は `world|frontX|frontY|frontZ` 形式で返し、Skript で `split("|")` しやすい形にしています。結果は10件ずつ、
+通常表示では World、座標、数量、ロード状態とともに表示します。結果順は `World UUID -> X -> Y -> Z` の昇順で、`--page` は 1 始まりです。`--world` は現在ロード中のWorld名のみ受け付けます。
 
 #### 保存済み索引CLI・ビューア
 
