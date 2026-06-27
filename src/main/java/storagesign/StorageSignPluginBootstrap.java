@@ -36,12 +36,16 @@ final class StorageSignPluginBootstrap {
         plugin.registerRecipes();
         plugin.registerListeners();
 
+        StorageSignCommandTabCompleter tabCompleter = new StorageSignCommandTabCompleter();
         plugin.getCommand("storagesigngive").setExecutor(new SsGiveCommand());
+        plugin.getCommand("storagesigngive").setTabCompleter(tabCompleter);
         plugin.getCommand("storagesignindex").setExecutor(new StorageSignIndexCommand(storageSignIndex));
+        plugin.getCommand("storagesignindex").setTabCompleter(tabCompleter);
         StorageSignQueryService storageSignQueries = new StorageSignQueryService(plugin, storageSignIndex);
         plugin.setStorageSignQueries(storageSignQueries);
         plugin.getCommand("storagesignsearch").setExecutor(
             new StorageSignSearchCommand(storageSignIndex, storageSignQueries));
+        plugin.getCommand("storagesignsearch").setTabCompleter(tabCompleter);
 
         NearbyStorageSignDisplay nearbyStorageSignDisplay = new NearbyStorageSignDisplay(plugin, storageSignIndex);
         plugin.setNearbyStorageSignDisplay(nearbyStorageSignDisplay);
