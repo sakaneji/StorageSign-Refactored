@@ -145,6 +145,48 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
+    void viewChangeStillAllowsRescanWhilePositionIsStable() {
+        var world = server.addSimpleWorld("view-rescan-display");
+        world.getChunkAt(0, 0).load();
+        Block frontBlock = world.getBlockAt(0, 65, 2);
+        frontBlock.setType(Material.OAK_SIGN);
+        Sign frontSign = (Sign) frontBlock.getState();
+        String frontIdentifier = LONG_IDENTIFIER;
+        StorageSign.fromSignLines(new String[] {"StorageSign", frontIdentifier, "12"}).applyToSign(frontSign);
+
+        Block sideBlock = world.getBlockAt(2, 65, 0);
+        sideBlock.setType(Material.OAK_SIGN);
+        Sign sideSign = (Sign) sideBlock.getState();
+        String sideIdentifier = "SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE";
+        StorageSign.fromSignLines(new String[] {"StorageSign", sideIdentifier, "13"}).applyToSign(sideSign);
+
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(frontBlock);
+        index.register(sideBlock);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+
+        try {
+            display.start();
+            server.getScheduler().performTicks(16);
+            assertEquals(1, display.activeLabelCount());
+            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            assertEquals(NearbyStorageSignDisplay.wrap(frontIdentifier), label.getText());
+
+            player.teleport(new Location(world, 0.5, 64, 0.5, 90, 0));
+            server.getScheduler().performTicks(6);
+
+            assertEquals(1, display.activeLabelCount());
+            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            assertEquals(NearbyStorageSignDisplay.wrap(sideIdentifier), label.getText());
+        } finally {
+            display.shutdown();
+        }
+    }
+
+    @Test
     void longIdentifierLabelStaysVisibleAfterViewChangeUntilNextRescan() {
         var world = server.addSimpleWorld("view-change-display");
         world.getChunkAt(0, 0).load();
@@ -547,6 +589,7 @@ class NearbyStorageSignDisplayIntegrationTest {
 
         assertTrue(((java.util.Set<?>) getField(state, "visible")).isEmpty());
         assertFalse((boolean) getField(state, "searched"));
+        assertTrue((boolean) getField(state, "needsRescan"));
         assertTrue(((java.util.Set<?>) getField(label, "viewers")).isEmpty());
         verify(textDisplay).remove();
         assertEquals(1, ((java.util.ArrayDeque<?>) getField(display, "searchQueue")).size());

@@ -117,10 +117,7 @@ public final class NearbyStorageSignDisplay {
             }
 
             boolean idle = state.positionStableTicks >= ConfigLoader.getNearbyDisplayIdleTicks();
-            boolean viewSettled = state.visible.isEmpty()
-                || !state.needsRescan
-                || state.viewStableTicks >= ConfigLoader.getNearbyDisplayIdleTicks();
-            if (!state.searched && state.needsRescan && idle && viewSettled) {
+            if (!state.searched && state.needsRescan && idle) {
                 enqueue(player.getUniqueId());
             }
         }
@@ -300,6 +297,7 @@ public final class NearbyStorageSignDisplay {
             state.visible.remove(position);
             if (rescanViewers) {
                 state.searched = false;
+                state.needsRescan = true;
                 enqueue(viewer);
             }
         }
