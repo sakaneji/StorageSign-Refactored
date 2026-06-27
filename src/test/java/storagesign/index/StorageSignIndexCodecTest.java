@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.zip.CRC32;
+import org.bukkit.block.BlockFace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
@@ -33,7 +34,7 @@ class StorageSignIndexCodecTest {
         UUID secondWorld = UUID.randomUUID();
         List<IndexedStorageSign> expected = List.of(
             new IndexedStorageSign(new StorageSignPosition(firstWorld, -123, -64, 456),
-                "NETHERITE_UPGRADE_SMITHING_TEMPLATE", Integer.MAX_VALUE, 123456789L),
+                "NETHERITE_UPGRADE_SMITHING_TEMPLATE", Integer.MAX_VALUE, 123456789L, BlockFace.SOUTH),
             new IndexedStorageSign(new StorageSignPosition(secondWorld, 0, 319, 0),
                 "STONE", 0, 987654321L));
         Path file = temporary.resolve("storage-sign-index.bin");
@@ -67,53 +68,53 @@ class StorageSignIndexCodecTest {
     @Test
     void rejectsInvalidMagicVersionCountIdentifierUtf8AndTrailingData() throws Exception {
         StorageSignIndexCodec codec = new StorageSignIndexCodec();
-        assertRejected(codec, payload(0, 1, 0), "magic");
-        assertRejected(codec, payload(0x53534958, 2, 0), "version");
-        assertRejected(codec, payload(0x53534958, 1, -1), "count");
-        assertRejected(codec, payload(0x53534958, 1, 10_000_001), "count");
-        assertRejected(codec, payload(0x53534958, 1, 1), "count");
+        assertRejected(codec, payload(0, 2, 0), "magic");
+        assertRejected(codec, payload(0x53534958, 3, 0), "version");
+        assertRejected(codec, payload(0x53534958, 2, -1), "count");
+        assertRejected(codec, payload(0x53534958, 2, 10_000_001), "count");
+        assertRejected(codec, payload(0x53534958, 2, 1), "count");
 
-        ByteArrayOutputStream trailing = payload(0x53534958, 1, 0);
+        ByteArrayOutputStream trailing = payload(0x53534958, 2, 0);
         trailing.write(1);
         assertRejected(codec, trailing, "trailing");
 
-        ByteArrayOutputStream invalidUtf8 = payload(0x53534958, 1, 1);
+        ByteArrayOutputStream invalidUtf8 = payload(0x53534958, 2, 1);
         try (DataOutputStream output = new DataOutputStream(invalidUtf8)) {
             output.writeLong(0); output.writeLong(0);
             output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
-            output.writeLong(0); output.writeInt(1); output.writeByte(0xff);
+            output.writeLong(0); output.writeBoolean(false); output.writeInt(1); output.writeByte(0xff);
         }
         assertRejected(codec, invalidUtf8, "UTF-8");
 
-        ByteArrayOutputStream invalidIdentifierLength = payload(0x53534958, 1, 1);
+        ByteArrayOutputStream invalidIdentifierLength = payload(0x53534958, 2, 1);
         try (DataOutputStream output = new DataOutputStream(invalidIdentifierLength)) {
             output.writeLong(0); output.writeLong(0);
             output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
-            output.writeLong(0); output.writeInt(65_537); output.writeByte(0);
+            output.writeLong(0); output.writeBoolean(false); output.writeInt(65_537); output.writeByte(0);
         }
         assertRejected(codec, invalidIdentifierLength, "Invalid identifier length");
 
-        ByteArrayOutputStream missingIdentifierBytes = payload(0x53534958, 1, 1);
+        ByteArrayOutputStream missingIdentifierBytes = payload(0x53534958, 2, 1);
         try (DataOutputStream output = new DataOutputStream(missingIdentifierBytes)) {
             output.writeLong(0); output.writeLong(0);
             output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
-            output.writeLong(0); output.writeInt(2); output.writeByte(0);
+            output.writeLong(0); output.writeBoolean(false); output.writeInt(2); output.writeByte(0);
         }
         assertRejected(codec, missingIdentifierBytes, "Invalid identifier length");
 
-        ByteArrayOutputStream emptyIdentifier = payload(0x53534958, 1, 1);
+        ByteArrayOutputStream emptyIdentifier = payload(0x53534958, 2, 1);
         try (DataOutputStream output = new DataOutputStream(emptyIdentifier)) {
             output.writeLong(0); output.writeLong(0);
             output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(1);
-            output.writeLong(0); output.writeInt(0); output.writeByte(0);
+            output.writeLong(0); output.writeBoolean(false); output.writeInt(0); output.writeByte(0);
         }
         assertRejected(codec, emptyIdentifier, "Invalid identifier length");
 
-        ByteArrayOutputStream negativeAmount = payload(0x53534958, 1, 1);
+        ByteArrayOutputStream negativeAmount = payload(0x53534958, 2, 1);
         try (DataOutputStream output = new DataOutputStream(negativeAmount)) {
             output.writeLong(0); output.writeLong(0);
             output.writeInt(0); output.writeInt(0); output.writeInt(0); output.writeInt(-1);
-            output.writeLong(0); output.writeInt(1); output.writeByte('S');
+            output.writeLong(0); output.writeBoolean(false); output.writeInt(1); output.writeByte('S');
         }
         assertRejected(codec, negativeAmount, "Invalid index entry");
     }

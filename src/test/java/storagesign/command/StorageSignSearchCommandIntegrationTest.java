@@ -2,6 +2,10 @@ package storagesign.command;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.bukkit.Material;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.Sign;
+import org.bukkit.block.data.Directional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -10,6 +14,7 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import storagesign.StorageSignPlugin;
+import storagesign.StorageSign;
 import storagesign.index.StorageSignPosition;
 
 @Tag("integration")
@@ -76,6 +81,37 @@ class StorageSignSearchCommandIntegrationTest {
         assertTrue(server.dispatchCommand(player, "sssearch item STONE --page 2"));
         assertTrue(player.nextMessage().contains("Searching"));
         assertTrue(awaitMessage("does not exist").contains("does not exist"));
+    }
+
+    @Test
+    void coordsAndFrontModesReturnPipeDelimitedLines() throws Exception {
+        var world = server.addSimpleWorld("search-coords");
+        var block = world.getBlockAt(10, 64, 20);
+        block.setType(Material.OAK_WALL_SIGN);
+        Directional data = (Directional) block.getBlockData();
+        data.setFacing(BlockFace.SOUTH);
+        block.setBlockData(data);
+        StorageSign.fromSignLines(new String[] {StorageSign.HEADER_LINE, "STONE", "7"}).applyToSign((Sign) block.getState());
+        plugin.getStorageSignIndex().register(block);
+
+        assertTrue(server.dispatchCommand(player, "sssearch item STONE --coords"));
+        assertTrue(player.nextMessage() == null);
+        assertTrue(awaitMessage("search-coords|10|64|20").equals("search-coords|10|64|20"));
+
+        assertTrue(server.dispatchCommand(player, "sssearch item STONE --front"));
+        assertTrue(player.nextMessage() == null);
+        assertTrue(awaitMessage("search-coords|10|64|19").equals("search-coords|10|64|19"));
+    }
+
+    @Test
+    void frontModeFallsBackToUuidWhenWorldIsMissing() throws Exception {
+        var worldId = java.util.UUID.randomUUID();
+        plugin.getStorageSignIndex().upsert(
+            new StorageSignPosition(worldId, 10, 64, 20), "STONE", 7, 1, BlockFace.SOUTH);
+
+        assertTrue(server.dispatchCommand(player, "sssearch item STONE --front"));
+        assertTrue(player.nextMessage() == null);
+        assertTrue(awaitMessage(worldId.toString() + "|10|64|21").equals(worldId.toString() + "|10|64|21"));
     }
 
     private String awaitMessage(String expected) throws Exception {

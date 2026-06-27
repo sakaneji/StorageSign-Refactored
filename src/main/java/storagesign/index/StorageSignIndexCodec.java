@@ -16,10 +16,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.zip.CRC32;
+import org.bukkit.block.BlockFace;
 
 /** Versioned, checksummed binary codec for the persistent StorageSign index. */
 public final class StorageSignIndexCodec {
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     private static final int MAGIC = 0x53534958; // SSIX
     private static final int MAX_ENTRIES = 10_000_000;
     private static final int MAX_IDENTIFIER_BYTES = 65_536;
@@ -37,7 +38,9 @@ public final class StorageSignIndexCodec {
             new ByteArrayInputStream(bytes, 0, bytes.length - Integer.BYTES))) {
             if (input.readInt() != MAGIC) throw new IOException("Invalid index magic");
             int version = input.readInt();
-            if (version != VERSION) throw new IOException("Unsupported index version: " + version);
+            if (version != 1 && version != VERSION) {
+                throw new IOException("Unsupported index version: " + version);
+            }
             int count = input.readInt();
             if (count < 0 || count > MAX_ENTRIES) throw new IOException("Invalid index count: " + count);
             if (count > input.available() / 45) {
@@ -51,6 +54,13 @@ public final class StorageSignIndexCodec {
                 int z = input.readInt();
                 int amount = input.readInt();
                 long verifiedAt = input.readLong();
+                BlockFace frontFacing = null;
+                if (version >= VERSION) {
+                    boolean hasFrontFacing = input.readBoolean();
+                    if (hasFrontFacing) {
+                        frontFacing = BlockFace.valueOf(input.readUTF());
+                    }
+                }
                 int identifierLength = input.readInt();
                 if (identifierLength <= 0 || identifierLength > MAX_IDENTIFIER_BYTES
                     || identifierLength > input.available()) {
@@ -66,7 +76,7 @@ public final class StorageSignIndexCodec {
                     throw new IOException("Invalid identifier UTF-8", e);
                 }
                 entries.add(new IndexedStorageSign(
-                    new StorageSignPosition(world, x, y, z), identifier, amount, verifiedAt));
+                    new StorageSignPosition(world, x, y, z), identifier, amount, verifiedAt, frontFacing));
             }
             if (input.available() != 0) throw new IOException("Unexpected trailing index data");
             return List.copyOf(entries);
@@ -92,6 +102,8 @@ public final class StorageSignIndexCodec {
                 output.writeInt(position.z());
                 output.writeInt(entry.amount());
                 output.writeLong(entry.verifiedAtEpochMillis());
+                output.writeBoolean(entry.frontFacing() != null);
+                if (entry.frontFacing() != null) output.writeUTF(entry.frontFacing().name());
                 byte[] identifier = entry.identifier().getBytes(StandardCharsets.UTF_8);
                 validateIdentifierBytes(identifier);
                 output.writeInt(identifier.length);

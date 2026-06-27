@@ -71,6 +71,17 @@
 
 `--contains`を付けると大文字小文字を無視した部分一致になります。部分一致は保存済み索引全体を対象とするため非同期実行され、同時実行数は設定で制限されます。
 
+### Skript向け座標出力
+
+```text
+/sssearch item STONE --coords
+/sssearch item STONE --front
+```
+
+`--coords` は `world|x|y|z` 形式、`--front` は `world|frontX|frontY|frontZ` 形式で返します。
+1行1結果で、区切り文字は `|` です。`world` にはワールド名、未ロード時は UUID 文字列を返します。
+`--coords` と `--front` は同時に指定できません。
+
 検索結果は `World UUID -> X -> Y -> Z` の昇順で並べます。`--page` は 1 始まりで、範囲外ページはエラーです。`--world` は現在ロードされている World 名のみ受け付けます。
 
 ### Worldとページの指定

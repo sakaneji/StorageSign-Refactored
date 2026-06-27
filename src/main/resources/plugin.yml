@@ -25,7 +25,7 @@ commands:
         permission: storagesign.index.admin
     storagesignsearch:
         description: Search indexed StorageSigns by stored item identifier.
-        usage: /<command> item <identifier> [--contains] [--world world] [--page number]
+        usage: /<command> item <identifier> [--contains] [--coords|--front] [--world world] [--page number]
         aliases:
             - sssearch
         permission: storagesign.search.admin
