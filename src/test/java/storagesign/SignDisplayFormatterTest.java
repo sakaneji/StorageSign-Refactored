@@ -31,7 +31,7 @@ class SignDisplayFormatterTest {
                 new String[] {"StorageSign", material.name(), "1"});
             assertNotNull(sign, material.name());
             String display = sign.getDisplayIdentifier();
-            assertTrue(SignDisplayFormatter.width(display) <= 90,
+            assertTrue(SignDisplayFormatter.width(display) <= SignDisplayFormatter.MAX_VANILLA_WIDTH,
                 () -> material + " => " + display + " width=" + SignDisplayFormatter.width(display));
         }
     }
@@ -45,7 +45,7 @@ class SignDisplayFormatterTest {
             "StorageSign", "Very_Long_Configured_Compatibility_Identifier", "3"});
         assertNotNull(sign);
         assertEquals("Very_Long_Configured_Compatibility_Identifier", sign.getIdentifier());
-        assertTrue(SignDisplayFormatter.width(sign.getDisplayIdentifier()) <= 90);
+        assertTrue(SignDisplayFormatter.width(sign.getDisplayIdentifier()) <= SignDisplayFormatter.MAX_VANILLA_WIDTH);
     }
 
     @Test
@@ -68,7 +68,7 @@ class SignDisplayFormatterTest {
         String fitted = SignDisplayFormatter.fit(
             "VERY_LONG_NAME_WITH_MANY_PARTS_AND_EXTRA_DETAILS_IDENTIFIER:7");
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
@@ -85,27 +85,27 @@ class SignDisplayFormatterTest {
     void leadingAndTrailingEmptyUnderscoreSegmentsAreIgnored() {
         String fitted = SignDisplayFormatter.fit("___VERY_LONG_NAME___");
         assertEquals("VL:NAME", fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
     void overlongUnderscoredIdentifiersWithoutSuffixStillFallBackToEllipsis() {
         String fitted = SignDisplayFormatter.fit(String.join("_", Collections.nCopies(20, "LONGWORD")));
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
     void overlongIdentifiersWithSuffixButNoUnderscoresStillFallBackToEllipsis() {
         String fitted = SignDisplayFormatter.fit("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:7");
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
     void compactedIdentifiersRespectWidthBoundaryBeforeTruncation() {
         String fitted = SignDisplayFormatter.fit("A_LONG_IDENTIFIER_WITH_SUFFIX:123");
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
@@ -137,7 +137,7 @@ class SignDisplayFormatterTest {
         String value = "ABCDEFGHIJKLMNOPQRSTUVWXYABCDEFGHIJKLMNOPQRSTUVWXY";
         String fitted = SignDisplayFormatter.fit(value);
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= 90, fitted);
+        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
     }
 
     @Test
@@ -151,8 +151,8 @@ class SignDisplayFormatterTest {
             "StorageSign", "STONE", Integer.toString(Integer.MAX_VALUE)});
         assertNotNull(sign);
         String[] lines = sign.getSignLines();
-        assertTrue(SignDisplayFormatter.width(lines[2]) <= 90, lines[2]);
-        assertTrue(SignDisplayFormatter.width(lines[3]) <= 90, lines[3]);
+        assertTrue(SignDisplayFormatter.width(lines[2]) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, lines[2]);
+        assertTrue(SignDisplayFormatter.width(lines[3]) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, lines[3]);
     }
 
     private static void setVirtualIdentifiers(Map<String, String> values) throws Exception {
