@@ -116,6 +116,38 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
+    void longIdentifierLabelStaysVisibleAfterViewChangeUntilNextRescan() {
+        var world = server.addSimpleWorld("view-change-display");
+        world.getChunkAt(0, 0).load();
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+
+        try {
+            display.start();
+            server.getScheduler().performTicks(16);
+            assertEquals(1, display.activeLabelCount());
+
+            player.teleport(new Location(world, 0.5, 64, 0.5, 180, 0));
+            server.getScheduler().performTicks(6);
+            assertEquals(1, display.activeLabelCount());
+            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+
+            server.getScheduler().performTicks(20);
+            assertEquals(0, display.activeLabelCount());
+            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+        } finally {
+            display.shutdown();
+        }
+    }
+
+    @Test
     void labelTextRefreshesAfterSignContentsChange() {
         var world = server.addSimpleWorld("refresh-display");
         world.getChunkAt(0, 0).load();
