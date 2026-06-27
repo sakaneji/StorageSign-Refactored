@@ -40,6 +40,7 @@ public final class ConfigLoader {
     private static final String KEY_VIRTUAL_IDENTIFIERS = "virtual-item-identifiers";
     private static final String KEY_STORAGE_INDEX_ENABLED = "storage-index.enabled";
     private static final String KEY_INDEX_CHUNKS_PER_TICK = "storage-index.rebuild-chunks-per-tick";
+    private static final String KEY_INDEX_CHUNK_RESCAN_QUEUE_CAP = "storage-index.chunk-rescan-queue-cap";
     private static final String KEY_NEARBY_DISPLAY_ENABLED = "nearby-display.enabled";
     private static final String KEY_DISPLAY_DISTANCE = "nearby-display.distance";
     private static final String KEY_DISPLAY_FOV = "nearby-display.field-of-view-degrees";
@@ -73,6 +74,7 @@ public final class ConfigLoader {
     private static Map<String, String> virtualItemIdentifiers = Map.of();
     private static boolean storageIndexEnabled;
     private static int indexChunksPerTick;
+    private static int indexChunkRescanQueueCap;
     private static boolean nearbyDisplayEnabled;
     private static double nearbyDisplayDistance;
     private static double nearbyDisplayFov;
@@ -119,6 +121,7 @@ public final class ConfigLoader {
         virtualItemIdentifiers = readStringMap(cfg.getConfigurationSection(KEY_VIRTUAL_IDENTIFIERS));
         storageIndexEnabled = cfg.getBoolean(KEY_STORAGE_INDEX_ENABLED, true);
         indexChunksPerTick = positive(cfg.getInt(KEY_INDEX_CHUNKS_PER_TICK, 8), 8);
+        indexChunkRescanQueueCap = positive(cfg.getInt(KEY_INDEX_CHUNK_RESCAN_QUEUE_CAP, 512), 512);
         nearbyDisplayEnabled = cfg.getBoolean(KEY_NEARBY_DISPLAY_ENABLED, true);
         nearbyDisplayDistance = positive(cfg.getDouble(KEY_DISPLAY_DISTANCE, 3.0), 3.0);
         nearbyDisplayFov = clamp(cfg.getDouble(KEY_DISPLAY_FOV, 90.0), 1.0, 360.0);
@@ -154,6 +157,7 @@ public final class ConfigLoader {
     public static Map<String, String> getVirtualItemIdentifiers() { return virtualItemIdentifiers; }
     public static boolean getStorageIndexEnabled() { return storageIndexEnabled; }
     public static int getIndexChunksPerTick() { return indexChunksPerTick; }
+    public static int getIndexChunkRescanQueueCap() { return indexChunkRescanQueueCap; }
     public static boolean getNearbyDisplayEnabled() { return nearbyDisplayEnabled; }
     public static boolean getEffectiveNearbyDisplayEnabled() {
         return storageIndexEnabled && nearbyDisplayEnabled;

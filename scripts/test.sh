@@ -344,7 +344,7 @@ run_e2e_version() {
     result=1
   fi
   if [ "$logger_mode" = "with-logger" ] \
-     && ! grep -Fq "[StorageSignPlugin#onEnable] StorageSign enabled." "$artifact_dir/paper.log"; then
+     && ! grep -Eq '\[StorageSignPlugin(Bootstrap)?#onEnable\] StorageSign enabled\.' "$artifact_dir/paper.log"; then
     echo "StorageSign message did not reach the external Logger sink on Paper $version" >&2
     result=1
   fi

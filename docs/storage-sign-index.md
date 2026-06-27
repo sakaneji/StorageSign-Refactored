@@ -14,7 +14,7 @@
 
 管理者検索と近接表示はこの索引を利用します。`storage-index.enabled: false`の場合、索引の読込・更新・保存を行わず、近接表示と管理者検索も無効になります。索引だけを有効にして近接表示を無効にすることはできます。
 
-設定値のうち、`storage-index.rebuild-chunks-per-tick`、`nearby-display.idle-delay-ticks`、`nearby-display.monitor-interval-ticks`、`nearby-display.max-per-player`、`nearby-display.max-searches-per-tick`、`nearby-display.global-label-limit`、`admin-search.page-size`、`admin-search.max-concurrent` は 0 以下なら既定値へ戻します。`nearby-display.field-of-view-degrees` は 1～360 度に丸めます。距離は 0 以下なら既定値へ戻します。
+設定値のうち、`storage-index.rebuild-chunks-per-tick`、`storage-index.chunk-rescan-queue-cap`、`nearby-display.idle-delay-ticks`、`nearby-display.monitor-interval-ticks`、`nearby-display.max-per-player`、`nearby-display.max-searches-per-tick`、`nearby-display.global-label-limit`、`admin-search.page-size`、`admin-search.max-concurrent` は 0 以下なら既定値へ戻します。`nearby-display.field-of-view-degrees` は 1～360 度に丸めます。距離は 0 以下なら既定値へ戻します。
 
 ## 起動から終了までの動作
 
@@ -117,6 +117,7 @@ NETHERITE_UPGRADE_SMITHING_TEMPLATE
 storage-index:
   enabled: true
   rebuild-chunks-per-tick: 8
+  chunk-rescan-queue-cap: 512
 
 nearby-display:
   enabled: true
@@ -137,6 +138,7 @@ admin-search:
 
 - 完全一致検索は副索引を使用します。部分一致は全件走査ですが非同期で実行します。
 - 手動再構築は`rebuild-chunks-per-tick`単位で分散し、未ロードチャンクを読み込みません。
+- チャンク読込時の再スキャンは遅延キューに積み、同時に保持する再スキャン待ちチャンク数は`chunk-rescan-queue-cap`で制限します。上限超過分はその場では破棄されます。
 - 通常の数量変更ではメモリ索引だけを更新し、毎回ファイルへは保存しません。
 - 保存件数が多いほど、起動時読込と終了時保存の時間・ファイルサイズが増えます。250msを超えた読込・保存は警告ログになります。
 - TextDisplayはサーバー全体で`global-label-limit`を超えません。標準上限は512体です。

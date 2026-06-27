@@ -77,65 +77,12 @@ public class StorageSignPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // /reload 等で同じクラスローダーが再利用されても、古いメタを持ち越さない。
-        setOminousBannerMeta(null);
-
-        // ── 1. Config ロード ──────────────────────────────────────────────────────────────
-        ConfigLoader.load(this);
-        PluginLogger.initialize(this, ConfigLoader.getLogLevel());
-        LOG.debug("onEnable", () -> "ConfigLoader loaded: auto-import=" + ConfigLoader.getAutoImport()
-                  + ", auto-export=" + ConfigLoader.getAutoExport()
-                  + ", no-bud=" + ConfigLoader.getNoBud());
-
-        storageSignIndex = new StorageSignIndex(this, ConfigLoader.getStorageIndexEnabled());
-        storageSignIndex.load();
-
-        // ── 2. レイドバナー ───────────────────────────────────────────────────────────
-        loadOminousBanner();
-
-        // ── 3. クラフトレシピ ─────────────────────────────────────────────────────────
-        registerRecipes();
-
-        // ── 4. イベントリスナー ────────────────────────────────────────────────────────
-        registerListeners();
-
-        getCommand("storagesigngive").setExecutor(new SsGiveCommand());
-        getCommand("storagesignindex").setExecutor(new StorageSignIndexCommand(storageSignIndex));
-        storageSignQueries = new StorageSignQueryService(this, storageSignIndex);
-        getCommand("storagesignsearch").setExecutor(
-            new StorageSignSearchCommand(storageSignIndex, storageSignQueries));
-
-        nearbyStorageSignDisplay = new NearbyStorageSignDisplay(this, storageSignIndex);
-        if (storageSignIndex.isEnabled()) {
-            storageSignIndex.rebuild(Bukkit.getWorlds(), result -> {
-                LOG.info("storageSignIndex", "StorageSign index ready: chunks=" + result.chunksScanned()
-                    + ", signs=" + result.countAfter());
-                nearbyStorageSignDisplay.start();
-            });
-        }
-        if (ConfigLoader.getNearbyDisplayEnabled() && !storageSignIndex.isEnabled()) {
-            LOG.warning("nearbyDisplay",
-                "nearby-display is disabled because storage-index.enabled is false");
-        }
-        if (!storageSignIndex.isEnabled()) nearbyStorageSignDisplay.start();
-
-        LOG.info("onEnable", "StorageSign enabled. Sign types: " + MaterialRegistry.SIGN_MATERIALS.size()
-                 + ", Shulker types: " + MaterialRegistry.SHULKER_BOX_MATERIALS.size());
+        new StorageSignPluginBootstrap(this).enable();
     }
 
     @Override
     public void onDisable() {
-        if (nearbyStorageSignDisplay != null) nearbyStorageSignDisplay.shutdown();
-        nearbyStorageSignDisplay = null;
-        if (storageSignIndex != null) {
-            storageSignIndex.saveSync();
-            storageSignIndex.shutdown();
-        }
-        storageSignIndex = null;
-        storageSignQueries = null;
-        cancelOminousBannerRetry();
-        LOG.info("onDisable", "StorageSign disabled.");
-        PluginLogger.shutdown();
+        new StorageSignPluginBootstrap(this).disable();
     }
 
     /** Public loaded-chunk position index for other StorageSign features. */
@@ -145,7 +92,12 @@ public class StorageSignPlugin extends JavaPlugin {
 
     // ── レイドバナー ───────────────────────────────────────────────────────────────
 
-    private void loadOminousBanner() {
+    void resetOminousBannerMeta() {
+        // /reload 等で同じクラスローダーが再利用されても、古いメタを持ち越さない。
+        setOminousBannerMeta(null);
+    }
+
+    void loadOminousBanner() {
         BannerMeta apiMeta = ominousBannerMetaFactory.apply(true);
         if (apiMeta != null) {
             setOminousBannerMeta(apiMeta);
@@ -158,7 +110,7 @@ public class StorageSignPlugin extends JavaPlugin {
         scheduleOminousBannerRetry();
     }
 
-    private void scheduleOminousBannerRetry() {
+    void scheduleOminousBannerRetry() {
         if (ominousBannerRetryTask != null) return;
 
         ominousBannerRetryWarningLogged = false;
@@ -170,13 +122,13 @@ public class StorageSignPlugin extends JavaPlugin {
         );
     }
 
-    private void cancelOminousBannerRetry() {
+    void cancelOminousBannerRetry() {
         BukkitTask task = ominousBannerRetryTask;
         ominousBannerRetryTask = null;
         if (task != null) task.cancel();
     }
 
-    private void retryOminousBanner() {
+    void retryOminousBanner() {
         // 実物の不吉な旗を未登録 SS に登録して先に復旧した場合も終了する。
         if (getOminousBannerMeta() != null) {
             cancelOminousBannerRetry();
@@ -207,7 +159,7 @@ public class StorageSignPlugin extends JavaPlugin {
      * API で不吉なバナー（白バナー 8 パターン）を構築する。
      * 成功時は BannerMeta、失敗時は null。
      */
-    private BannerMeta createOminousBannerMetaByApi(boolean logFailureAsWarning) {
+    BannerMeta createOminousBannerMetaByApi(boolean logFailureAsWarning) {
         try {
             BannerMeta meta = OMINOUS_BANNER_CODEC.create();
             if (meta == null) return null;
@@ -225,7 +177,7 @@ public class StorageSignPlugin extends JavaPlugin {
         return null;
     }
 
-    private void logDegradedBannerDecorations() {
+    void logDegradedBannerDecorations() {
         if (!ominousBannerNameAvailable) {
             LOG.warning("loadOminousBanner",
                 "不吉な旗の名前APIが利用できないため、名前装飾だけを無効化しました");
@@ -265,7 +217,7 @@ public class StorageSignPlugin extends JavaPlugin {
      * </pre>
      * C=CHEST、S=対象看板、H=CHEST（hardrecipe=true 時は ENDER_CHEST）
      */
-    private void registerRecipes() {
+    void registerRecipes() {
         for (Material signMat : MaterialRegistry.SIGN_MATERIALS) {
             NamespacedKey key = new NamespacedKey(this, "storagesign_" + signMat.name().toLowerCase());
             // リロード時の重複登録を防ぐため、同じキーのレシピは一度削除する
@@ -287,7 +239,7 @@ public class StorageSignPlugin extends JavaPlugin {
 
     // ── イベントリスナー ────────────────────────────────────────────────────────────
 
-    private void registerListeners() {
+    void registerListeners() {
         PluginManager pm = getServer().getPluginManager();
 
         pm.registerEvents(new PlayerInteractListener(this), this);
@@ -305,5 +257,25 @@ public class StorageSignPlugin extends JavaPlugin {
             pm.registerEvents(new SignPhysicsListener(), this);
             LOG.info("registerListeners", "no-bud: BUD 防止を有効化しました。");
         }
+    }
+
+    void setStorageSignIndex(StorageSignIndex storageSignIndex) {
+        this.storageSignIndex = storageSignIndex;
+    }
+
+    NearbyStorageSignDisplay getNearbyStorageSignDisplay() {
+        return nearbyStorageSignDisplay;
+    }
+
+    void setNearbyStorageSignDisplay(NearbyStorageSignDisplay nearbyStorageSignDisplay) {
+        this.nearbyStorageSignDisplay = nearbyStorageSignDisplay;
+    }
+
+    StorageSignQueryService getStorageSignQueries() {
+        return storageSignQueries;
+    }
+
+    void setStorageSignQueries(StorageSignQueryService storageSignQueries) {
+        this.storageSignQueries = storageSignQueries;
     }
 }

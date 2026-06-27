@@ -166,6 +166,72 @@ function assertBannerMetadata(state) {
   assert.equal(state.bannerTooltipHidden, true)
 }
 
+async function runLegacyBlockRoundTrip({
+  scenario,
+  initialIdentifier,
+  initialAmount,
+  normalizedIdentifier,
+  exportItemName,
+  exportedCountField,
+}) {
+  await reset(scenario)
+  let state = await inspect(scenario)
+  assert.equal(state.lines[0], 'StorageSign')
+  assertIdentifierLine(state.lines[1], initialIdentifier)
+  assert.equal(state.lines[2], String(initialAmount))
+  assert.equal(state.lines[3], '')
+
+  await emptyHand()
+  await command(`/sstest interact ${scenario}`, `SSTEST INTERACTED ${scenario}`)
+  await sleep(1200)
+  state = await inspect(scenario)
+  assert.equal(state.lines[0], 'StorageSign')
+  assertIdentifierLine(state.lines[1], normalizedIdentifier)
+  assert.equal(state.lines[2], '0')
+  assert.equal(state[exportedCountField], initialAmount)
+
+  await equip(exportItemName)
+  await command('/sstest sneak true', 'SSTEST SNEAK true')
+  await command(`/sstest interact ${scenario}`, `SSTEST INTERACTED ${scenario}`)
+  await sleep(1200)
+  await command('/sstest sneak false', 'SSTEST SNEAK false')
+  state = await inspect(scenario)
+  assert.equal(state.lines[0], 'StorageSign')
+  assertIdentifierLine(state.lines[1], normalizedIdentifier)
+  assert.equal(state.lines[2], String(initialAmount))
+  assert.equal(state[exportedCountField], 0)
+}
+
+async function runLegacyItemMerge({
+  scenario,
+  blockIdentifier,
+  heldIdentifier,
+}) {
+  await reset(scenario)
+  let state = await inspect(scenario)
+  assert.equal(state.lines[0], 'StorageSign')
+  assertIdentifierLine(state.lines[1], blockIdentifier)
+  assert.equal(state.lines[2], '2')
+  assert.equal(state.heldLore, `${heldIdentifier} 2`)
+
+  await command('/sstest sneak true', 'SSTEST SNEAK true')
+  await command(`/sstest interact ${scenario}`, `SSTEST INTERACTED ${scenario}`)
+  await sleep(1200)
+  await command('/sstest sneak false', 'SSTEST SNEAK false')
+  state = await inspect(scenario)
+  assert.equal(state.lines[0], 'StorageSign')
+  assertIdentifierLine(state.lines[1], blockIdentifier)
+  assert.equal(state.lines[2], '4')
+  assert.equal(state.heldLore, 'Empty')
+}
+
+function assertIdentifierLine(actual, expected) {
+  if (actual === expected) return
+  const prefix = expected.slice(0, Math.min(expected.length, 13))
+  assert.ok(actual.startsWith(prefix),
+    `Expected identifier line to match ${expected}, got ${actual}`)
+}
+
 function wrapLabel(value) {
   const columns = 28
   let wrapped = ''
@@ -374,16 +440,119 @@ async function runMainSuite() {
   await runCase('StorageSign item export and reimport', async () => {
     await reset('storage-sign-items')
     await emptyHand()
-    await activateSign()
+    await command('/sstest interact storage-sign-items', 'SSTEST INTERACTED storage-sign-items')
+    await sleep(1200)
     let state = await inspect('storage-sign-items')
     assert.equal(state.lines[2], '0')
     assert.equal(state.playerSigns, 2)
 
     await equip('oak_sign')
-    await activateSign({ sneak: true })
+    await command('/sstest sneak true', 'SSTEST SNEAK true')
+    await command('/sstest interact storage-sign-items', 'SSTEST INTERACTED storage-sign-items')
+    await sleep(1200)
+    await command('/sstest sneak false', 'SSTEST SNEAK false')
     state = await inspect('storage-sign-items')
     assert.equal(state.lines[2], '2')
     assert.equal(state.playerSigns, 0)
+  })
+
+  await runCase('legacy StorageSign item round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-storage-sign-items',
+      initialIdentifier: 'OakStorageSign',
+      initialAmount: 2,
+      normalizedIdentifier: 'OakStorageSign',
+      exportItemName: 'oak_sign',
+      exportedCountField: 'playerEmptyStorageSigns',
+    })
+  })
+
+  await runCase('legacy EmptySign item merge', async () => {
+    await reset('legacy-empty-sign-item-merge')
+    let state = await inspect('legacy-empty-sign-item-merge')
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'OakStorageSign', '2'])
+    assert.equal(state.heldLore, 'EmptySign 2')
+
+    await command('/sstest sneak true', 'SSTEST SNEAK true')
+    await command('/sstest interact legacy-empty-sign-item-merge',
+      'SSTEST INTERACTED legacy-empty-sign-item-merge')
+    await sleep(1200)
+    await command('/sstest sneak false', 'SSTEST SNEAK false')
+    state = await inspect('legacy-empty-sign-item-merge')
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'OakStorageSign', '4'])
+    assert.equal(state.playerEmptyStorageSigns, 1)
+    assert.equal(state.heldLore, 'Empty')
+  })
+
+  await runCase('legacy SpruceStorageSign item merge', async () => {
+    await runLegacyItemMerge({
+      scenario: 'legacy-spruce-sign-item',
+      blockIdentifier: 'SpruceStorageSign',
+      heldIdentifier: 'SpruceStorageSign',
+    })
+  })
+
+  await runCase('legacy DarkOakStorageSign item merge', async () => {
+    await runLegacyItemMerge({
+      scenario: 'legacy-dark-oak-sign-item',
+      blockIdentifier: 'DarkOakStorageSign',
+      heldIdentifier: 'DarkOakStorageSign',
+    })
+  })
+
+  await runCase('legacy EmptySign block round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-empty-sign-block',
+      initialIdentifier: 'EmptySign',
+      initialAmount: 3,
+      normalizedIdentifier: 'OakStorageSign',
+      exportItemName: 'oak_sign',
+      exportedCountField: 'playerEmptyStorageSigns',
+    })
+  })
+
+  await runCase('legacy SIGN block round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-sign-block',
+      initialIdentifier: 'SIGN',
+      initialAmount: 4,
+      normalizedIdentifier: 'OAK_SIGN',
+      exportItemName: 'oak_sign',
+      exportedCountField: 'playerSigns',
+    })
+  })
+
+  await runCase('legacy spruce sign block round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-spruce-sign-block',
+      initialIdentifier: 'SpruceStorageSign',
+      initialAmount: 5,
+      normalizedIdentifier: 'SpruceStorageSign',
+      exportItemName: 'spruce_sign',
+      exportedCountField: 'playerEmptyStorageSigns',
+    })
+  })
+
+  await runCase('legacy dark oak sign block round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-dark-oak-sign-block',
+      initialIdentifier: 'DarkOakStorageSign',
+      initialAmount: 6,
+      normalizedIdentifier: 'DarkOakStorageSign',
+      exportItemName: 'dark_oak_sign',
+      exportedCountField: 'playerEmptyStorageSigns',
+    })
+  })
+
+  await runCase('legacy HorseEgg block round trip', async () => {
+    await runLegacyBlockRoundTrip({
+      scenario: 'legacy-horse-egg-block',
+      initialIdentifier: 'HorseEgg',
+      initialAmount: 3,
+      normalizedIdentifier: 'HorseEgg',
+      exportItemName: 'ghast_spawn_egg',
+      exportedCountField: 'playerLegacyMarkerItems',
+    })
   })
 
   await runCase('StorageSign division with multiple empty signs', async () => {

@@ -1,16 +1,11 @@
 package storagesign.listener;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.DoubleChest;
-import org.bukkit.entity.ChestBoat;
-import org.bukkit.entity.minecart.HopperMinecart;
-import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -18,17 +13,16 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.block.Container;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
+import org.bukkit.entity.ChestBoat;
+import org.bukkit.entity.minecart.HopperMinecart;
+import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
 import storagesign.ConfigLoader;
-import storagesign.AmountTransfer;
 import storagesign.StorageSignPlugin;
 import storagesign.adjacency.SsAdjacencyMatch;
-import storagesign.adjacency.SsAdjacencyPurpose;
-import storagesign.adjacency.SsAdjacencyQuery;
-import storagesign.adjacency.SsAdjacencyResolver;
 import storagesign.logging.PluginLogger;
 import storagesign.task.ExportSignTask;
 
@@ -56,7 +50,6 @@ import storagesign.task.ExportSignTask;
 public final class InventoryListener implements Listener {
 
     private static final PluginLogger LOG = PluginLogger.getLogger(InventoryListener.class);
-    private static final SsAdjacencyResolver ADJACENCY_RESOLVER = SsAdjacencyResolver.defaultResolver();
 
     private final StorageSignPlugin plugin;
 
@@ -175,14 +168,7 @@ public final class InventoryListener implements Listener {
     }
 
     static int absorbAvailable(Inventory inventory, ItemStack item, SsAdjacencyMatch match) {
-        int requested = Math.min(item.getAmount(),
-            AmountTransfer.accepted(match.storageSign().getAmount(), item.getAmount()));
-        int absorbed = removeMatchingAmount(inventory, withAmount(item, requested));
-        if (absorbed > 0) {
-            match.storageSign().setAmount(match.storageSign().getAmount() + absorbed);
-            match.storageSign().applyToSign(match.signState());
-        }
-        return absorbed;
+        return InventoryTransferSupport.absorbAvailable(inventory, item, match);
     }
 
     // ── ヘルパー ──────────────────────────────────────────────────────────────────
@@ -191,9 +177,7 @@ public final class InventoryListener implements Listener {
      * 指定ブロックに隣接し、{@code item} と一致する StorageSign を 1 件解決する。
      */
     static Optional<SsAdjacencyMatch> resolveAdjacentStorageSign(Block container, ItemStack item) {
-        return ADJACENCY_RESOLVER.findFirst(
-            new SsAdjacencyQuery(container, item, SsAdjacencyPurpose.INVENTORY_TRANSFER)
-        );
+        return InventoryTransferSupport.resolveAdjacentStorageSign(container, item);
     }
 
     private static Optional<SsAdjacencyMatch> resolveAdjacentStorageSignForInventory(Inventory inventory, ItemStack item) {
@@ -240,33 +224,10 @@ public final class InventoryListener implements Listener {
      * このメソッドは左ったアイテムから削除数を計算することでその可変状態に依存しない。</p>
      */
     private static int removeMatchingAmount(Inventory inventory, ItemStack requested) {
-        if (inventory == null || requested == null) return 0;
-
-        int requestAmount = requested.getAmount();
-        if (requestAmount <= 0) return 0;
-
-        ItemStack toRemove = requested.clone();
-        // clone() は amount を保持する; setAmount(requestAmount) は意図的に省略。
-        // この時点で requested.getAmount() == requestAmount なので追加設定不要。
-
-        Map<Integer, ItemStack> leftovers = inventory.removeItem(toRemove);
-        int notRemoved = 0;
-        for (ItemStack leftover : leftovers.values()) {
-            notRemoved += leftover.getAmount();
-        }
-
-        // 渡したスタックの amount を変更するが leftovers を空に返す実装へのフォールバック。
-        if (notRemoved == 0 && toRemove.getAmount() != requestAmount) {
-            notRemoved = toRemove.getAmount();
-        }
-
-        return Math.max(0, requestAmount - notRemoved);
+        return InventoryTransferSupport.removeMatchingAmount(inventory, requested);
     }
 
     private static ItemStack withAmount(ItemStack item, int amount) {
-        if (amount <= 0) return null;
-        ItemStack copy = item.clone();
-        copy.setAmount(amount);
-        return copy;
+        return InventoryTransferSupport.withAmount(item, amount);
     }
 }
