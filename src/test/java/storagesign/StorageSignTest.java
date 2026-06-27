@@ -551,14 +551,14 @@ class StorageSignTest {
 
     @Test
     void getSignLines_usesTighterIdentifierWidthForHangingSigns() throws Exception {
-        setVirtualIdentifiers(Map.of("ABCDEFGHIJKLMN", "STONE"));
+        setVirtualIdentifiers(Map.of("activator_rail", "STONE"));
         try {
             StorageSign ss = StorageSign.fromSignLines(
-                new String[]{"StorageSign", "ABCDEFGHIJKLMN", "12", "..."});
+                new String[]{"StorageSign", "activator_rail", "12", "..."});
             assertNotNull(ss);
 
-            assertEquals("ABCDEFGHIJKLMN", ss.getSignLines(Material.OAK_SIGN)[1]);
-            assertTrue(ss.getSignLines(Material.OAK_HANGING_SIGN)[1].endsWith("..."));
+            assertEquals("activator_rail", ss.getSignLines(Material.OAK_SIGN)[1]);
+            assertEquals("a:rail", ss.getSignLines(Material.OAK_HANGING_SIGN)[1]);
         } finally {
             setVirtualIdentifiers(Map.of());
         }

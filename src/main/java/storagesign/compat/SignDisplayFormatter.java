@@ -5,7 +5,7 @@ import org.bukkit.Material;
 /** Fits a readable label onto a physical sign while canonical data remains in PDC. */
 public final class SignDisplayFormatter {
     public static final int MAX_VANILLA_WIDTH = 90;
-    public static final int MAX_HANGING_SIGN_WIDTH = 80;
+    public static final int MAX_HANGING_SIGN_WIDTH = 58;
 
     private SignDisplayFormatter() {}
 
