@@ -2,11 +2,14 @@ package storagesign.display;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -87,6 +90,17 @@ class NearbyStorageSignDisplayTest {
         Location changed = new Location(second, 1, 2, 3, 20, 10);
 
         assertTrue(NearbyStorageSignDisplay.moved(original, changed));
+    }
+
+    @Test
+    void shouldDisplayUsesTighterWidthForHangingSigns() throws Exception {
+        setVirtualIdentifiers(Map.of("ABCDEFGHIJKLMN", "STONE"));
+        StorageSign sign = StorageSign.fromSignLines(
+            new String[] {"StorageSign", "ABCDEFGHIJKLMN", "1"});
+        assertNotNull(sign);
+
+        assertFalse(NearbyStorageSignDisplaySupport.shouldDisplay(sign, Material.OAK_SIGN));
+        assertTrue(NearbyStorageSignDisplaySupport.shouldDisplay(sign, Material.OAK_HANGING_SIGN));
     }
 
     @Test
@@ -432,5 +446,11 @@ class NearbyStorageSignDisplayTest {
         java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         return field.get(target);
+    }
+
+    private static void setVirtualIdentifiers(Map<String, String> values) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField("virtualItemIdentifiers");
+        field.setAccessible(true);
+        field.set(null, values);
     }
 }

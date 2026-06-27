@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Display;
@@ -231,7 +232,7 @@ public final class NearbyStorageSignDisplay {
             index.unregister(position);
             return null;
         }
-        if (!shouldDisplay(storageSign)) return null;
+        if (!shouldDisplay(storageSign, block.getType())) return null;
         Location location = new Location(world, position.x() + 0.5, position.y() + 1.25, position.z() + 0.5);
         TextDisplay display = world.spawn(location, TextDisplay.class, entity -> {
             entity.setPersistent(false);
@@ -253,14 +254,19 @@ public final class NearbyStorageSignDisplay {
             Label label = entry.getValue();
             World world = Bukkit.getWorld(position.worldId());
             StorageSign storageSign = null;
+            boolean displayable = false;
             if (world != null && world.isChunkLoaded(position.x() >> 4, position.z() >> 4)) {
-                storageSign = StorageSign.fromBlock(world.getBlockAt(position.x(), position.y(), position.z()));
+                Block block = world.getBlockAt(position.x(), position.y(), position.z());
+                storageSign = StorageSign.fromBlock(block);
+                if (storageSign != null) {
+                    displayable = shouldDisplay(storageSign, block.getType());
+                }
             }
             if (storageSign == null) {
                 removeLabel(position, label, true);
                 index.unregister(position);
-            } else if (!shouldDisplay(storageSign)) {
-                removeLabel(position, label, false);
+            } else if (!displayable) {
+                removeLabel(position, label, true);
             } else {
                 label.display.setText(labelText(storageSign));
             }
@@ -324,8 +330,8 @@ public final class NearbyStorageSignDisplay {
         return NearbyStorageSignDisplaySupport.labelText(storageSign);
     }
 
-    private static boolean shouldDisplay(StorageSign storageSign) {
-        return NearbyStorageSignDisplaySupport.shouldDisplay(storageSign);
+    private static boolean shouldDisplay(StorageSign storageSign, Material signMaterial) {
+        return NearbyStorageSignDisplaySupport.shouldDisplay(storageSign, signMaterial);
     }
 
     static String wrap(String value) {

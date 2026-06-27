@@ -2,6 +2,7 @@ package storagesign.display;
 
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.RayTraceResult;
@@ -55,9 +56,10 @@ final class NearbyStorageSignDisplaySupport {
         return wrap(storageSign.getIdentifier());
     }
 
-    static boolean shouldDisplay(StorageSign storageSign) {
+    static boolean shouldDisplay(StorageSign storageSign, Material signMaterial) {
         if (storageSign == null || storageSign.isUnregistered()) return false;
-        return !storageSign.getIdentifier().equals(SignDisplayFormatter.fit(storageSign.getIdentifier()));
+        return !storageSign.getIdentifier().equals(
+            SignDisplayFormatter.fit(storageSign.getIdentifier(), signMaterial));
     }
 
     static String wrap(String value) {

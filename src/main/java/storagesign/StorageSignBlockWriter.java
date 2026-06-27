@@ -11,17 +11,13 @@ final class StorageSignBlockWriter {
     }
 
     static void applyToSign(StorageSign sign, Sign block) {
-        String identifier = sign.getDisplayIdentifier();
-        int amount = sign.getAmount();
-        int lc = amount / 3456;
-        int rem = amount % 3456;
-        int stacks = rem / 64;
-        int singles = rem % 64;
+        String[] lines = sign.getSignLines(block.getType());
         var front = block.getSide(Side.FRONT);
-        front.setLine(0, StorageSign.HEADER_LINE);
-        front.setLine(1, identifier);
-        front.setLine(2, String.valueOf(amount));
-        front.setLine(3, lc + "LC " + stacks + "s " + singles);
+        front.setLine(0, lines[0]);
+        front.setLine(1, lines[1]);
+        front.setLine(2, lines[2]);
+        front.setLine(3, lines[3]);
+        int amount = sign.getAmount();
         if (sign.isUnregistered()) {
             block.getPersistentDataContainer().remove(StorageSign.canonicalPotionIdentifierKey());
         } else {

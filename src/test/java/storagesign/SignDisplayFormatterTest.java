@@ -49,6 +49,20 @@ class SignDisplayFormatterTest {
     }
 
     @Test
+    void hangingSignsUseATighterWidthLimitThanStandingSigns() throws Exception {
+        setVirtualIdentifiers(Map.of("ABCDEFGHIJKLMN", "STONE"));
+        StorageSign sign = StorageSign.fromSignLines(
+            new String[] {"StorageSign", "ABCDEFGHIJKLMN", "3"});
+        assertNotNull(sign);
+
+        assertEquals("ABCDEFGHIJKLMN", SignDisplayFormatter.fit("ABCDEFGHIJKLMN", Material.OAK_SIGN));
+        String hanging = SignDisplayFormatter.fit("ABCDEFGHIJKLMN", Material.OAK_HANGING_SIGN);
+        assertTrue(hanging.endsWith("..."), hanging);
+        assertTrue(SignDisplayFormatter.width(hanging) <= SignDisplayFormatter.MAX_HANGING_SIGN_WIDTH,
+            hanging);
+    }
+
+    @Test
     void longUnderscoredIdentifiersCompressBeforeFallbackTruncation() {
         assertEquals(
             "VLN:IDENTIFIER:7",

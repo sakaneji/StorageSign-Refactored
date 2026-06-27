@@ -1298,6 +1298,41 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
+    void refreshLabelsRescansViewersWhenALabelStopsBeingDisplayable() throws Exception {
+        var world = server.addSimpleWorld("refresh-rescan-display");
+        world.getChunkAt(0, 0).load();
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "7"}).applyToSign(sign);
+
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
+        TextDisplay textDisplay = mock(TextDisplay.class);
+        Object label = newLabel(textDisplay);
+        UUID viewer = UUID.randomUUID();
+        Object state = newPlayerState();
+        setField(state, "visible", new HashSet<>(java.util.List.of(position)));
+        setField(state, "desired", java.util.List.of(position));
+        setField(state, "searched", true);
+        setField(label, "viewers", new HashSet<>(java.util.List.of(viewer)));
+        putMap(display, "players", viewer, state);
+        putMap(display, "labels", position, label);
+
+        Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("refreshLabels");
+        method.setAccessible(true);
+        method.invoke(display);
+
+        assertTrue(((java.util.Map<?, ?>) getField(display, "labels")).isEmpty());
+        assertTrue(((java.util.ArrayDeque<?>) getField(display, "searchQueue")).contains(viewer));
+        assertFalse((Boolean) getField(state, "searched"));
+        assertTrue((Boolean) getField(state, "needsRescan"));
+        verify(textDisplay).remove();
+    }
+
+    @Test
     void shutdownCancelsTaskAndClearsAllState() throws Exception {
         var world = server.addSimpleWorld("shutdown-display");
         world.getChunkAt(0, 0).load();

@@ -2,6 +2,8 @@ package storagesign;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.reflect.Field;
+import java.util.Map;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionType;
@@ -547,6 +549,21 @@ class StorageSignTest {
         assertEquals("0LC 0s 1", ss.getSignLines()[3]);
     }
 
+    @Test
+    void getSignLines_usesTighterIdentifierWidthForHangingSigns() throws Exception {
+        setVirtualIdentifiers(Map.of("ABCDEFGHIJKLMN", "STONE"));
+        try {
+            StorageSign ss = StorageSign.fromSignLines(
+                new String[]{"StorageSign", "ABCDEFGHIJKLMN", "12", "..."});
+            assertNotNull(ss);
+
+            assertEquals("ABCDEFGHIJKLMN", ss.getSignLines(Material.OAK_SIGN)[1]);
+            assertTrue(ss.getSignLines(Material.OAK_HANGING_SIGN)[1].endsWith("..."));
+        } finally {
+            setVirtualIdentifiers(Map.of());
+        }
+    }
+
     // ── getLoreText ───────────────────────────────────────────────────────────
 
     @Test
@@ -576,5 +593,11 @@ class StorageSignTest {
             new String[]{"StorageSign", "OMINOUS_BOTTLE:2", "10", "..."});
         assertNotNull(ss);
         assertEquals("OMINOUS_BOTTLE:2 10", ss.getLoreText());
+    }
+
+    private static void setVirtualIdentifiers(Map<String, String> values) throws Exception {
+        Field field = ConfigLoader.class.getDeclaredField("virtualItemIdentifiers");
+        field.setAccessible(true);
+        field.set(null, values);
     }
 }

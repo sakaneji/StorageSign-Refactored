@@ -224,15 +224,28 @@ public final class StorageSign {
 
     /** Physical-sign label. The complete identifier is persisted in the sign PDC. */
     String getDisplayIdentifier() {
-        return unregistered ? "" : SignDisplayFormatter.fit(getIdentifier());
+        return getDisplayIdentifier(null);
+    }
+
+    String getDisplayIdentifier(Material signMaterial) {
+        return unregistered ? "" : SignDisplayFormatter.fit(getIdentifier(), signMaterial);
     }
 
     /**
      * 物理看板ブロック用の 4 行テキストを生成する。
      */
     public String[] getSignLines() {
+        return getSignLines(null);
+    }
+
+    /**
+     * 物理看板ブロック用の 4 行テキストを生成する。
+     *
+     * @param signMaterial 表示先の看板素材。つり看板は通常看板より短い幅で省略する。
+     */
+    public String[] getSignLines(Material signMaterial) {
         // 空（未登録）のとき行 1 は空文字列（旧版の getShortName() が "" を返すのと同じ）
-        String identifier = getDisplayIdentifier();
+        String identifier = getDisplayIdentifier(signMaterial);
         int lc = amount / 3456;
         int rem = amount % 3456;
         int stacks = rem / 64;
