@@ -116,6 +116,35 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
+    void initialLabelAppearsWhileThePlayerKeepsTurning() {
+        var world = server.addSimpleWorld("turning-display");
+        world.getChunkAt(0, 0).load();
+        Block block = world.getBlockAt(0, 65, 2);
+        block.setType(Material.OAK_SIGN);
+        Sign sign = (Sign) block.getState();
+        StorageSign.fromSignLines(new String[] {"StorageSign", LONG_IDENTIFIER, "12"}).applyToSign(sign);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        PlayerMock player = server.addPlayer();
+        player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+
+        try {
+            display.start();
+            server.getScheduler().performTicks(5);
+            player.teleport(new Location(world, 0.5, 64, 0.5, 10, 0));
+            server.getScheduler().performTicks(5);
+            player.teleport(new Location(world, 0.5, 64, 0.5, 20, 0));
+            server.getScheduler().performTicks(6);
+
+            assertEquals(1, display.activeLabelCount());
+            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+        } finally {
+            display.shutdown();
+        }
+    }
+
+    @Test
     void longIdentifierLabelStaysVisibleAfterViewChangeUntilNextRescan() {
         var world = server.addSimpleWorld("view-change-display");
         world.getChunkAt(0, 0).load();
@@ -593,7 +622,7 @@ class NearbyStorageSignDisplayIntegrationTest {
 
         UUID missing = UUID.randomUUID();
         Object missingState = newPlayerState();
-        setField(missingState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+        setField(missingState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
         setField(missingState, "searched", false);
         putMap(display, "players", missing, missingState);
         enqueue(display, missing);
@@ -629,7 +658,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         UUID missing = UUID.randomUUID();
         Object searchedState = newPlayerState();
         setField(searchedState, "searched", true);
-        setField(searchedState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+        setField(searchedState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
         UUID searched = server.addPlayer().getUniqueId();
         putMap(display, "players", missing, newPlayerState());
         putMap(display, "players", searched, searchedState);
@@ -637,7 +666,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         PlayerMock idleSoon = server.addPlayer();
         idleSoon.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object idleState = newPlayerState();
-        setField(idleState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+        setField(idleState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         putMap(display, "players", idleSoon.getUniqueId(), idleState);
 
         Method enqueue = NearbyStorageSignDisplay.class.getDeclaredMethod("enqueue", UUID.class);
@@ -711,15 +740,15 @@ class NearbyStorageSignDisplayIntegrationTest {
 
             Object searchedState = newPlayerState();
             setField(searchedState, "searched", true);
-            setField(searchedState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+            setField(searchedState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
             putMap(display, "players", searched, searchedState);
 
             Object tooSoonState = newPlayerState();
-            setField(tooSoonState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+            setField(tooSoonState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
             putMap(display, "players", tooSoon, tooSoonState);
 
             Object validState = newPlayerState();
-            setField(validState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+            setField(validState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
             putMap(display, "players", valid, validState);
 
             java.util.ArrayDeque<UUID> queue = new java.util.ArrayDeque<>();
@@ -810,7 +839,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
             UUID viewer = player.getUniqueId();
             Object state = newPlayerState();
-            setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+            setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
             putMap(display, "players", viewer, state);
             java.util.ArrayDeque<UUID> queue = new java.util.ArrayDeque<>();
             queue.add(viewer);
@@ -853,7 +882,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
             UUID viewer = player.getUniqueId();
             Object state = newPlayerState();
-            setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+            setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
             putMap(display, "players", viewer, state);
             java.util.ArrayDeque<UUID> queue = new java.util.ArrayDeque<>();
             queue.add(viewer);
@@ -1258,7 +1287,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object onlineState = newPlayerState();
         setField(onlineState, "last", player.getEyeLocation().clone().add(1, 0, 0));
-        setField(onlineState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+        setField(onlineState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         setField(onlineState, "searched", true);
         setField(onlineState, "indexRevision", 1L);
         putMap(display, "players", player.getUniqueId(), onlineState);
@@ -1273,7 +1302,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         method.invoke(display);
 
         assertEquals(1, ((java.util.Map<?, ?>) getField(display, "players")).size());
-        assertEquals(0, getField(onlineState, "stableTicks"));
+        assertEquals(0, getField(onlineState, "positionStableTicks"));
         assertEquals(false, getField(onlineState, "searched"));
         assertTrue(((java.util.Set<?>) getField(onlineState, "visible")).isEmpty());
     }
@@ -1288,7 +1317,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         online.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object onlineState = newPlayerState();
         setField(onlineState, "last", online.getEyeLocation().clone());
-        setField(onlineState, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+        setField(onlineState, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         setField(onlineState, "searched", true);
         setField(onlineState, "indexRevision", 99L);
 
@@ -1336,7 +1365,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object state = newPlayerState();
         setField(state, "last", player.getEyeLocation().clone());
-        setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+        setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
         setField(state, "searched", true);
         setField(state, "indexRevision", 0L);
         putMap(display, "players", player.getUniqueId(), state);
@@ -1364,7 +1393,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object state = newPlayerState();
         setField(state, "last", player.getEyeLocation().clone());
-        setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+        setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
         setField(state, "searched", true);
         setField(state, "indexRevision", index.revision(world));
         setField(state, "contentRevision", index.contentRevision(world) - 1);
@@ -1388,7 +1417,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object state = newPlayerState();
         setField(state, "last", player.getEyeLocation().clone());
-        setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+        setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         setField(state, "searched", true);
         setField(state, "indexRevision", index.revision(world));
         setField(state, "contentRevision", index.contentRevision(world));
@@ -1412,7 +1441,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
         Object state = newPlayerState();
         setField(state, "last", player.getEyeLocation().clone());
-        setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
+        setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks() - 1);
         setField(state, "searched", false);
         putMap(display, "players", player.getUniqueId(), state);
         TextDisplay textDisplay = mock(TextDisplay.class);
@@ -1585,7 +1614,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
             UUID playerId = UUID.randomUUID();
             Object state = newPlayerState();
-            setField(state, "stableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
+            setField(state, "positionStableTicks", ConfigLoader.getNearbyDisplayIdleTicks());
             setField(state, "searched", false);
             putMap(display, "players", playerId, state);
             enqueue(display, playerId);

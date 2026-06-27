@@ -28,11 +28,19 @@ final class NearbyStorageSignDisplaySupport {
     }
 
     static boolean moved(Location previous, Location current) {
+        return movedPosition(previous, current) || movedView(previous, current);
+    }
+
+    static boolean movedPosition(Location previous, Location current) {
         if (previous.getWorld() != current.getWorld()) return true;
         double dx = previous.getX() - current.getX();
         double dy = previous.getY() - current.getY();
         double dz = previous.getZ() - current.getZ();
-        if (dx * dx + dy * dy + dz * dz > 0.0001) return true;
+        return dx * dx + dy * dy + dz * dz > 0.0001;
+    }
+
+    static boolean movedView(Location previous, Location current) {
+        if (previous.getWorld() != current.getWorld()) return true;
         return angleDifference(previous.getYaw(), current.getYaw()) > 0.5f
             || Math.abs(previous.getPitch() - current.getPitch()) > 0.5f;
     }

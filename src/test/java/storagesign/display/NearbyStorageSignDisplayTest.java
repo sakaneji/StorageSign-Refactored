@@ -66,6 +66,20 @@ class NearbyStorageSignDisplayTest {
     }
 
     @Test
+    void movementCanDistinguishPositionAndViewChanges() {
+        Location original = new Location(null, 1, 2, 3, 20, 10);
+
+        assertTrue(NearbyStorageSignDisplay.movedPosition(
+            original, new Location(null, 1.1, 2, 3, 20, 10)));
+        assertFalse(NearbyStorageSignDisplay.movedPosition(
+            original, new Location(null, 1, 2, 3, 21, 10)));
+        assertTrue(NearbyStorageSignDisplay.movedView(
+            original, new Location(null, 1, 2, 3, 21, 10)));
+        assertFalse(NearbyStorageSignDisplay.movedView(
+            original, new Location(null, 1.1, 2, 3, 20, 10)));
+    }
+
+    @Test
     void movementTreatsWorldChangesAsMovement() {
         World first = org.mockito.Mockito.mock(World.class);
         World second = org.mockito.Mockito.mock(World.class);

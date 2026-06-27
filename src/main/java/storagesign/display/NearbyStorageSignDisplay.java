@@ -85,19 +85,42 @@ public final class NearbyStorageSignDisplay {
             online.add(player.getUniqueId());
             PlayerState state = players.computeIfAbsent(player.getUniqueId(), ignored -> new PlayerState());
             Location current = player.getEyeLocation();
-            if (state.last == null || moved(state.last, current)) {
+            if (state.last == null) {
                 state.last = current.clone();
-                state.stableTicks = 0;
-                state.searched = false;
+                state.positionStableTicks = 0;
+                state.viewStableTicks = 0;
                 continue;
             }
-            state.stableTicks += interval;
+
+            boolean positionMoved = movedPosition(state.last, current);
+            boolean viewMoved = movedView(state.last, current);
+            if (positionMoved) {
+                state.positionStableTicks = 0;
+                state.searched = false;
+                state.needsRescan = true;
+            } else {
+                state.positionStableTicks += interval;
+            }
+            if (viewMoved) {
+                state.viewStableTicks = 0;
+                state.searched = false;
+                state.needsRescan = true;
+            } else {
+                state.viewStableTicks += interval;
+            }
+            state.last = current.clone();
             if (state.searched && (
                 state.indexRevision != index.revision(player.getWorld())
                     || state.contentRevision != index.contentRevision(player.getWorld()))) {
                 state.searched = false;
+                state.needsRescan = true;
             }
-            if (!state.searched && state.stableTicks >= ConfigLoader.getNearbyDisplayIdleTicks()) {
+
+            boolean idle = state.positionStableTicks >= ConfigLoader.getNearbyDisplayIdleTicks();
+            boolean viewSettled = state.visible.isEmpty()
+                || !state.needsRescan
+                || state.viewStableTicks >= ConfigLoader.getNearbyDisplayIdleTicks();
+            if (!state.searched && state.needsRescan && idle && viewSettled) {
                 enqueue(player.getUniqueId());
             }
         }
@@ -123,9 +146,10 @@ public final class NearbyStorageSignDisplay {
             Player player = Bukkit.getPlayer(playerId);
             PlayerState state = players.get(playerId);
             if (player == null || state == null || state.searched
-                || state.stableTicks < ConfigLoader.getNearbyDisplayIdleTicks()) continue;
+                || state.positionStableTicks < ConfigLoader.getNearbyDisplayIdleTicks()) continue;
             state.desired = select(player);
             state.searched = true;
+            state.needsRescan = false;
             state.indexRevision = index.revision(player.getWorld());
             state.contentRevision = index.contentRevision(player.getWorld());
             if (!applyDesired(player, state)) allocationPending.add(playerId);
@@ -286,6 +310,14 @@ public final class NearbyStorageSignDisplay {
         return NearbyStorageSignDisplaySupport.moved(previous, current);
     }
 
+    static boolean movedPosition(Location previous, Location current) {
+        return NearbyStorageSignDisplaySupport.movedPosition(previous, current);
+    }
+
+    static boolean movedView(Location previous, Location current) {
+        return NearbyStorageSignDisplaySupport.movedView(previous, current);
+    }
+
     static boolean isInForwardCone(Vector forward, Vector direction, double fieldOfViewDegrees) {
         return NearbyStorageSignDisplaySupport.isInForwardCone(forward, direction, fieldOfViewDegrees);
     }
@@ -304,8 +336,10 @@ public final class NearbyStorageSignDisplay {
 
     private static final class PlayerState {
         private Location last;
-        private int stableTicks;
+        private int positionStableTicks;
+        private int viewStableTicks;
         private boolean searched;
+        private boolean needsRescan = true;
         private long indexRevision;
         private long contentRevision;
         private List<StorageSignPosition> desired = List.of();
