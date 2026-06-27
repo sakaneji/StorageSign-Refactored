@@ -102,15 +102,18 @@ public final class StorageSignSearchCommand implements CommandExecutor {
 
     private void show(CommandSender sender, String identifier, int page, StorageSignSearchResult result,
                       OutputMode mode) {
-        int pageSize = ConfigLoader.getAdminSearchPageSize();
+        int pageSize = Math.max(1, ConfigLoader.getAdminSearchPageSize());
         int pages = Math.max(1, (result.entries().size() + pageSize - 1) / pageSize);
         if (page > pages) {
             sender.sendMessage("§cPage " + page + " does not exist; total pages=" + pages);
             return;
         }
         if (mode == OutputMode.DEFAULT) {
+            String totalAmount = result.totalAmount() == Long.MAX_VALUE
+                ? ">" + Long.MAX_VALUE
+                : Long.toString(result.totalAmount());
             sender.sendMessage("§aStorageSign search '" + identifier + "': matches=" + result.entries().size()
-                + ", totalAmount=" + result.totalAmount() + ", page=" + page + "/" + pages);
+                + ", totalAmount=" + totalAmount + ", page=" + page + "/" + pages);
         }
         int start = (page - 1) * pageSize;
         int end = Math.min(start + pageSize, result.entries().size());

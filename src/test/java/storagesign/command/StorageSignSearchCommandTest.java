@@ -183,6 +183,26 @@ class StorageSignSearchCommandTest {
     }
 
     @Test
+    void showUsesGreaterThanFormatWhenTotalAmountIsCapped() throws Exception {
+        ServerMock server = MockBukkit.mock();
+        try {
+            CommandSender sender = mock(CommandSender.class);
+            StorageSignSearchResult result = new StorageSignSearchResult(List.of(), Long.MAX_VALUE);
+            StorageSignSearchCommand command = new StorageSignSearchCommand(
+                new StorageSignIndex(null, true), new StorageSignQueryService(null, new StorageSignIndex(null, true)));
+            Method show = StorageSignSearchCommand.class.getDeclaredMethod(
+                "show", CommandSender.class, String.class, int.class, StorageSignSearchResult.class);
+            show.setAccessible(true);
+
+            show.invoke(command, sender, "STONE", 1, result);
+
+            verify(sender).sendMessage(contains("totalAmount=>" + Long.MAX_VALUE));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
     void parseRecognizesContainsWorldAndPageOptions() throws Exception {
         ServerMock server = MockBukkit.mock();
         try {

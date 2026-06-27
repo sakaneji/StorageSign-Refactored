@@ -70,7 +70,15 @@ public final class StorageSignQueryService {
                 .thenComparingInt(entry -> entry.position().y())
                 .thenComparingInt(entry -> entry.position().z()))
             .toList();
-        return new StorageSignSearchResult(matches,
-            matches.stream().mapToLong(IndexedStorageSign::amount).sum());
+        long totalAmount = 0L;
+        for (IndexedStorageSign entry : matches) {
+            try {
+                totalAmount = Math.addExact(totalAmount, entry.amount());
+            } catch (ArithmeticException overflow) {
+                totalAmount = Long.MAX_VALUE;
+                break;
+            }
+        }
+        return new StorageSignSearchResult(matches, totalAmount);
     }
 }
