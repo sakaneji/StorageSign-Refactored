@@ -81,7 +81,7 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
-    void longIdentifierPlayerGetsOneSharedLabelAndMovementRemovesIt() {
+    void longIdentifierPlayerGetsOneSharedLabelAndMovementKeepsItUntilOutOfRange() {
         var world = server.addSimpleWorld("nearby-display");
         world.getChunkAt(0, 0).load();
         Block block = world.getBlockAt(0, 65, 2);
@@ -103,6 +103,11 @@ class NearbyStorageSignDisplayIntegrationTest {
 
             player.teleport(new Location(world, 1.5, 64, 0.5, 0, 0));
             server.getScheduler().performTicks(6);
+            assertEquals(1, display.activeLabelCount());
+            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+
+            player.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
+            server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
             assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
         } finally {
@@ -170,7 +175,7 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
-    void twoPlayersShareOnePrivateNonPersistentLabelUntilBothMove() {
+    void twoPlayersShareOnePrivateNonPersistentLabelUntilBothMoveOutOfRange() {
         var world = server.addSimpleWorld("shared-display");
         world.getChunkAt(0, 0).load();
         Block block = world.getBlockAt(0, 65, 2);
@@ -201,6 +206,12 @@ class NearbyStorageSignDisplayIntegrationTest {
             assertEquals(1, display.activeLabelCount());
             second.teleport(second.getLocation().add(1, 0, 0));
             server.getScheduler().performTicks(6);
+            assertEquals(1, display.activeLabelCount());
+            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+
+            first.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
+            second.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
+            server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
             assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
         } finally {

@@ -86,7 +86,6 @@ public final class NearbyStorageSignDisplay {
             PlayerState state = players.computeIfAbsent(player.getUniqueId(), ignored -> new PlayerState());
             Location current = player.getEyeLocation();
             if (state.last == null || moved(state.last, current)) {
-                clearPlayer(player.getUniqueId(), player, state);
                 state.last = current.clone();
                 state.stableTicks = 0;
                 state.searched = false;
