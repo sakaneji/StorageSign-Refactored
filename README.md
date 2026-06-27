@@ -373,6 +373,20 @@ target/StorageSign-Refactored-<version>.jar
 ./scripts/test.sh all
 ```
 
+### 手動実働作確認用 Docker
+
+`docker/manual/compose.yml` は、人間が実働作確認するための専用 Paper コンテナです。
+検証用ワールドは superflat、難易度は peaceful にしています。
+op の一覧は `docker/manual/local/ops.json` に置きます。
+
+```bash
+mvn package
+docker compose -f docker/manual/compose.yml up -d --build
+```
+
+`MC_VERSION` と `PAPER_BUILD` を環境変数で上書きできます。既定値は、現時点でこのリポジトリが
+動作確認の起点にしている 1.21.11 / 69 です。
+
 E2E は Paper と Mineflayer クライアントを Docker Compose で起動し、外部 Logger の
 未導入時フォールバックと導入時の登録状態、右クリック、
 スニーク、ホッパー搬送、ホッパー付きトロッコ、チェスト付きトロッコ、チェスト付きボート、

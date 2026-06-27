@@ -9,6 +9,9 @@
 dependency-reduced-pom.xml
 release.properties
 
+# Local manual validation config
+docker/manual/local/
+
 # Logs
 *.log
 

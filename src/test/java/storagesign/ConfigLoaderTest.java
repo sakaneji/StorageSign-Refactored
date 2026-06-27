@@ -2,12 +2,18 @@ package storagesign;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
@@ -19,9 +25,10 @@ import org.junit.jupiter.api.Test;
 class ConfigLoaderTest {
 
     @Test
-    void loadCachesAllScalarsAndSanitizedCompatibilityMaps() {
+    void loadCachesAllScalarsAndSanitizedCompatibilityMaps() throws IOException {
         JavaPlugin plugin = mock(JavaPlugin.class);
         FileConfiguration config = mock(FileConfiguration.class);
+        Path dataFolder = tempDataFolder();
         ConfigurationSection aliases = section(
             Set.of(" old ", "blank", "missing"),
             Map.of(" old ", " NEW ", "blank", "  ")
@@ -29,7 +36,11 @@ class ConfigLoaderTest {
         ConfigurationSection virtuals = section(Set.of("Legacy"), Map.of("Legacy", "STONE:2"));
         ConfigurationSection potionAliases = section(
             Set.of("minecraft:old"), Map.of("minecraft:old", "minecraft:new"));
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenReturn(
+            new ByteArrayInputStream("default-config".getBytes()));
         when(plugin.getConfig()).thenReturn(config);
+        doNothing().when(plugin).reloadConfig();
         when(config.getString("no-permisson", "You don't have permission")).thenReturn("denied");
         when(config.getString("log-level", "INFO")).thenReturn("TRACE");
         when(config.getBoolean("manual-import", true)).thenReturn(false);
@@ -66,8 +77,9 @@ class ConfigLoaderTest {
 
         ConfigLoader.load(plugin);
 
-        verify(plugin).saveDefaultConfig();
+        verify(plugin).getResource("config.default.yml");
         verify(plugin).reloadConfig();
+        assertArrayEquals("default-config".getBytes(), Files.readAllBytes(dataFolder.resolve("config.yml")));
         assertEquals("denied", ConfigLoader.getNoPermission());
         assertEquals("TRACE", ConfigLoader.getLogLevel());
         assertFalse(ConfigLoader.getManualImport());
@@ -109,7 +121,12 @@ class ConfigLoaderTest {
     void loadUsesEmptyMapsWhenSectionsAreAbsent() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         FileConfiguration config = mock(FileConfiguration.class);
+        Path dataFolder = tempDataFolder();
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenReturn(
+            new ByteArrayInputStream("default-config".getBytes()));
         when(plugin.getConfig()).thenReturn(config);
+        doNothing().when(plugin).reloadConfig();
 
         ConfigLoader.load(plugin);
 
@@ -123,7 +140,12 @@ class ConfigLoaderTest {
     void loadFallsBackForNonPositiveSizingValues() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         FileConfiguration config = mock(FileConfiguration.class);
+        Path dataFolder = tempDataFolder();
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenReturn(
+            new ByteArrayInputStream("default-config".getBytes()));
         when(plugin.getConfig()).thenReturn(config);
+        doNothing().when(plugin).reloadConfig();
         when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
         when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(null);
         when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
@@ -161,7 +183,12 @@ class ConfigLoaderTest {
     void nearbyDisplayIsEffectivelyDisabledWhenEitherGateIsOff() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         FileConfiguration config = mock(FileConfiguration.class);
+        Path dataFolder = tempDataFolder();
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenReturn(
+            new ByteArrayInputStream("default-config".getBytes()));
         when(plugin.getConfig()).thenReturn(config);
+        doNothing().when(plugin).reloadConfig();
         when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
         when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(null);
         when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
@@ -175,6 +202,27 @@ class ConfigLoaderTest {
         assertFalse(ConfigLoader.getEffectiveNearbyDisplayEnabled());
     }
 
+    @Test
+    void loadDoesNotOverwriteExistingRuntimeConfig() throws IOException {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        FileConfiguration config = mock(FileConfiguration.class);
+        Path dataFolder = tempDataFolder();
+        Path runtimeConfig = dataFolder.resolve("config.yml");
+        Files.writeString(runtimeConfig, "existing-config");
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenThrow(new AssertionError("default resource should not be read"));
+        when(plugin.getConfig()).thenReturn(config);
+        doNothing().when(plugin).reloadConfig();
+        when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
+        when(config.getConfigurationSection("item-identifier-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("potion-key-aliases")).thenReturn(null);
+        when(config.getConfigurationSection("virtual-item-identifiers")).thenReturn(null);
+
+        ConfigLoader.load(plugin);
+
+        assertEquals("existing-config", Files.readString(runtimeConfig));
+    }
+
     private static ConfigurationSection section(Set<String> keys, Map<String, String> values) {
         ConfigurationSection section = mock(ConfigurationSection.class);
         when(section.getKeys(false)).thenReturn(keys);
@@ -182,5 +230,13 @@ class ConfigLoaderTest {
             when(section.getString(key)).thenReturn(values.get(key));
         }
         return section;
+    }
+
+    private static Path tempDataFolder() {
+        try {
+            return Files.createTempDirectory("storagesign-config-test");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

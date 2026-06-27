@@ -1,6 +1,9 @@
 package storagesign;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +20,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <p>キー {@code no-permisson} （「i」欠き）は元プラグインのタイポをそのまま維持している。
  */
 public final class ConfigLoader {
+    private static final String DEFAULT_CONFIG_RESOURCE = "config.default.yml";
+    private static final String RUNTIME_CONFIG_FILE = "config.yml";
 
     // ── 設定キー定数 ────────────────────────────────────────────────────────────
     private static final String KEY_NO_PERMISSION     = "no-permisson";  // 元プラグインのタイポ — 互換のためそのまま維持
@@ -92,7 +97,7 @@ public final class ConfigLoader {
      * デフォルト config がなければ生成し、全値をロードする。
      */
     public static void load(JavaPlugin plugin) {
-        plugin.saveDefaultConfig();
+        ensureConfigExists(plugin);
         plugin.reloadConfig();
         FileConfiguration cfg = plugin.getConfig();
 
@@ -132,6 +137,25 @@ public final class ConfigLoader {
         nearbyDisplayGlobalLimit = positive(cfg.getInt(KEY_DISPLAY_GLOBAL_LIMIT, 512), 512);
         adminSearchPageSize = positive(cfg.getInt(KEY_SEARCH_PAGE_SIZE, 10), 10);
         adminSearchMaxConcurrent = positive(cfg.getInt(KEY_SEARCH_MAX_CONCURRENT, 2), 2);
+    }
+
+    private static void ensureConfigExists(JavaPlugin plugin) {
+        File dataFolder = plugin.getDataFolder();
+        if (!dataFolder.exists() && !dataFolder.mkdirs() && !dataFolder.exists()) {
+            throw new IllegalStateException("Failed to create plugin data folder: " + dataFolder);
+        }
+
+        File runtimeConfig = new File(dataFolder, RUNTIME_CONFIG_FILE);
+        if (runtimeConfig.isFile()) return;
+
+        try (InputStream input = plugin.getResource(DEFAULT_CONFIG_RESOURCE)) {
+            if (input == null) {
+                throw new IllegalStateException("Missing default config resource: " + DEFAULT_CONFIG_RESOURCE);
+            }
+            Files.copy(input, runtimeConfig.toPath());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to create runtime config from " + DEFAULT_CONFIG_RESOURCE, e);
+        }
     }
 
     // ── ゲッター ───────────────────────────────────────────────────────────────
