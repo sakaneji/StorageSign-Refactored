@@ -22,6 +22,7 @@ Paper 向け Minecraft プラグインです。
   - [主な設定項目](#主な設定項目)
   - [運用上の注意](#運用上の注意)
 - [位置索引・検索・近接表示の詳細](docs/storage-sign-index.md)
+- [変更時に確認するドキュメント](docs/documentation-update-guide.md)
 - [開発者向けガイド](#開発者向けガイド)
   - [プロジェクト構成](#プロジェクト構成)
   - [ビルド手順](#ビルド手順)
@@ -37,31 +38,37 @@ Paper 向け Minecraft プラグインです。
 
 ### 追加された機能
 
-- `config.yml` に `unregister-on-empty` を追加
-  - 保管数が 0 になった際に登録を解除するかを切り替え可能。
-- `config.yml` に `item-identifier-aliases` を追加
-  - 旧識別子や別名を現在の Material 名にマッピングでき、リネーム耐性を向上。
-- `config.yml` に `virtual-item-identifiers` を追加
-  - 実在しない識別子を `MATERIAL[:damage]` にマッピング可能。
+- `config.yml` を拡張
+  - `unregister-on-empty` で、保管数が 0 になった際に登録を解除するかを切り替え可能。
+  - `item-identifier-aliases` で、旧識別子や別名を現在の Material 名へマッピング可能。
+  - `virtual-item-identifiers` で、実在しない識別子を `MATERIAL[:damage]` にマッピング可能。
+  - `potion-key-aliases` で、Potion の Registry キー変更に追従可能。
+  - `brewing-ingredient-identifiers` で、追加の醸造材料を製品コード変更なしで受け入れ可能。
+- `storage-index` / `nearby-display` / `admin-search` を追加
+  - ロード済みチャンクの位置索引、管理者検索、近接表示を本体機能として持つ。
+- `/storagesignindex`（エイリアス: `/ssindex`）と `/storagesignsearch`（エイリアス: `/sssearch`）を追加
+  - 保存済み索引の再構築・検索を行える。
+- `/storagesigngive`（エイリアス: `/ssgive`）を追加
+  - クリエイティブモードのプレイヤーが任意の識別子・数量・看板種類で StorageSign アイテムを直接取得できる。
 - 吊り看板系（`_HANGING_SIGN` / `_WALL_HANGING_SIGN`）の取り扱いを実装
   - 隣接判定や向き判定を含め、通常看板と同様に対象化。
 - 互換性・可搬性向上のためのレジストリ層を追加
   - `MaterialRegistry` / `LegacyNameRegistry` / `DyeRegistry` により、素材解決と旧名互換を整理。
+- 外部 Logger 連携を追加
+  - `Logger` は `softdepend` にし、未導入または初期化失敗時は標準ロガーへフォールバックする。
 - テストスイートを追加
-  - `StorageSign` 本体とレジストリ・ポーション補助ロジックのユニットテストを整備。
-- `/storagesigngive`（エイリアス: `/ssgive`）コマンドを追加
-  - クリエイティブモードのプレイヤーが任意の識別子・数量・看板種類で StorageSign アイテムを直接取得できる。
+  - `StorageSign` 本体とレジストリ・ポーション補助ロジック、索引、搬送イベントの自動テストを整備した。
 - ホッパー付きトロッコ・チェスト付きトロッコ・チェスト付きボートへの自動入出庫対応を追加
   - `InventoryMoveItemEvent` の送信元・受信先としてこれらのエンティティインベントリを認識し、隣接 SS との自動インポート/エクスポートが機能する。
 
 ### 削除・廃止された機能
 
-- 外部プラグイン依存を任意化
-  - `Logger` は `softdepend` とし、`FarmNBT` と `WorldGuard` の依存宣言は削除。
-  - [`teruteru128/logger`](https://github.com/teruteru128/logger) がサーバーに導入済みなら優先して使用し、未導入または初期化失敗時は Bukkit/JDK 標準ロガーへ自動的にフォールバック。
-  - 旧版で `FarmNBT` が供給していたバージョン別 SNBT は使用せず、不吉な旗を Bukkit API から構築する。API 構築に失敗した場合も白旗へ変換せず、1 ティック後から 5 秒間隔でメタの復旧を自動的に再試行する。復旧までは不吉な旗の搬出を止め、保管数も変更しない。
-  - `WorldGuard` は未使用だったため削除。
-- 外部 Logger 連携と標準ロガーのフォールバックを共通ロギング層で統一。
+- 旧版の `storagesign.create` 権限を廃止
+  - 現行は `/storagesigngive` と `storagesign.give` に整理した。
+- `WorldGuard` の softdepend を削除
+  - 旧版では `softdepend: [WorldGuard]` だったが、現行は Logger のみを softdepend にしている。
+- `FarmNBT` 依存を廃止
+  - 不吉な旗は Bukkit API から構築し、失敗時は白旗へ変換せず復旧再試行する。
 - ビルド時の `project.properties` + `maven-resources-plugin` コピー運用を廃止
   - 現行は `maven-shade-plugin` によるパッケージング中心へ移行。
 
@@ -374,6 +381,8 @@ target/StorageSign-Refactored-<version>.jar
 # 上記をすべて実行
 ./scripts/test.sh all
 ```
+
+変更時にどのドキュメントを見直すべきかは [変更時に確認するドキュメント](docs/documentation-update-guide.md) を参照してください。
 
 ### 手動実働作確認用 Docker
 
