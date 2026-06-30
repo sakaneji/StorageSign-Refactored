@@ -46,8 +46,8 @@ Paper 向け Minecraft プラグインです。
   - `brewing-ingredient-identifiers` で、追加の醸造材料を製品コード変更なしで受け入れ可能。
 - `storage-index` / `nearby-display` / `admin-search` を追加
   - ロード済みチャンクの位置索引、管理者検索、近接表示を本体機能として持つ。
-- `/storagesignindex`（エイリアス: `/ssindex`）と `/storagesignsearch`（エイリアス: `/sssearch`）を追加
-  - 保存済み索引の再構築・検索を行える。
+- `/storagesignindex`（エイリアス: `/ssindex`）、`/storagesignsearch`（エイリアス: `/sssearch`）、`/storagesignwarp`（エイリアス: `/sswarp`）を追加
+  - 保存済み索引の再構築・検索と、指定アイテムを持つStorageSign前面へのワープを行える。
 - `/storagesigngive`（エイリアス: `/ssgive`）を追加
   - クリエイティブモードのプレイヤーが任意の識別子・数量・看板種類で StorageSign アイテムを直接取得できる。
 - 吊り看板系（`_HANGING_SIGN` / `_WALL_HANGING_SIGN`）の取り扱いを実装
@@ -227,6 +227,26 @@ World名を指定してください。0以下の設定値は既定値へ戻し�
 通常は大文字小文字を無視した完全一致、`--contains`指定時は部分一致です。`--coords` は `world|x|y|z`、`--front` は `world|frontX|frontY|frontZ` 形式で返し、Skript で `split("|")` しやすい形にしています。結果は10件ずつ、
 通常表示では World、座標、数量、ロード状態とともに表示します。数量合計が `Long.MAX_VALUE` に達した場合は `>9223372036854775807` のように、上限以上であることを示します。結果順は `World UUID -> X -> Y -> Z` の昇順で、`--page` は 1 始まりです。`--world` は現在ロード中のWorld名のみ受け付けます。
 
+#### /storagesignwarp（/sswarp）
+
+プレイヤーの現在Worldにある、指定アイテムを持つ最寄りのStorageSignの前面へワープします。
+一般プレイヤーが使う想定のコマンドで、追加権限は不要です。
+
+```text
+/storagesignwarp STONE
+/sswarp POTION:HEAL:0
+```
+
+検索は完全識別子の大文字小文字を無視した完全一致です。複数候補がある場合は同じWorld内でプレイヤーに最も近いStorageSignを選びます。
+候補チャンクは実ブロック確認のためにロードされます。前面方向が保存済み索引にもロード済み看板にもない場合、または前面ブロックか頭上が空気でない場合、あるいは足場が solid でない場合はワープしません。
+
+Skriptから関数として使う場合は、プレイヤーにこのコマンドを実行させます。
+
+```vb
+function warp_to_ss_item(p: player, identifier: text):
+    make {_p} execute command "sswarp %{_identifier}%"
+```
+
 #### 保存済み索引CLI・ビューア
 
 保存済みの `storage-sign-index.bin` を読む外部CLIがあります。検索、集計、CSV/JSON出力はCLIで行い、Web画面は独立したviewerで起動します。
@@ -240,6 +260,19 @@ python3 tools/storage_sign_index_viewer.py --world-map worlds.json
 ```
 
 詳細は [位置索引・検索・近接表示](docs/storage-sign-index.md) の「外部CLI・ビューア」を参照してください。
+
+### オフライン region 再構築
+
+サーバーを起動せずに、ワールドディレクトリの `level.dat` と `region/*.mca` から索引を再構築できます。
+これはプラグイン内の `/ssindex` とは分離した standalone ツールです。
+
+```text
+python3 tools/storage_sign_region_cli.py /path/to/world
+python3 tools/storage_sign_region_cli.py /path/to/world --output /path/to/storage-sign-index.bin
+python3 tools/storage_sign_region_cli.py /path/to/world /path/to/another-world
+```
+
+`rebuild` も互換 alias として受け付けます。既定の出力先は repo root 基準の `plugins/StorageSign-Refactored/storage-sign-index.bin` です。入力ワールドは `uid.dat` を優先し、必要に応じて `level.dat` も参照して UUID を読み、`region` 配下の `.mca` を走査します。存在しない world や壊れた region/chunk は警告して続行し、警告が出た場合は終了コード 1 になります。
 
 ### 権限一覧
 

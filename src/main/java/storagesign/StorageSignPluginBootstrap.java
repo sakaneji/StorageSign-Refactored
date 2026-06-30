@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import storagesign.command.SsGiveCommand;
 import storagesign.command.StorageSignIndexCommand;
 import storagesign.command.StorageSignSearchCommand;
+import storagesign.command.StorageSignWarpCommand;
 import storagesign.display.NearbyStorageSignDisplay;
 import storagesign.index.StorageSignIndex;
 import storagesign.logging.PluginLogger;
@@ -46,6 +47,8 @@ final class StorageSignPluginBootstrap {
         plugin.getCommand("storagesignsearch").setExecutor(
             new StorageSignSearchCommand(storageSignIndex, storageSignQueries));
         plugin.getCommand("storagesignsearch").setTabCompleter(tabCompleter);
+        plugin.getCommand("storagesignwarp").setExecutor(new StorageSignWarpCommand(storageSignIndex));
+        plugin.getCommand("storagesignwarp").setTabCompleter(tabCompleter);
 
         NearbyStorageSignDisplay nearbyStorageSignDisplay = new NearbyStorageSignDisplay(plugin, storageSignIndex);
         plugin.setNearbyStorageSignDisplay(nearbyStorageSignDisplay);

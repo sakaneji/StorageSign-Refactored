@@ -15,13 +15,15 @@ from typing import Sequence
 
 
 MAGIC = 0x53534958
-VERSION = 1
+VERSION = 2
 MAX_IDENTIFIER_BYTES = 65_536
 MAX_ENTRIES = 10_000_000
-MIN_ENTRY_BYTES = 45
+REPO_ROOT = Path(__file__).resolve().parents[1]
+MIN_ENTRY_BYTES_V1 = 45
+MIN_ENTRY_BYTES_V2 = 46
 DEFAULT_INDEX_PATHS = (
-    Path("plugins/StorageSign-Refactored/storage-sign-index.bin"),
-    Path("plugins/StorageSign-Refactored/storage-sign-index.bin.tmp"),
+    REPO_ROOT / "plugins/StorageSign-Refactored/storage-sign-index.bin",
+    REPO_ROOT / "plugins/StorageSign-Refactored/storage-sign-index.bin.tmp",
 )
 WorldMap = dict[str, str]
 
@@ -35,6 +37,7 @@ class Entry:
     identifier: str
     amount: int
     verified_at: int
+    front_facing: str | None = None
 
 
 def default_index_path() -> Path:
@@ -99,11 +102,12 @@ def read_index(path: Path) -> list[Entry]:
     magic, version, count = struct.unpack(">III", _read_exact(stream, 12))
     if magic != MAGIC:
         raise ValueError("invalid index magic")
-    if version != VERSION:
+    if version not in (1, VERSION):
         raise ValueError(f"unsupported index version: {version}")
     if count > MAX_ENTRIES:
         raise ValueError(f"invalid index count: {count}")
-    if count > (len(payload) - 12) // MIN_ENTRY_BYTES:
+    min_entry_bytes = MIN_ENTRY_BYTES_V2 if version >= 2 else MIN_ENTRY_BYTES_V1
+    if count > (len(payload) - 12) // min_entry_bytes:
         raise ValueError(f"index count exceeds available data: {count}")
 
     entries: list[Entry] = []
@@ -111,12 +115,17 @@ def read_index(path: Path) -> list[Entry]:
         world_msb, world_lsb = struct.unpack(">qq", _read_exact(stream, 16))
         x, y, z, amount = struct.unpack(">iiii", _read_exact(stream, 16))
         (verified_at,) = struct.unpack(">q", _read_exact(stream, 8))
+        front_facing = None
+        if version >= 2:
+            (has_front_facing,) = struct.unpack(">?", _read_exact(stream, 1))
+            if has_front_facing:
+                front_facing = _read_utf(stream)
         (identifier_length,) = struct.unpack(">i", _read_exact(stream, 4))
         if identifier_length <= 0 or identifier_length > MAX_IDENTIFIER_BYTES:
             raise ValueError(f"invalid identifier length: {identifier_length}")
         identifier = _read_exact(stream, identifier_length).decode("utf-8")
         world_id = str(uuid.UUID(bytes=struct.pack(">qq", world_msb, world_lsb)))
-        entries.append(Entry(world_id, x, y, z, identifier, amount, verified_at))
+        entries.append(Entry(world_id, x, y, z, identifier, amount, verified_at, front_facing))
 
     if stream.read(1):
         raise ValueError("unexpected trailing index data")
@@ -128,6 +137,11 @@ def _read_exact(stream: io.BytesIO, size: int) -> bytes:
     if len(data) != size:
         raise ValueError("index file is truncated")
     return data
+
+
+def _read_utf(stream: io.BytesIO) -> str:
+    (length,) = struct.unpack(">H", _read_exact(stream, 2))
+    return _read_exact(stream, length).decode("utf-8")
 
 
 def filter_entries(
@@ -178,6 +192,7 @@ def entry_payload(entry: Entry, world_map: WorldMap | None = None) -> dict[str, 
         "identifier": entry.identifier,
         "amount": entry.amount,
         "verified_at": entry.verified_at,
+        "front_facing": entry.front_facing,
     }
 
 
@@ -255,3 +270,34 @@ def json_result(
     summary_entries: Sequence[Entry] | None = None,
 ) -> str:
     return json.dumps(result_payload(path, entries, world_map, summary_entries), ensure_ascii=False, indent=2)
+
+
+def write_index(path: Path, entries: Sequence[Entry]) -> int:
+    if len(entries) > MAX_ENTRIES:
+        raise ValueError("too many index entries")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = io.BytesIO()
+    payload.write(struct.pack(">III", MAGIC, VERSION, len(entries)))
+    for entry in entries:
+        world_uuid = uuid.UUID(entry.world_id)
+        world_msb, world_lsb = struct.unpack(">qq", world_uuid.bytes)
+        identifier = entry.identifier.encode("utf-8")
+        if not identifier:
+            raise ValueError("identifier is required")
+        if len(identifier) > MAX_IDENTIFIER_BYTES:
+            raise ValueError("identifier is too long")
+        payload.write(struct.pack(">qqiiiiq", world_msb, world_lsb, entry.x, entry.y, entry.z,
+                                  entry.amount, entry.verified_at))
+        payload.write(struct.pack(">?", entry.front_facing is not None))
+        if entry.front_facing is not None:
+            facing = entry.front_facing.encode("utf-8")
+            payload.write(struct.pack(">H", len(facing)))
+            payload.write(facing)
+        payload.write(struct.pack(">i", len(identifier)))
+        payload.write(identifier)
+    raw = payload.getvalue()
+    crc = zlib.crc32(raw) & 0xFFFFFFFF
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(raw + struct.pack(">I", crc))
+    temporary.replace(path)
+    return path.stat().st_size
