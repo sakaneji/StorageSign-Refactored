@@ -29,6 +29,11 @@ commands:
         aliases:
             - sssearch
         permission: storagesign.search.admin
+    storagesignwarp:
+        description: Warp to the front of the nearest StorageSign storing an item.
+        usage: /<command> <itemIdentifier>
+        aliases:
+            - sswarp
 
 permissions:
     storagesign.*:

@@ -48,6 +48,18 @@
 
 コンソールから`rebuild`を使う場合は`all`またはWorld名が必要です。再構築の完了後、索引全体を非同期保存します。未ロードチャンクはロードも削除もされません。
 
+## オフライン region 再構築
+
+サーバー未起動でも、ワールドディレクトリの `level.dat` と `region/*.mca` から索引を再構築できます。これはプラグイン本体の `/ssindex` とは別の standalone ツールです。
+
+```text
+python3 tools/storage_sign_region_cli.py /path/to/world
+python3 tools/storage_sign_region_cli.py /path/to/world /path/to/another-world
+python3 tools/storage_sign_region_cli.py /path/to/world --output /path/to/storage-sign-index.bin
+```
+
+`rebuild` も互換 alias として受け付けます。入力ワールドごとに `uid.dat` を優先し、必要に応じて `level.dat` も参照して UUID を読み、`region` 配下の `.mca` を走査します。存在しない world や壊れた region/chunk は警告して続行し、警告が出た場合は終了コード 1 になります。出力は既存の `storage-sign-index.bin` と同じ形式です。
+
 ## アイテム名検索コマンド
 
 権限は`storagesign.search.admin`、デフォルトはOPです。短縮形は`/sssearch`です。
@@ -83,6 +95,23 @@
 `--coords` と `--front` は同時に指定できません。
 
 検索結果は `World UUID -> X -> Y -> Z` の昇順で並べます。`--page` は 1 始まりで、範囲外ページはエラーです。`--world` は現在ロードされている World 名のみ受け付けます。
+
+### 一般プレイヤー向けワープ
+
+```text
+/sswarp STONE
+/storagesignwarp POTION:HEAL:0
+```
+
+`/sswarp` は実行プレイヤーの現在Worldだけを対象に、完全識別子が一致する最寄りのStorageSignを探し、
+その前面ブロック中央へワープします。追加権限は不要です。候補チャンクは実ブロック確認のためにロードされます。前面方向が不明な候補、前面ブロックか頭上が空気でない候補、または足場が solid でない候補へはワープしません。
+
+Skriptで関数化する場合は、対象プレイヤーに `/sswarp` を実行させます。
+
+```vb
+function warp_to_ss_item(p: player, identifier: text):
+    make {_p} execute command "sswarp %{_identifier}%"
+```
 
 ### Worldとページの指定
 

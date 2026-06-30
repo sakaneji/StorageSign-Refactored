@@ -1,6 +1,7 @@
 package storagesign;
 
 import java.util.UUID;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Sign;
@@ -36,6 +37,24 @@ public final class StorageSignFacingSupport {
         if (dx == 0 && dy == 0 && dz == 0) return null;
         return new StorageSignPosition(position.worldId(), position.x() + dx,
             position.y() + dy, position.z() + dz);
+    }
+
+    public static StorageSignPosition resolveFrontPosition(StorageSignPosition position,
+                                                           BlockFace indexedFacing,
+                                                           World world) {
+        if (position == null) return null;
+        BlockFace facing = indexedFacing;
+        if (facing == null && world != null && world.getUID().equals(position.worldId())
+            && world.isChunkLoaded(position.x() >> 4, position.z() >> 4)
+            && world.getBlockAt(position.x(), position.y(), position.z()).getState() instanceof Sign sign) {
+            facing = resolveFrontFacing(sign);
+        }
+        return frontPosition(position, facing);
+    }
+
+    public static Location centeredLocation(StorageSignPosition position, World world, float yaw, float pitch) {
+        if (position == null || world == null || !world.getUID().equals(position.worldId())) return null;
+        return new Location(world, position.x() + 0.5, position.y(), position.z() + 0.5, yaw, pitch);
     }
 
     public static String formatWorld(World world, UUID worldId) {

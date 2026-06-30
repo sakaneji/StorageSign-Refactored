@@ -85,4 +85,21 @@ class StorageSignCommandTabCompleterTest {
             MockBukkit.unmock();
         }
     }
+
+    @Test
+    void warpCompletesItemIdentifiers() {
+        ServerMock server = MockBukkit.mock();
+        try {
+            StorageSignCommandTabCompleter completer = new StorageSignCommandTabCompleter();
+            Command command = mock(Command.class);
+            when(command.getName()).thenReturn("storagesignwarp");
+
+            List<String> identifiers = completer.onTabComplete(
+                server.getConsoleSender(), command, "sswarp", new String[] {"ST"});
+
+            assertTrue(identifiers.contains("STONE"));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
 }

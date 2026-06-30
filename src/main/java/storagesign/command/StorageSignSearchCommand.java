@@ -3,8 +3,6 @@ package storagesign.command;
 import java.util.UUID;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.Sign;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -138,25 +136,12 @@ public final class StorageSignSearchCommand implements CommandExecutor {
         World world = Bukkit.getWorld(position.worldId());
         String worldName = StorageSignFacingSupport.formatWorld(world, position.worldId());
         StorageSignPosition target = mode == OutputMode.FRONT
-            ? resolveFrontPosition(entry, world)
+            ? StorageSignFacingSupport.resolveFrontPosition(entry.position(), entry.frontFacing(), world)
             : position;
         if (target == null) {
             target = position;
         }
         return worldName + "|" + target.x() + "|" + target.y() + "|" + target.z();
-    }
-
-    private StorageSignPosition resolveFrontPosition(IndexedStorageSign entry, World world) {
-        BlockFace facing = entry.frontFacing();
-        if (facing == null && world != null) {
-            StorageSignPosition position = entry.position();
-            if (world.isChunkLoaded(position.x() >> 4, position.z() >> 4)) {
-                if (world.getBlockAt(position.x(), position.y(), position.z()).getState() instanceof Sign sign) {
-                    facing = StorageSignFacingSupport.resolveFrontFacing(sign);
-                }
-            }
-        }
-        return StorageSignFacingSupport.frontPosition(entry.position(), facing);
     }
 
     private enum OutputMode {

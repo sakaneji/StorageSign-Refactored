@@ -45,6 +45,7 @@ class StorageSignPluginIntegrationTest {
         assertNotNull(server.getPluginCommand("storagesigngive"));
         assertNotNull(server.getPluginCommand("storagesignindex"));
         assertNotNull(server.getPluginCommand("storagesignsearch"));
+        assertNotNull(server.getPluginCommand("storagesignwarp"));
         assertNotNull(plugin.getStorageSignIndex());
     }
 

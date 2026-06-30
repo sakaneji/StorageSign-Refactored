@@ -28,6 +28,7 @@ public final class StorageSignCommandTabCompleter implements TabCompleter {
             case "storagesigngive" -> completeGive(args);
             case "storagesignindex" -> completeIndex(sender, args);
             case "storagesignsearch" -> completeSearch(sender, args);
+            case "storagesignwarp" -> completeWarp(args);
             default -> List.of();
         };
     }
@@ -66,6 +67,11 @@ public final class StorageSignCommandTabCompleter implements TabCompleter {
             }
             return complete(current, remainingSearchFlags(args));
         }
+        return List.of();
+    }
+
+    private List<String> completeWarp(String[] args) {
+        if (args.length == 1) return complete(args[0], identifierCandidates());
         return List.of();
     }
 
