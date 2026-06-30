@@ -8,6 +8,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Sign;
 import org.bukkit.block.BlockFace;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
+import storagesign.ConfigLoader;
 import storagesign.StorageSign;
 import storagesign.StorageSignPlugin;
 import storagesign.index.StorageSignPosition;
@@ -56,6 +58,86 @@ class StorageSignWarpCommandIntegrationTest {
         assertTrue(world.getBlockAt(location).getRelative(BlockFace.UP).getType().isAir());
         assertTrue(world.getBlockAt(location).getRelative(BlockFace.DOWN).getType().isSolid());
         assertTrue(player.nextMessage().contains("ワープしました"));
+    }
+
+    @Test
+    void playerWarpUsesMainHandStoredItemIdentifier() {
+        var world = server.addSimpleWorld("warp-hand-item");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        player.getInventory().setItemInMainHand(new ItemStack(Material.STONE));
+        createIndexedSign(world.getBlockAt(4, 64, 0), "STONE", BlockFace.EAST);
+        world.getBlockAt(5, 63, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp --hand"));
+
+        Location location = player.getLocation();
+        assertEquals(5.5, location.getX(), 0.0001);
+        assertEquals(64.0, location.getY(), 0.0001);
+        assertEquals(0.5, location.getZ(), 0.0001);
+        assertTrue(player.nextMessage().contains("ワープしました"));
+    }
+
+    @Test
+    void playerWarpUsesRegisteredStorageSignItemContentsIdentifier() {
+        var world = server.addSimpleWorld("warp-hand-ss");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        StorageSign stored = StorageSign.fromSignLines(new String[] {StorageSign.HEADER_LINE, "DIRT", "9"});
+        player.getInventory().setItemInMainHand(StorageSign.createStorageSignItem(Material.OAK_SIGN, stored, 1));
+        createIndexedSign(world.getBlockAt(4, 64, 0), "DIRT", BlockFace.EAST);
+        world.getBlockAt(5, 63, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp --hand"));
+
+        Location location = player.getLocation();
+        assertEquals(5.5, location.getX(), 0.0001);
+        assertEquals(64.0, location.getY(), 0.0001);
+        assertEquals(0.5, location.getZ(), 0.0001);
+        assertTrue(player.nextMessage().contains("DIRT"));
+    }
+
+    @Test
+    void playerWarpAllowsEscapedHandIdentifierLiteral() {
+        var world = server.addSimpleWorld("warp-hand-literal");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        plugin.getConfig().set("virtual-item-identifiers.--hand", "STONE");
+        plugin.saveConfig();
+        ConfigLoader.load(plugin);
+        createIndexedSign(world.getBlockAt(4, 64, 0), "--hand", BlockFace.EAST);
+        world.getBlockAt(5, 63, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp \\--hand"));
+
+        Location location = player.getLocation();
+        assertEquals(5.5, location.getX(), 0.0001);
+        assertEquals(64.0, location.getY(), 0.0001);
+        assertEquals(0.5, location.getZ(), 0.0001);
+        assertTrue(player.nextMessage().contains("--hand"));
+    }
+
+    @Test
+    void playerWarpRejectsInvalidHandInputWithoutMoving() {
+        var world = server.addSimpleWorld("warp-hand-invalid");
+        Location origin = new Location(world, 0.5, 64, 0.5);
+        player.teleport(origin);
+
+        assertTrue(server.dispatchCommand(player, "sswarp --hand"));
+        assertTrue(player.nextMessage().contains("保管対象"));
+        assertLocation(origin, player.getLocation());
+
+        player.getInventory().setItemInMainHand(
+            StorageSign.createStorageSignItem(Material.OAK_SIGN, StorageSign.EMPTY_MARKER, 1));
+        assertTrue(server.dispatchCommand(player, "sswarp --hand"));
+        assertTrue(player.nextMessage().contains("登録済み"));
+        assertLocation(origin, player.getLocation());
+
+        ItemStack named = new ItemStack(Material.STONE);
+        var meta = named.getItemMeta();
+        meta.setDisplayName("custom stone");
+        named.setItemMeta(meta);
+        player.getInventory().setItemInMainHand(named);
+        assertTrue(server.dispatchCommand(player, "sswarp --hand"));
+        assertTrue(player.nextMessage().contains("保管対象"));
+        assertLocation(origin, player.getLocation());
     }
 
     @Test

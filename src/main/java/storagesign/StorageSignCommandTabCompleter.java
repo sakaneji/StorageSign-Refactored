@@ -71,7 +71,12 @@ public final class StorageSignCommandTabCompleter implements TabCompleter {
     }
 
     private List<String> completeWarp(String[] args) {
-        if (args.length == 1) return complete(args[0], identifierCandidates());
+        if (args.length == 1) {
+            LinkedHashSet<String> values = new LinkedHashSet<>();
+            values.add("--hand");
+            values.addAll(identifierCandidates());
+            return complete(args[0], values);
+        }
         return List.of();
     }
 

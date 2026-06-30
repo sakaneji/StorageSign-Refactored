@@ -31,7 +31,7 @@ commands:
         permission: storagesign.search.admin
     storagesignwarp:
         description: Warp to the front of the nearest StorageSign storing an item.
-        usage: /<command> <itemIdentifier>
+        usage: /<command> <itemIdentifier|--hand>
         aliases:
             - sswarp
 
