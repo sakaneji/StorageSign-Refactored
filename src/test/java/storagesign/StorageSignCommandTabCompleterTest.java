@@ -96,8 +96,11 @@ class StorageSignCommandTabCompleterTest {
 
             List<String> identifiers = completer.onTabComplete(
                 server.getConsoleSender(), command, "sswarp", new String[] {"ST"});
+            List<String> options = completer.onTabComplete(
+                server.getConsoleSender(), command, "sswarp", new String[] {"--"});
 
             assertTrue(identifiers.contains("STONE"));
+            assertTrue(options.contains("--hand"));
         } finally {
             MockBukkit.unmock();
         }

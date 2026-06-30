@@ -47,7 +47,7 @@ Paper 向け Minecraft プラグインです。
 - `storage-index` / `nearby-display` / `admin-search` を追加
   - ロード済みチャンクの位置索引、管理者検索、近接表示を本体機能として持つ。
 - `/storagesignindex`（エイリアス: `/ssindex`）、`/storagesignsearch`（エイリアス: `/sssearch`）、`/storagesignwarp`（エイリアス: `/sswarp`）を追加
-  - 保存済み索引の再構築・検索と、指定アイテムを持つStorageSign前面へのワープを行える。
+  - 保存済み索引の再構築・検索と、指定または手持ちアイテムを持つStorageSign前面へのワープを行える。
 - `/storagesigngive`（エイリアス: `/ssgive`）を追加
   - クリエイティブモードのプレイヤーが任意の識別子・数量・看板種類で StorageSign アイテムを直接取得できる。
 - 吊り看板系（`_HANGING_SIGN` / `_WALL_HANGING_SIGN`）の取り扱いを実装
@@ -235,9 +235,12 @@ World名を指定してください。0以下の設定値は既定値へ戻し�
 ```text
 /storagesignwarp STONE
 /sswarp POTION:HEAL:0
+/sswarp --hand
+/sswarp \--hand
 ```
 
-検索は完全識別子の大文字小文字を無視した完全一致です。複数候補がある場合は同じWorld内でプレイヤーに最も近いStorageSignを選びます。
+検索は完全識別子の大文字小文字を無視した完全一致です。`--hand` を指定すると、メインハンドのアイテムを入力にします。登録済みStorageSignアイテムを持っている場合は、StorageSignアイテム自体ではなく、そのStorageSignに登録されているアイテムの識別子で検索します。identifier 文字列そのものとして `--hand` を指定したい場合は `\--hand` のように先頭を `\` でエスケープします。
+複数候補がある場合は同じWorld内でプレイヤーに最も近いStorageSignを選びます。
 候補チャンクは実ブロック確認のためにロードされます。前面方向が保存済み索引にもロード済み看板にもない場合、または前面ブロックか頭上が空気でない場合、あるいは足場が solid でない場合はワープしません。
 
 Skriptから関数として使う場合は、プレイヤーにこのコマンドを実行させます。
@@ -245,6 +248,12 @@ Skriptから関数として使う場合は、プレイヤーにこのコマン�
 ```vb
 function warp_to_ss_item(p: player, identifier: text):
     make {_p} execute command "sswarp %{_identifier}%"
+
+function warp_to_held_ss_item(p: player):
+    make {_p} execute command "sswarp --hand"
+
+function warp_to_literal_hand_identifier(p: player):
+    make {_p} execute command "sswarp \\--hand"
 ```
 
 #### 保存済み索引CLI・ビューア

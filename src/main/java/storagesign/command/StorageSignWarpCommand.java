@@ -8,6 +8,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import storagesign.StorageSign;
 import storagesign.StorageSignFacingSupport;
@@ -17,6 +18,8 @@ import storagesign.index.StorageSignPosition;
 
 /** Player-facing warp to the front of the nearest matching StorageSign. */
 public final class StorageSignWarpCommand implements CommandExecutor {
+    private static final String HAND_OPTION = "--hand";
+    private static final String OPTION_ESCAPE_PREFIX = "\\";
     private final StorageSignIndex index;
 
     public StorageSignWarpCommand(StorageSignIndex index) {
@@ -31,8 +34,16 @@ public final class StorageSignWarpCommand implements CommandExecutor {
             return true;
         }
         if (args.length != 1 || args[0].isBlank()) {
-            player.sendMessage("§e使い方: /" + label + " <itemIdentifier>");
-            player.sendMessage("§7例: /" + label + " STONE");
+            sendUsage(player, label);
+            return true;
+        }
+
+        String identifier = resolveIdentifier(player, args[0].trim());
+        if (identifier == null) {
+            return true;
+        }
+        if (identifier.isBlank()) {
+            sendUsage(player, label);
             return true;
         }
         if (index == null || !index.isEnabled()) {
@@ -40,7 +51,6 @@ public final class StorageSignWarpCommand implements CommandExecutor {
             return true;
         }
 
-        String identifier = args[0].trim();
         World world = player.getWorld();
         WarpTarget target = nearestValidTarget(player.getLocation(), identifier);
         if (target == null) {
@@ -68,6 +78,37 @@ public final class StorageSignWarpCommand implements CommandExecutor {
             player.sendMessage("§cワープに失敗しました。");
         }
         return true;
+    }
+
+    private void sendUsage(Player player, String label) {
+        player.sendMessage("§e使い方: /" + label + " <itemIdentifier|--hand>");
+        player.sendMessage("§7例: /" + label + " STONE");
+        player.sendMessage("§7例: /" + label + " --hand");
+        player.sendMessage("§7例: /" + label + " \\--hand");
+    }
+
+    private String resolveIdentifier(Player player, String input) {
+        if (input.startsWith(OPTION_ESCAPE_PREFIX) && input.length() > OPTION_ESCAPE_PREFIX.length()) {
+            return input.substring(OPTION_ESCAPE_PREFIX.length());
+        }
+        if (!HAND_OPTION.equalsIgnoreCase(input)) return input;
+
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        StorageSign storageSignItem = StorageSign.fromItemStack(hand);
+        if (storageSignItem != null) {
+            if (storageSignItem.isUnregistered()) {
+                player.sendMessage("§e登録済みのStorageSignアイテム、または保管対象のアイテムを手に持ってください。");
+                return null;
+            }
+            return storageSignItem.getIdentifier();
+        }
+
+        StorageSign storedItem = StorageSign.fromStoredItem(hand);
+        if (storedItem == null || storedItem.isUnregistered()) {
+            player.sendMessage("§e保管対象にできるアイテムを手に持ってください。");
+            return null;
+        }
+        return storedItem.getIdentifier();
     }
 
     private WarpTarget nearestValidTarget(Location origin, String identifier) {
