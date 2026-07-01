@@ -4,6 +4,7 @@ import java.util.Comparator;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -20,6 +21,7 @@ import storagesign.index.StorageSignPosition;
 public final class StorageSignWarpCommand implements CommandExecutor {
     private static final String HAND_OPTION = "--hand";
     private static final String OPTION_ESCAPE_PREFIX = "\\";
+    private static final int SUPPORT_SEARCH_DEPTH = 3;
     private final StorageSignIndex index;
 
     public StorageSignWarpCommand(StorageSignIndex index) {
@@ -60,13 +62,14 @@ public final class StorageSignWarpCommand implements CommandExecutor {
 
         StorageSignPosition front = StorageSignFacingSupport.resolveFrontPosition(
             target.entry().position(), target.entry().frontFacing(), world);
-        Location destination = StorageSignFacingSupport.centeredLocation(
+        Location baseDestination = StorageSignFacingSupport.centeredLocation(
             front, world, player.getLocation().getYaw(), player.getLocation().getPitch());
-        if (destination == null) {
+        if (baseDestination == null) {
             player.sendMessage("§cStorageSign の前面方向を特定できません: " + identifier);
             return true;
         }
-        if (!isSafeDestination(destination)) {
+        Location destination = findSafeDestination(baseDestination);
+        if (destination == null) {
             player.sendMessage("§cワープ先の前面ブロックが安全ではありません: "
                 + front.x() + " " + front.y() + " " + front.z());
             return true;
@@ -150,13 +153,20 @@ public final class StorageSignWarpCommand implements CommandExecutor {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    private boolean isSafeDestination(Location destination) {
+    private Location findSafeDestination(Location destination) {
         World world = destination.getWorld();
-        if (world == null) return false;
-        Block feet = world.getBlockAt(destination);
-        Block head = feet.getRelative(org.bukkit.block.BlockFace.UP);
-        Block support = feet.getRelative(org.bukkit.block.BlockFace.DOWN);
-        return feet.getType().isAir() && head.getType().isAir() && support.getType().isSolid();
+        if (world == null) return null;
+        for (int offsetY = 0; offsetY <= SUPPORT_SEARCH_DEPTH; offsetY++) {
+            Location candidate = destination.clone().subtract(0, offsetY, 0);
+            Block feet = world.getBlockAt(candidate);
+            Block head = feet.getRelative(BlockFace.UP);
+            Block support = feet.getRelative(BlockFace.DOWN);
+            if (feet.getType().isAir() && head.getType().isAir() && support.getType().isSolid()) {
+                return new Location(world, destination.getX(), feet.getY(), destination.getZ(),
+                    destination.getYaw(), destination.getPitch());
+            }
+        }
+        return null;
     }
 
     private record WarpTarget(IndexedStorageSign entry) {}

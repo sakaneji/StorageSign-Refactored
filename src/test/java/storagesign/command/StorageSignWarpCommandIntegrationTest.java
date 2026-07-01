@@ -184,6 +184,60 @@ class StorageSignWarpCommandIntegrationTest {
     }
 
     @Test
+    void playerWarpDropsToLowerSafeSupportWithinThreeBlocks() {
+        var world = server.addSimpleWorld("warp-lower-support");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        createIndexedSign(world.getBlockAt(4, 66, 0), "STONE", BlockFace.EAST);
+        world.getBlockAt(5, 63, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp STONE"));
+
+        Location location = player.getLocation();
+        assertEquals(5.5, location.getX(), 0.0001);
+        assertEquals(64.0, location.getY(), 0.0001);
+        assertEquals(0.5, location.getZ(), 0.0001);
+        assertTrue(world.getBlockAt(location).getType().isAir());
+        assertTrue(world.getBlockAt(location).getRelative(BlockFace.UP).getType().isAir());
+        assertTrue(world.getBlockAt(location).getRelative(BlockFace.DOWN).getType().isSolid());
+        assertTrue(player.nextMessage().contains("ワープしました"));
+    }
+
+    @Test
+    void playerWarpRejectsSupportBelowSearchDepth() {
+        var world = server.addSimpleWorld("warp-too-low-support");
+        Location origin = new Location(world, 0.5, 64, 0.5);
+        player.teleport(origin);
+        createIndexedSign(world.getBlockAt(4, 67, 0), "STONE", BlockFace.EAST);
+        world.getBlockAt(5, 62, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp STONE"));
+
+        assertTrue(player.nextMessage().contains("安全ではありません"));
+        assertLocation(origin, player.getLocation());
+    }
+
+    @Test
+    void playerWarpSkipsBlockedLowerCandidateAndUsesNextSafeSupport() {
+        var world = server.addSimpleWorld("warp-lower-blocked");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        createIndexedSign(world.getBlockAt(4, 66, 0), "STONE", BlockFace.EAST);
+        world.getBlockAt(5, 66, 0).setType(Material.STONE);
+        world.getBlockAt(5, 65, 0).setType(Material.STONE);
+        world.getBlockAt(5, 62, 0).setType(Material.STONE);
+
+        assertTrue(server.dispatchCommand(player, "sswarp STONE"));
+
+        Location location = player.getLocation();
+        assertEquals(5.5, location.getX(), 0.0001);
+        assertEquals(63.0, location.getY(), 0.0001);
+        assertEquals(0.5, location.getZ(), 0.0001);
+        assertTrue(world.getBlockAt(location).getType().isAir());
+        assertTrue(world.getBlockAt(location).getRelative(BlockFace.UP).getType().isAir());
+        assertTrue(world.getBlockAt(location).getRelative(BlockFace.DOWN).getType().isSolid());
+        assertTrue(player.nextMessage().contains("ワープしました"));
+    }
+
+    @Test
     void playerWarpSkipsStaleNearestIndexEntry() {
         var world = server.addSimpleWorld("warp-stale");
         player.teleport(new Location(world, 0.5, 64, 0.5));
