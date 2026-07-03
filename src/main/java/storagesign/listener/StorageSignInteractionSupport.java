@@ -94,7 +94,7 @@ final class StorageSignInteractionSupport {
         }
 
         if (handSS.isUnregistered() && ConfigLoader.getManualExport()
-            && handItem.getType() == MaterialRegistry.toItemSignMaterial(block.getType())
+            && MaterialRegistry.isAnySign(handItem.getType())
             && blockSS.getAmount() > handItem.getAmount()) {
             ItemStack template = blockSS.getContents(1);
             if (template == null) return;

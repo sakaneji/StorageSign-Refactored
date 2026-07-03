@@ -1,6 +1,7 @@
 package storagesign.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -49,14 +50,35 @@ class PlayerInteractDivisionPolicyTest {
     }
 
     @Test
-    void divisionRequiresMatchingSignMaterial() throws Exception {
+    void divisionAllowsDifferentSignMaterials() throws Exception {
         setManualExport(true);
-        Fixture fixture = fixture(Material.OAK_SIGN, Material.SPRUCE_SIGN);
+        MockBukkit.mock();
+        try {
+            Player player = mock(Player.class);
+            PlayerInventory inventory = mock(PlayerInventory.class);
+            Block block = mock(Block.class);
+            StorageSign blockSign = StorageSign.fromSignLines(new String[] {
+                StorageSign.HEADER_LINE, "STONE", "100"
+            });
+            ItemStack hand = StorageSign.createStorageSignItem(Material.SPRUCE_SIGN,
+                StorageSign.EMPTY_MARKER, 2);
+            StorageSign handSign = StorageSign.fromItemStack(hand);
+            assertNotNull(handSign);
+            when(player.getInventory()).thenReturn(inventory);
+            when(player.isSneaking()).thenReturn(false);
+            when(inventory.getContents()).thenReturn(new ItemStack[0]);
+            when(block.getType()).thenReturn(Material.OAK_SIGN);
 
-        invoke(fixture);
+            invokeInteraction(player, block, blockSign, hand, handSign);
 
-        verify(fixture.inventory(), never()).setItemInMainHand(org.mockito.ArgumentMatchers.any());
-        verify(fixture.blockSign(), never()).setAmount(org.mockito.ArgumentMatchers.anyInt());
+            ArgumentCaptor<ItemStack> mainHandCaptor = ArgumentCaptor.forClass(ItemStack.class);
+            verify(inventory).setItemInMainHand(mainHandCaptor.capture());
+            assertEquals(Material.SPRUCE_SIGN, mainHandCaptor.getValue().getType());
+            assertEquals(List.of("STONE 33"), mainHandCaptor.getValue().getItemMeta().getLore());
+            assertEquals(34, blockSign.getAmount());
+        } finally {
+            MockBukkit.unmock();
+        }
     }
 
     @Test

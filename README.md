@@ -139,7 +139,8 @@ Paper 向け Minecraft プラグインです。
 - 1枚あたりの割当数は通常 `divide-limit`、スニーク時は
   `sneak-divide-limit` が上限です。設定値が `0` 以下なら上限はありません。
 - 例: `B=100, N=2` では各アイテムが33個、ブロックに34個残ります。
-- `manual-export: false`、保管数が空 StorageSign 数以下、異なる看板素材では分割しません。
+- `manual-export: false`、保管数が空 StorageSign 数以下では分割しません。異なる看板素材でも分割できます。
+- 分割後のアイテムは、手に持っていた看板素材のまま返します。
 - StorageSign アイテム自体を保管しているブロックでは、空 StorageSign は分割ではなく
   sign-in-sign の手動インポートとして扱います。
 
