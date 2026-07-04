@@ -10,9 +10,15 @@ Read: `AGENTS.md`, `docs/documentation-update-guide.md`, `README.md`, and the do
 
 ## Targets
 
-- Feature changes: `README.md`
-- Index/search/nearby display: `docs/storage-sign-index.md`
-- Test coverage or behavior descriptions: `docs/test-cases.md`
+- Landing page / high-level summary: `README.md`
+- Overview and compatibility: `docs/compatibility.md`
+- Getting started / usage: `docs/getting-started.md`
+- Commands and permissions: `docs/commands.md`
+- Configuration: `docs/configuration.md`
+- Operations and runtime checks: `docs/operations.md`
+- Development notes and test entry points: `docs/development.md`
+- Index/search/`/sswarp`/nearby display/external CLI-viewer: `docs/storage-sign-index.md`
+- Test coverage, behavior descriptions, or saved-result summaries: `docs/test-cases.md`
 - Manual runtime checks: `docs/runtime-validation-checklist.md`
 - Coverage gaps: `docs/test-gap-audit.md`
 
@@ -21,4 +27,5 @@ Read: `AGENTS.md`, `docs/documentation-update-guide.md`, `README.md`, and the do
 - Keep descriptions aligned with the code.
 - Prefer existing command names and setting keys.
 - Do not invent behavior.
+- Keep README short and use topic files for details.
 - Verify links and finish with `git diff --check`.
