@@ -107,7 +107,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
 
             player.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
-            server.getScheduler().performTicks(20);
+            server.getScheduler().performTicks(6);
             assertEquals(0, display.activeLabelCount());
             assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
         } finally {
@@ -314,7 +314,7 @@ class NearbyStorageSignDisplayIntegrationTest {
 
             first.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
             second.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
-            server.getScheduler().performTicks(20);
+            server.getScheduler().performTicks(6);
             assertEquals(0, display.activeLabelCount());
             assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
         } finally {

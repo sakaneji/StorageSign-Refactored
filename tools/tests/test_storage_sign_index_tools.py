@@ -99,6 +99,13 @@ class StorageSignIndexTest(unittest.TestCase):
         with self.assertRaises(UnicodeDecodeError):
             index.read_index(self.index_path)
 
+        payload = struct.pack(">IIIqqiiiiq?", index.MAGIC, index.VERSION, 1,
+                              world_msb, world_lsb, 0, 0, 0, -1, 0, False)
+        payload += struct.pack(">i", 5) + b"STONE"
+        write_payload(self.index_path, payload)
+        with self.assertRaisesRegex(ValueError, "amount"):
+            index.read_index(self.index_path)
+
     def test_world_map_and_serializers(self) -> None:
         world_map_path = Path(self.temp_dir.name) / "worlds.json"
         world_map_path.write_text(json.dumps({str(WORLD_ID): "world"}), encoding="utf-8")
@@ -259,6 +266,44 @@ class StorageSignIndexTest(unittest.TestCase):
         self.assertEqual("STONE", entries[0].identifier)
         self.assertEqual(128, entries[0].amount)
         self.assertEqual("NORTH", entries[0].front_facing)
+
+    def test_offline_region_rebuild_prefers_persistent_identifier(self) -> None:
+        full_identifier = "NETHERITE_UPGRADE_SMITHING_TEMPLATE"
+        entries = region.scan_chunk({
+            "block_entities": [{
+                "id": "minecraft:sign",
+                "x": 1,
+                "y": 64,
+                "z": 1,
+                "front_text": {
+                    "messages": ["StorageSign", "N:SMITHING_TEMPLATE", "128", ""],
+                },
+                "PublicBukkitValues": {
+                    "storagesign:storage_identifier": full_identifier,
+                },
+            }],
+        }, str(WORLD_ID))
+
+        self.assertEqual(1, len(entries))
+        self.assertEqual(full_identifier, entries[0].identifier)
+
+    def test_offline_region_rebuild_falls_back_to_legacy_potion_identifier(self) -> None:
+        entries = region.scan_chunk({
+            "block_entities": [{
+                "id": "minecraft:sign",
+                "x": 1,
+                "y": 64,
+                "z": 1,
+                "front_text": {
+                    "messages": ["StorageSign", "POTION:HEAL:0", "4", ""],
+                },
+                "BukkitValues": {
+                    "storagesign:potion_identifier": "POTION:minecraft:healing",
+                },
+            }],
+        }, str(WORLD_ID))
+
+        self.assertEqual("POTION:minecraft:healing", entries[0].identifier)
 
     def test_offline_region_rebuild_skips_invalid_chunk_pointer(self) -> None:
         world_dir = Path(self.temp_dir.name) / "world"

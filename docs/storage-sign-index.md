@@ -65,7 +65,7 @@ python3 tools/storage_sign_region_cli.py /path/to/world /path/to/another-world
 python3 tools/storage_sign_region_cli.py /path/to/world --output /path/to/storage-sign-index.bin
 ```
 
-`rebuild` も互換 alias として受け付けます。`--output` を省略した場合は `plugins/StorageSign-Refactored/storage-sign-index.bin` を優先し、`.bin` が無く `.bin.tmp` だけ存在する場合はその `.bin.tmp` を既定出力先として使います。入力ワールドごとに `uid.dat` を優先し、必要に応じて `level.dat` も参照して UUID を読み、`region` 配下の `.mca` を走査します。存在しない world や壊れた region/chunk は警告して続行し、警告が出た場合は標準エラーへ警告内容と `warning: rebuild completed with warnings` を出し、終了コード 1 になります。出力は既存の `storage-sign-index.bin` と同じ形式です。
+`rebuild` も互換 alias として受け付けます。`--output` を省略した場合は `plugins/StorageSign-Refactored/storage-sign-index.bin` を優先し、`.bin` が無く `.bin.tmp` だけ存在する場合はその `.bin.tmp` を既定出力先として使います。入力ワールドごとに `uid.dat` を優先し、必要に応じて `level.dat` も参照して UUID を読み、`region` 配下の `.mca` を走査します。完全識別子は看板の PersistentDataContainer を優先し、PDCを持たない旧データだけ表示行へフォールバックします。存在しない world や壊れた region/chunk は警告して続行し、警告が出た場合は標準エラーへ警告内容と `warning: rebuild completed with warnings` を出し、終了コード 1 になります。出力は既存の `storage-sign-index.bin` と同じ形式です。
 
 ## アイテム名検索コマンド
 
@@ -166,7 +166,7 @@ NETHERITE_UPGRADE_SMITHING_TEMPLATE
 
 短い識別子がすでに看板本文へ収まる場合は、近接 TextDisplay を追加表示しません。
 
-同じStorageSignを複数人が表示する場合、TextDisplayは共有され、対象プレイヤーにだけ送信されます。移動、視点変更、World移動、退出、StorageSign消失時に表示を解除します。
+同じStorageSignを複数人が表示する場合、TextDisplayは共有され、対象プレイヤーにだけ送信されます。移動や視点変更だけでは消さず、検索距離外への移動、World移動、退出、StorageSign消失時に表示を解除します。移動中の距離確認は各プレイヤーの表示中項目だけを対象にし、索引全体の再検索は停止後まで行いません。
 
 ## 設定
 

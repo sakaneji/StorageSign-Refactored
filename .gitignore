@@ -4,6 +4,8 @@
 /e2e/runtime/
 /e2e/artifacts/
 /e2e/bot/node_modules/
+**/__pycache__/
+*.py[cod]
 
 # Maven helper files
 dependency-reduced-pom.xml

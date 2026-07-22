@@ -109,6 +109,7 @@ public final class NearbyStorageSignDisplay {
             } else {
                 state.viewStableTicks += interval;
             }
+            hideOutOfRange(player, state, current);
             state.last = current.clone();
             if (state.searched && (
                 state.indexRevision != index.revision(player.getWorld())
@@ -281,6 +282,18 @@ public final class NearbyStorageSignDisplay {
         allocationPending.remove(playerId);
     }
 
+    private void hideOutOfRange(Player player, PlayerState state, Location current) {
+        double maximumDistance = ConfigLoader.getNearbyDisplayDistance();
+        double maximumDistanceSquared = maximumDistance * maximumDistance;
+        UUID worldId = current.getWorld() == null ? null : current.getWorld().getUID();
+        for (StorageSignPosition position : List.copyOf(state.visible)) {
+            if (!position.worldId().equals(worldId)
+                || distanceSquared(current, position) > maximumDistanceSquared) {
+                hide(player, state, position);
+            }
+        }
+    }
+
     private void hide(Player player, PlayerState state, StorageSignPosition position) {
         hide(player == null ? null : player.getUniqueId(), player, state, position);
     }
@@ -324,6 +337,13 @@ public final class NearbyStorageSignDisplay {
 
     static boolean isInForwardCone(Vector forward, Vector direction, double fieldOfViewDegrees) {
         return NearbyStorageSignDisplaySupport.isInForwardCone(forward, direction, fieldOfViewDegrees);
+    }
+
+    private static double distanceSquared(Location origin, StorageSignPosition position) {
+        double dx = position.x() + 0.5 - origin.getX();
+        double dy = position.y() + 0.5 - origin.getY();
+        double dz = position.z() + 0.5 - origin.getZ();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private static String labelText(StorageSign storageSign) {

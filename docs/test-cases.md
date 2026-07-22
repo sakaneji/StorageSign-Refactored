@@ -87,6 +87,7 @@
 | DAT-14 | `Integer.MAX_VALUE`付近で搬入・搬出する | 空き容量まで搬入し、余剰を元の場所へ残す | Unit/Paper E2E | ✅ |
 | DAT-15 | 遅延搬出前にチャンクがアンロードされる | 強制ロードせず安全に中止し、数量を変更しない | Integration | ✅ |
 | DAT-16 | 全Material・長い設定識別子・最大数量を看板へ表示する | 表示は看板種別ごとの実測幅以内、完全識別子はPDCに保持して復元できる | Unit/Integration | ✅ |
+| DAT-17 | 通常Materialのdamage部分が非数値 | 壊れた識別子として拒否し、damage 0へ変換しない | Unit | ✅ |
 
 ## 4. 識別子・Material・バージョン非依存性
 
@@ -320,7 +321,7 @@
 | IDX-02 | 索引を無効化する | 走査・登録・検索を行わず、近接表示も無効になる | Unit/Integration | ✅ |
 | IDX-03 | 索引だけを有効化する | 検索と手動再構築は利用でき、TextDisplayは生成しない | Integration | ✅ |
 | IDX-04 | 古い索引位置を検索する | 実ブロックを検証して古い位置を除去する | Integration | ✅ |
-| IDX-05 | 位置が止まった状態で前方90度を検索する | 位置移動中は検索せず、視点変更は再検索対象にしつつ、距離・角度・遮蔽物で候補を絞る | Unit/Integration | ✅ |
+| IDX-05 | 位置が止まった状態で前方90度を検索する | 位置移動中は索引を再検索せず、表示中の設定上限件数だけを距離確認して範囲外を解放し、視点変更後は距離・角度・遮蔽物で再検索する | Unit/Integration | ✅ |
 | IDX-06 | 長い完全識別子を表示する | 識別子だけを省略せず改行表示する | Unit | ✅ |
 | IDX-07 | 多人数が別々のSSを表示する | 25検索/tick、512 TextDisplayの上限を超えない | Load | ⏳ |
 | IDX-08 | 管理コマンドで再構築する | 未ロードチャンクをロードせず、進捗と結果を通知する | Unit/Integration | ✅ |
@@ -347,13 +348,13 @@
 | ID | テストケース | 期待結果 | レベル | 状態 |
 |---|---|---|---|---|
 | EXT-01 | CLIでinspect/search/exportを実行する | Text/JSON/CSVを生成し、検索上限でも全一致件数を保持する | Python Unit | ✅ |
-| EXT-02 | CRC、magic、version、件数、UTF-8、末尾データが不正 | 処理を中止し、巨大件数による無制限ループを開始しない | Python Unit | ✅ |
+| EXT-02 | CRC、magic、version、件数、負の数量、UTF-8、末尾データが不正 | 処理を中止し、巨大件数による無制限ループを開始しない | Python Unit | ✅ |
 | EXT-03 | CSVへ数式開始文字を含む識別子・World名を出力する | 表計算ソフトで数式として評価されない形式へ無害化する | Python Unit | ✅ |
 | EXT-04 | Viewerで検索・ページング・CSV取得を行う | 全一致集計を維持し、1応答の件数を上限内に制限する | Python Unit | ✅ |
 | EXT-05 | Viewerへ別ファイルパス・不正mode・不正pageを渡す | HTTP 400を返し、起動時指定以外のファイルを読まない | Python Unit | ✅ |
 | EXT-06 | 存在しないViewer URLへアクセスする | HTTP 404を返す | Python Unit | ✅ |
 | EXT-07 | 同じ索引へ連続アクセスする | ファイルが変わるまで解析結果を共有し、変更後は再読込する | Python Unit | ✅ |
-| EXT-08 | offline region から索引を再構築する | `uid.dat` または `level.dat` と `region/*.mca` から索引を生成し、World UUID・座標・識別子・数量・前面方向を保存する | Python Unit | ✅ |
+| EXT-08 | offline region から索引を再構築する | `uid.dat` または `level.dat` と `region/*.mca` から索引を生成し、PDCの完全識別子を表示行より優先してWorld UUID・座標・数量・前面方向とともに保存する | Python Unit | ✅ |
 | EXT-09 | 壊れた region/chunk や欠落した world が混在する | 警告して継続し、有効な world / chunk だけを出力する | Python Unit | ✅ |
 | EXT-10 | offline region CLI を既定引数・互換 alias・警告付きで実行する | 既定出力先を使い、`rebuild` alias を受け付け、警告時は標準エラーへ warning を出して終了コード 1 を返す | Python Unit | ✅ |
 

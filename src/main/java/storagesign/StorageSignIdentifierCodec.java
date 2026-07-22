@@ -129,6 +129,7 @@ final class StorageSignIdentifierCodec {
                     }
                     return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
                 }
+                return null;
             }
         }
 

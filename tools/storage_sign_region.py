@@ -51,6 +51,12 @@ ROTATION_FACES = (
     "SOUTH_SOUTH_EAST",
 )
 
+PERSISTENT_DATA_CONTAINERS = ("PublicBukkitValues", "BukkitValues")
+STORAGE_IDENTIFIER_KEYS = (
+    "storagesign:storage_identifier",
+    "storagesign:potion_identifier",
+)
+
 CARDINAL_FACES = {
     "north": "NORTH",
     "south": "SOUTH",
@@ -173,7 +179,7 @@ def scan_chunk(chunk: dict[str, Any], world_id: str) -> list[Entry]:
         lines = _extract_sign_lines(block_entity)
         if lines is None:
             continue
-        parsed = parse_storage_sign_lines(lines)
+        parsed = parse_storage_sign_lines(lines, _persistent_storage_identifier(block_entity))
         if parsed is None:
             continue
         sign_state = _block_state_at(section_map, x, y, z)
@@ -182,18 +188,32 @@ def scan_chunk(chunk: dict[str, Any], world_id: str) -> list[Entry]:
     return entries
 
 
-def parse_storage_sign_lines(lines: Sequence[str]) -> tuple[str, int] | None:
+def parse_storage_sign_lines(
+    lines: Sequence[str], canonical_identifier: str | None = None
+) -> tuple[str, int] | None:
     if len(lines) < 3:
         return None
     if lines[0] != "StorageSign":
         return None
-    identifier = lines[1].strip()
+    identifier = canonical_identifier.strip() if canonical_identifier else lines[1].strip()
     if not identifier or identifier == "Empty":
         return None
     amount = _parse_int(lines[2])
     if amount is None or amount < 0:
         return None
     return identifier, amount
+
+
+def _persistent_storage_identifier(block_entity: dict[str, Any]) -> str | None:
+    for container_name in PERSISTENT_DATA_CONTAINERS:
+        container = block_entity.get(container_name)
+        if not isinstance(container, dict):
+            continue
+        for identifier_key in STORAGE_IDENTIFIER_KEYS:
+            identifier = _string_value(container.get(identifier_key))
+            if identifier is not None and identifier.strip():
+                return identifier.strip()
+    return None
 
 
 def read_world_uuid(world_dir: Path) -> uuid.UUID:
