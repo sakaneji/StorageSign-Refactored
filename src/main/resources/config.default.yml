@@ -9,17 +9,18 @@ log-level: INFO
 manual-import: true
 manual-export: true
 
-# Allow transport blocks (hopper/dropper/dispenser/crafter/hopper minecart) to automatically move items into/out of StorageSigns
+# Allow transport blocks (hopper/dropper/dispenser/crafter/hopper minecart/chest minecart/chest boat) to automatically move items into/out of StorageSigns
 auto-import: true
 auto-export: true
 
-# Automatically collect dropped items into a held StorageSign
+# Automatically collect dropped items into a held registered StorageSign when the hand holds exactly one
+# and the player inventory already has at least one full stack of the same item
 autocollect: true
 
 # Harder crafting recipe (requires Ender Chest instead of a second Chest)
 hardrecipe: false
 
-# Maximum items to split per right-click export
+# Maximum items assigned to each empty StorageSign during right-click split
 divide-limit: 345600
 sneak-divide-limit: 34560
 
@@ -39,15 +40,17 @@ falling-block-itemSS: false
 # Debug: at TRACE level, log raw ItemMeta for main-hand right-clicked items (very verbose)
 banner-debug: false
 
-# Maintain an in-memory index of StorageSign block positions in loaded chunks.
-# The index never loads chunks and is rebuilt from live world data on startup.
+# Maintain an in-memory index of StorageSign block positions from loaded chunks,
+# while retaining last-verified entries after those chunks unload.
+# The index never loads chunks for searches, loads persisted data on startup,
+# and revalidates only currently loaded chunks against live world data.
 storage-index:
   enabled: true
   rebuild-chunks-per-tick: 8
   chunk-rescan-queue-cap: 512
 
-# Show full stored identifiers near players after they stop moving and looking around,
-# but only when the sign label would otherwise be shortened.
+# Show full stored identifiers near players after they stop moving.
+# Looking around marks the display for rescan, and labels appear only when the sign text would otherwise be shortened.
 # This feature is automatically disabled when storage-index.enabled is false.
 nearby-display:
   enabled: true

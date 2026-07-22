@@ -1,6 +1,6 @@
 # StorageSign テストケース一覧
 
-最終レビュー日: 2026-06-25
+最終レビュー日: 2026-07-03
 
 この文書は、実装済みテスト、手動確認項目、未カバー領域を同じ表で管理し、要件とテストの見落としを発見するための一覧である。
 
@@ -11,19 +11,20 @@
 | ✅ | 自動テストがあり、直近の対象テストで成功 |
 | 🟡 | 一部の分岐だけ自動テスト済み |
 | ⏸️ | 自動テスト定義済みだが、対象環境では未完走 |
+| ⏳ | テスト定義または確認観点はあるが、まだ完了記録を持たない |
 | 🧑 | 手動チェックリストのみ |
 | ❌ | テスト未定義、または要件の確認が必要 |
 
-## 現在の自動テスト結果
+## 保存済みローカル成果物の要約
 
 | 項目 | 結果 |
 |---|---:|
-| JUnit Unit | 613件成功、失敗0、エラー0、スキップ1 |
-| JUnit Integration | 192件成功、失敗0、エラー0、スキップ29 |
-| Pythonツール | 14件成功、失敗0、エラー0 |
-| カバレッジ | 今回の追加後は未再計測 |
-| Paper 1.21.4 / 1.21.8 / 1.21.11 | Loggerあり・なし、main・restart成功 |
-| Paper 26.1.2 / 26.2 | テスト定義済み、実サーバー未完走 |
+| JUnit Unit | 2026-07-01 保存ログ: 628件成功、失敗0、エラー0、スキップ1 |
+| JUnit Integration | 2026-07-01 保存ログ: 210件成功、失敗0、エラー0、スキップ33 |
+| Pythonツール | 2026-07-01 保存ログ: 22件成功、失敗0、エラー0 |
+| カバレッジ | 2026-06-27 保存レポート: lines 98.5%、branches 93.0% |
+| Paper 1.21.4 / 1.21.8 / 1.21.11 | ローカル E2E / banner-upgrade 成果物あり |
+| Paper 26.1.2 / 26.2 | ローカル成果物では Java 25 起動とプラグイン有効化までは確認済み。保存済み bot ログでは Mineflayer / `minecraft-protocol` の `unsupported protocol version` で停止しており、main/restart 完走確認は別途必要 |
 
 ## 1. 起動・停止・設定
 
@@ -60,7 +61,7 @@
 | CMD-08 | 引数不足・過多 | 使用方法を表示し、付与しない | Integration | ✅ |
 | CMD-09 | 負数を指定する | 数量エラーとして拒否する | Integration | ✅ |
 | CMD-10 | 不正な看板種類を指定する | 看板種類エラーとして拒否する | Integration | ✅ |
-| CMD-11 | インベントリに空きがない | 付与できないStorageSignを足元へドロップする | Paper E2E | ✅ |
+| CMD-11 | インベントリに空きがない | 付与できないStorageSignをプレイヤー位置へドロップする | Integration/Paper E2E | ✅ |
 | RCP-01 | 通常レシピを登録する | 全看板種類のStorageSignレシピが利用できる | Integration | ✅ |
 | RCP-02 | クラフト権限がない | StorageSignのクラフトだけをキャンセルする | Unit | ✅ |
 | RCP-03 | クラフト権限がある | クラフトをキャンセルしない | Unit | ✅ |
@@ -72,7 +73,7 @@
 |---|---|---|---|---|
 | DAT-01 | null、0～2行、不正ヘッダーを解析する | StorageSignとして認識しない | Unit | ✅ |
 | DAT-02 | 大文字小文字が異なるヘッダーを解析する | 厳密一致しない場合は認識しない | Unit | ✅ |
-| DAT-03 | 識別子が空または`EmptySign` | 未登録StorageSignとして解析する | Unit | ✅ |
+| DAT-03 | 識別子が空または`Empty`、および旧互換`EmptySign`を解析する | 空/`Empty`は未登録、`EmptySign`は看板アイテム互換識別子として解析する | Unit | ✅ |
 | DAT-04 | 通常Materialと数量を解析する | Material、damage、数量を保持する | Unit | ✅ |
 | DAT-05 | 数量が空、非数値、負数、整数範囲外 | 壊れたStorageSignとして拒否する | Unit | ✅ |
 | DAT-06 | 未知Material | nullを返し、誤ったStorageSignを生成しない | Unit | ✅ |
@@ -82,7 +83,7 @@
 | DAT-10 | 1LC、複数LC、スタック、端数の表示 | 4行目のサマリーが正しい | Unit | ✅ |
 | DAT-11 | 看板行→識別子→看板行を往復する | Materialと特殊種別を失わない | Unit | ✅ |
 | DAT-12 | StorageSignアイテムのLoreを生成する | 識別子と数量を1行で保持する | Unit | ✅ |
-| DAT-13 | 壊れたLore、複数Lore、極端に長いLoreを読む | 非数値は数量0、追加Loreは先頭行、識別不能形式は拒否する | Integration | ✅ |
+| DAT-13 | 壊れたLore、複数Lore、極端に長いLoreを読む | 追加Loreは先頭行だけを使い、非数値数量や識別不能形式は拒否する | Integration | ✅ |
 | DAT-14 | `Integer.MAX_VALUE`付近で搬入・搬出する | 空き容量まで搬入し、余剰を元の場所へ残す | Unit/Paper E2E | ✅ |
 | DAT-15 | 遅延搬出前にチャンクがアンロードされる | 強制ロードせず安全に中止し、数量を変更しない | Integration | ✅ |
 | DAT-16 | 全Material・長い設定識別子・最大数量を看板へ表示する | 表示は看板種別ごとの実測幅以内、完全識別子はPDCに保持して復元できる | Unit/Integration | ✅ |
@@ -118,13 +119,13 @@
 | MAN-07 | 未登録StorageSignへアイテムを登録する | 手持ちを消費せず対象種別を数量0で登録する | Paper E2E | ✅ |
 | MAN-08 | StorageSignアイテムを搬出・再取込する | 個数とLoreを失わず往復する | Paper E2E | ✅ |
 | MAN-09 | インベントリが満杯の状態で搬出する | 足元へドロップした数量だけ減算する | Paper E2E | ✅ |
-| MAN-10 | 同一tickで同じStorageSignを連続操作する | 処理順に関係なく重複搬出や数量消失が発生しない | Paper E2E | ✅ |
+| MAN-10 | 同一tickで同じStorageSignを連続操作する | 重複搬出や数量消失が発生せず、搬出後の総量が保存される | Paper E2E | ✅ |
 | MAN-11 | Spectatorが操作する | 権限判定や数量変更を行わない | Unit | ✅ |
 | MAN-12 | 左クリックする | StorageSign処理を行わない | Unit | ✅ |
 | MAN-13 | スニーク中にオフハンドのStorageSignで操作する | 誤設置だけを拒否し、保管内容を変更しない | Unit | ✅ |
 | MAN-14 | 通常アイテムでオフハンド操作する | Vanilla操作を妨げずStorageSign処理を行わない | Unit | ✅ |
 | MAN-15 | クライアントが空中右クリックとして送信する | 3ブロック以内の対象StorageSignへ同じ権限・操作判定を適用する | Unit | ✅ |
-| MAN-16 | 保管内容と異なる染料で操作する | 搬出せず、看板色変更をVanillaへ委譲する | Unit | ✅ |
+| MAN-16 | 保管内容と異なる染料またはインクで操作する | 搬出せず、看板色変更・発光変更をVanillaへ委譲する | Unit | ✅ |
 | MAN-17 | スニークして同種の染料・発光インクを搬入する | 数量を加算し、前面の色・発光状態も更新する | Integration | ✅ |
 
 ### 5.1 StorageSignアイテムのマージ
@@ -197,11 +198,11 @@
 | INV-08 | Brewing Standへ材料を補充する | 有効材料だけ材料スロットへ入れ、非対応品を拒否する | Integration | ✅ |
 | INV-09 | Furnace系へ燃料・入力を補充する | Material種別に応じて専用スロットへ入れる | Integration | ✅ |
 | INV-10 | Double Chestで搬送する | 両側を同一Inventoryとして扱い、重複や漏れがない | Paper E2E | ✅ |
-| INV-11 | Dropperで搬入・搬出する | InventoryMoveとワールド排出後補充で数量同期する | Paper E2E | ✅ |
-| INV-12 | Dispenserで搬入・搬出する | InventoryMoveとワールド排出後補充で数量同期する | Paper E2E | ✅ |
-| INV-13 | Crafterを連続駆動する | InventoryMoveとワールド排出後補充で数量同期する | Paper E2E | ✅ |
+| INV-11 | Dropperがワールドへ吐き出す | 排出後補充で数量同期する | Paper E2E | ✅ |
+| INV-12 | Dispenserがワールドへ吐き出す | 排出後補充で数量同期する | Paper E2E | ✅ |
+| INV-13 | Crafterがワールドへ吐き出す | 排出後補充で数量同期する | Paper E2E | ✅ |
 | INV-14 | Dropper等がワールドへ吐き出す | 排出後に実在庫を補充し、その分だけStorageSignを減算する | Paper E2E | ✅ |
-| INV-15 | Chest Boatを搬送元・搬送先にする | Entity Inventoryとして正しく認識する | Paper E2E | ✅ |
+| INV-15 | Chest Boatを搬送先にする | Entity Inventoryとして正しく認識する | Paper E2E | ✅ |
 | INV-16 | 対象Inventoryが満杯 | アイテムとStorageSign数量を変更しない | Integration | ✅ |
 | INV-17 | 既に満杯スタックが存在する | 不要な補充を行わない | Integration | ✅ |
 | INV-18 | 搬送イベントがキャンセル済み | StorageSign処理を行わない | Unit | ✅ |
@@ -216,7 +217,7 @@
 
 | ID | テストケース | 期待結果 | レベル | 状態 |
 |---|---|---|---|---|
-| ENT-01 | 登録済みStorageSignをメインハンドに持って対象品を拾う | ドロップを消し、Lore数量を増やす | Paper E2E | ✅ |
+| ENT-01 | 登録済みStorageSignをメインハンドに持って対象品を拾う | 対象ドロップを消し、手持ちStorageSignのLore数量を増やす | Paper E2E | ✅ |
 | ENT-02 | メインハンドで収納できずオフハンドに対象StorageSignがある | オフハンド側へ収納する | Unit | ✅ |
 | ENT-03 | `storagesign.autocollect`権限がない | 自動収納せず通常取得する | Unit | ✅ |
 | ENT-04 | StorageSignアイテムを複数スタックして持つ | 自動収納対象にしない | Unit | ✅ |
@@ -235,15 +236,15 @@
 | SPC-02 | 特殊Potion名と旧NBT名を解析する | 現行PotionTypeへ正規化する | Unit | ✅ |
 | SPC-03 | Ominous Bottleの増幅値0～最大を解析する | 増幅値を失わず識別子へ往復する | Unit | ✅ |
 | SPC-04 | Ominous Bottleを実物アイテムで搬入・搬出する | ItemMetaの増幅値を維持する | Paper E2E | ✅ |
-| SPC-05 | Enchanted Bookを搬入・搬出する | 単一Enchantとレベルを維持する | Integration | ✅ |
+| SPC-05 | Enchanted Bookを登録・復元する | 単一Enchantとレベルを維持する | Integration | ✅ |
 | SPC-06 | 複数Enchantを持つ本を登録する | 保管不可として拒否する | Integration | ✅ |
-| SPC-07 | Firework Rocketを搬入・搬出する | 飛翔時間を維持し、効果付きは拒否する | Integration | ✅ |
-| SPC-08 | 耐久値付きアイテムを搬入・搬出する | damage値を維持し、異なるdamageを混同しない | Integration | ✅ |
-| SPC-09 | シュルカーボックスを搬入・搬出する | 空箱だけを許可し、中身入りは拒否する | Integration | ✅ |
-| SPC-10 | 蜂の巣・養蜂箱を登録する | 空だけを許可し、蜂Entity入りは拒否する | Integration | ✅ |
+| SPC-07 | Firework Rocketを登録・復元する | 飛翔時間を維持し、効果付きは拒否する | Integration | ✅ |
+| SPC-08 | 耐久値付きアイテムを登録・復元する | damage値を維持し、異なるdamageを混同しない | Integration | ✅ |
+| SPC-09 | シュルカーボックスを登録・復元する | 空箱だけを許可し、中身入りは拒否する | Integration | ✅ |
+| SPC-10 | 養蜂箱を登録・復元する | 空だけを許可し、蜂Entity入りは拒否する | Integration | ✅ |
 | SPC-11 | 復元不能な個別ItemMetaを登録する | カスタム効果、名前、Lore、Enchant、ItemFlagを拒否する | Integration | ✅ |
 | SPC-12 | Potionの短縮表示とPDC正規キーを保存する | 表示は旧形式のまま、復元はNamespacedKeyを優先する | Integration/Paper E2E | ✅ |
-| SPC-13 | 全Potion表示文字列のVanilla幅を計算する | 90px以内かつ16文字以内で枠外へはみ出さない | Unit/Paper E2E | ✅ |
+| SPC-13 | 全Potion表示文字列の現在幅制限を計算する | 看板種別ごとの現在幅制限以内かつ16文字以内で枠外へはみ出さない | Unit/Paper E2E | ✅ |
 | SPC-14 | PDCと表示行が異なるPotionを示す | PDCを正としてMaterial・PotionTypeを復元する | Integration | ✅ |
 | SPC-15 | 1.21.4→1.21.8→1.21.11でPotion看板を更新する | PDC、短縮表示、数量、PotionTypeを維持する | Upgrade E2E | ✅ |
 | SPC-16 | 実行時Registryの全Enchantを短縮キーで往復する | キー衝突がなく、種類とレベルを完全復元する | Integration | ✅ |
@@ -264,7 +265,7 @@
 | BNR-08 | 再試行前に実物旗から復旧 | 取得済みメタを維持し、不要な生成をしない | Unit | ✅ |
 | BNR-09 | サーバー停止時に再試行保留 | タスクをキャンセルする | Unit | ✅ |
 | BNR-10 | 不吉な旗を搬出・再取込する | 8模様、名前、数量、ツールチップを維持する | Paper E2E | ✅ |
-| BNR-11 | 1.21.4→1.21.8→1.21.11でワールド更新する | 旧旗を取込・再搬出し、現行装飾を復元する | Upgrade E2E | ✅ |
+| BNR-11 | 1.21.4→1.21.8→1.21.11でワールド更新する | 旧旗を取込・再搬出し、8模様と不吉な旗名を維持し、再搬出後は現行のツールチップ非表示フラグを再付与する | Upgrade E2E | ✅ |
 | BNR-12 | 1.21.11→26.1.2→26.2でワールド更新する | 同一処理で旗互換性を維持し、再試行挙動も崩れない | Upgrade E2E | ⏸️ |
 
 ## 11. Logger・診断ログ
@@ -280,7 +281,7 @@
 | LOG-07 | TRACEかつ`banner-debug`有効 | ItemMetaと呼出元を診断ログへ出す | Unit | ✅ |
 | LOG-08 | 例外をログ出力する | メッセージにスタックトレースを付加する | Unit | ✅ |
 | LOG-09 | 実際の外部Logger保存先を確認する | 登録後のINFO本文がPaperログsinkへ到達する | Paper E2E | ✅ |
-| LOG-10 | ログローテーション・書込失敗 | ゲーム処理を停止せず、診断可能な状態を維持する | Manual | 🧑 |
+| LOG-10 | ログローテーション・書込失敗 | ゲーム処理を停止せず、診断可能な状態を維持する。確認手順は `docs/runtime-validation-checklist.md` を使う | Manual | 🧑 |
 
 ## 12. 再起動・バージョン互換性
 
@@ -291,8 +292,8 @@
 | VER-03 | Paper 1.21.11、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ✅ |
 | VER-04 | Paper 26.1.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
 | VER-05 | Paper 26.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
-| VER-06 | 26.xをJava 25で起動する | Java要件を満たし、プラグインが有効化される | Paper E2E | ⏸️ |
-| VER-07 | 1.21.4→1.21.8→1.21.11でワールド更新する | StorageSign、Potion PDC、旗データを失わない | Upgrade E2E | ✅ |
+| VER-06 | 26.xをJava 25で起動する | Java要件を満たし、プラグインが有効化される | Paper E2E | ✅ |
+| VER-07 | 1.21.4→1.21.8→1.21.11でワールド更新する | 仕込み済みの不吉な旗 StorageSign と Potion StorageSign について、表示行・Potion PDC・旗データを維持する | Upgrade E2E | ✅ |
 | VER-08 | 新版ワールドを旧版で開く | 非対応と事前バックアップ必須が文書化されている | Documentation | ✅ |
 | VER-09 | Spigotで実行する | 製品保証・リリース試験の対象外である | Documentation | ✅ |
 
@@ -300,16 +301,16 @@
 
 | ID | テストケース | 期待結果 | レベル | 状態 |
 |---|---|---|---|---|
-| TST-01 | Unit / Integration / Coverageを個別実行する | 対象スコープだけをDockerで実行し、件数を要約する | Runner | ✅ |
+| TST-01 | Unit / Integration / Coverageを個別実行する | 対象スコープだけを実行し、Java系はDocker、Pythonツールはホスト`python3`で実行したうえで件数を要約する | Runner | ✅ |
 | TST-02 | E2EのLogger構成を切り替える | Logger JARの有無を物理的に切り替え、独立環境で検証する | Runner | ✅ |
 | TST-03 | 成功したE2E時間を保存する | 構成別平均をキャッシュし、次回推定に使用する | Runner self-test | ✅ |
 | TST-04 | 履歴なしでE2Eを開始する | 未知部分全体を180秒、初回待機を210秒と提示する | Runner self-test | ✅ |
 | TST-05 | E2E構成が完了する | 残件だけで推定時間を再計算する | Runner self-test | ✅ |
-| TST-06 | Minecraft初回起動へ進む | 1分の固定待機ヒントを提示する | Runner | ✅ |
+| TST-06 | Minecraft初回起動へ進む | `stage=minecraft-startup` と `estimate_seconds=60` / `wait_seconds=60` の固定待機ヒントを提示する | Runner | ✅ |
 | TST-07 | 時間キャッシュが壊れている | 壊れたファイルを退避し、初回推定へ戻る | Runner self-test | ✅ |
-| TST-08 | E2Eが失敗・中断する | 失敗時間を平均へ混入させず、対象ログを案内する | Runner self-test | ✅ |
-| TST-09 | 成功ログを扱う | PASS要約だけを表示し、詳細成果物を読まない | Runner | ✅ |
-| TST-10 | 失敗ログを扱う | 既定40行と必要な成果物だけを表示する | Runner | ✅ |
+| TST-08 | E2Eが失敗・中断する | 失敗時間を平均へ混入させない | Runner self-test | ✅ |
+| TST-09 | 成功ログを扱う | 構造化された`PASS`要約を表示する | Runner | ✅ |
+| TST-10 | 失敗ログを扱う | 既定40行の抜粋と`diagnose:`先を表示する | Runner | ✅ |
 
 ## 14. 位置索引・近接表示
 
@@ -319,29 +320,29 @@
 | IDX-02 | 索引を無効化する | 走査・登録・検索を行わず、近接表示も無効になる | Unit/Integration | ✅ |
 | IDX-03 | 索引だけを有効化する | 検索と手動再構築は利用でき、TextDisplayは生成しない | Integration | ✅ |
 | IDX-04 | 古い索引位置を検索する | 実ブロックを検証して古い位置を除去する | Integration | ✅ |
-| IDX-05 | 停止後に前方90度を検索する | 移動中は検索せず、距離・角度・遮蔽物で候補を絞る | Unit/Paper | 🟡 |
-| IDX-06 | 長い完全識別子を表示する | 省略せず改行し、数量とともに表示する | Unit | ✅ |
+| IDX-05 | 位置が止まった状態で前方90度を検索する | 位置移動中は検索せず、視点変更は再検索対象にしつつ、距離・角度・遮蔽物で候補を絞る | Unit/Integration | ✅ |
+| IDX-06 | 長い完全識別子を表示する | 識別子だけを省略せず改行表示する | Unit | ✅ |
 | IDX-07 | 多人数が別々のSSを表示する | 25検索/tick、512 TextDisplayの上限を超えない | Load | ⏳ |
-| IDX-08 | 管理コマンドで再構築する | 未ロードチャンクをロードせず、進捗と結果を通知する | Integration | ⏳ |
+| IDX-08 | 管理コマンドで再構築する | 未ロードチャンクをロードせず、進捗と結果を通知する | Unit/Integration | ✅ |
 | IDX-09 | 500人で停止・移動を繰り返す | TPSを維持し、実測負荷と表示待ち時間が許容範囲内 | Load | ⏳ |
 | IDX-10 | 複数World・負座標・最大数量を保存して再読込する | バージョン付きバイナリから完全復元する | Unit | ✅ |
 | IDX-11 | 索引ファイルが切断・改変されている | CRC不一致を検出し、破損データを採用しない | Unit | ✅ |
 | IDX-12 | 数量だけを更新する | アイテム検索結果は更新し、位置検索の構造世代は変えない | Integration | ✅ |
-| IDX-13 | アイテム名を完全一致・部分一致で検索する | 大文字小文字、World、数量条件を適用して位置と数量を返す | Unit | ✅ |
-| IDX-14 | 多数の一致結果を検索する | 10件単位でページングし、数量合計をlongで保持する | Unit/Integration | ✅ |
+| IDX-13 | 内部検索サービスでアイテム名を完全一致・部分一致で検索する | 大文字小文字、World、数量条件を適用して位置と数量を返す | Unit | ✅ |
+| IDX-14 | 多数の一致結果を検索する | `admin-search.page-size` 件単位でページングし、数量合計をlongで保持する | Unit/Integration | ✅ |
 | IDX-15 | サーバー停止・再起動する | 索引を保存・読込後、ロード済みチャンクで再検証する | Integration/Paper E2E | ✅ |
-| IDX-16 | `/sssearch`へ不正な権限・World・ページ・オプションを渡す | 検索を開始せず、原因を示すメッセージを返す | Integration | ✅ |
+| IDX-16 | `/sssearch`へ不正な権限・ページ書式・オプションを渡す | 検索を開始せず、原因を示すメッセージを返す | Integration | ✅ |
 | IDX-17 | 保存ファイルのmagic、version、件数、UTF-8、末尾データが不正 | 不正ファイルを拒否し、部分データを採用しない | Unit | ✅ |
 | IDX-18 | JavaとPythonで同じ索引プロトコルを読む | UUID、負座標、数量、識別子、時刻を同じ値へ復元する | Unit | ✅ |
 | IDX-19 | 検索結果の並び順を確認する | `World UUID -> X -> Y -> Z` の昇順で安定表示する | Unit/Integration | ✅ |
 | IDX-20 | `--page` が範囲外の検索を行う | 結果を出さず、明示的にページ範囲エラーを返す | Integration | ✅ |
-| IDX-21 | `--world` に未定義のWorld指定や許可外の入力を渡す | 検索を開始せず、入力エラーを返す | Integration | ✅ |
-| IDX-22 | 近接表示が上限に達する | 既存表示を維持し、残件を次回以降に再試行する | Integration/Paper | 🟡 |
-| IDX-23 | 停止中のプレイヤー検索が上限を超える | `max-searches-per-tick` を超えず、未処理分を繰り越す | Integration/Paper | 🟡 |
-| IDX-24 | 長い識別子が表示枠を超えそうになる | 28文字折り返しで枠外表示を避ける | Unit | ✅ |
+| IDX-21 | `--world` に未定義のWorld名を渡す | 検索を開始せず、入力エラーを返す | Integration | ✅ |
+| IDX-22 | 近接表示が上限に達する | 既存表示を維持し、残件を次回以降に再試行する | Integration | ✅ |
+| IDX-23 | 停止中のプレイヤー検索が上限を超える | `max-searches-per-tick` を超えず、未処理分を繰り越す | Integration | ✅ |
+| IDX-24 | 近接表示の長い識別子が表示枠を超えそうになる | 28文字折り返しで枠外表示を避ける | Unit | ✅ |
 | IDX-25 | `/sswarp` で一般プレイヤーが指定アイテムまたは手持ち入力のSS前面へワープする | 同一Worldの最寄り候補を選び、登録済みSSアイテムは登録内容で検索し、下3ブロックまでの安全な足場直上へ移動し、足場なし、足元・頭上埋まり、方向不明の候補は拒否する | Integration | ✅ |
 
-## 15. 外部CLI・Webビューア
+## 15. 外部CLI・Webビューア・offline region rebuild
 
 | ID | テストケース | 期待結果 | レベル | 状態 |
 |---|---|---|---|---|
@@ -352,12 +353,15 @@
 | EXT-05 | Viewerへ別ファイルパス・不正mode・不正pageを渡す | HTTP 400を返し、起動時指定以外のファイルを読まない | Python Unit | ✅ |
 | EXT-06 | 存在しないViewer URLへアクセスする | HTTP 404を返す | Python Unit | ✅ |
 | EXT-07 | 同じ索引へ連続アクセスする | ファイルが変わるまで解析結果を共有し、変更後は再読込する | Python Unit | ✅ |
+| EXT-08 | offline region から索引を再構築する | `uid.dat` または `level.dat` と `region/*.mca` から索引を生成し、World UUID・座標・識別子・数量・前面方向を保存する | Python Unit | ✅ |
+| EXT-09 | 壊れた region/chunk や欠落した world が混在する | 警告して継続し、有効な world / chunk だけを出力する | Python Unit | ✅ |
+| EXT-10 | offline region CLI を既定引数・互換 alias・警告付きで実行する | 既定出力先を使い、`rebuild` alias を受け付け、警告時は標準エラーへ warning を出して終了コード 1 を返す | Python Unit | ✅ |
 
 ## 確定した要件と残作業
 
 | 観点 | 確定内容 |
 |---|---|
-| 26.x | 検証環境が利用可能になるまで保留する |
+| 26.x | Java 25 サーバー起動はできるが、保存済み成果物では Mineflayer / `minecraft-protocol` が `unsupported protocol version` で停止するため、その対応待ちで保留する |
 | 数量整合性 | 処理順は規定せず、成功した移動の総数量保存と重複タスク防止を保証する |
 | 数量上限 | `Integer.MAX_VALUE`まで部分搬入し、余剰を元の場所へ残す |
 | 壊れたデータ | 例外を出さず、安全値へ変換できない形式は拒否する |
@@ -373,7 +377,7 @@
 | 検索順序 | `World UUID -> X -> Y -> Z` の昇順で固定する |
 | 近接表示上限 | 既存表示を優先し、残件は後続tickで再試行する |
 | World指定 | `--world` は現在ロード中のWorld名のみ受け付ける |
-| 折り返し | 表示文面は内部28文字折り返しで枠外表示を避ける |
+| 折り返し | 近接表示文面は内部28文字折り返しで枠外表示を避ける |
 
-自動化の残作業は、26.x環境の準備後に行うVER-04～06とBNR-12に加え、IDX-07/09の多人数負荷試験、IDX-08の管理コマンド全分岐、IDX-05の遮蔽物境界検証、近接表示の上限制御検証である。
+自動化の残作業は、Mineflayer / `minecraft-protocol` の 26.x 対応後に再開する VER-04～05 と BNR-12 に加え、IDX-07/09 の多人数負荷試験である。
 LOG-10は意図的に手動障害注入として維持する。

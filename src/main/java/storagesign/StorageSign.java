@@ -18,7 +18,7 @@ import storagesign.registry.MaterialRegistry;
 import storagesign.logging.PluginLogger;
 
 /**
- * StorageSign のデータモデル（イミュータブル）。
+ * StorageSign のデータモデル。
  *
  * <p>StorageSign は以下の 2 形態で存在する:
  * <ol>

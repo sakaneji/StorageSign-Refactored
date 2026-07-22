@@ -1,7 +1,7 @@
 # Implementation Workflow
 
 Read: `AGENTS.md`, `README.md`, `docs/documentation-update-guide.md`, the touched source files, and related tests.  
-If the change touches index/search/nearby display, also read `docs/storage-sign-index.md`.
+If the change touches index/search/`/sswarp`/nearby display/external CLI-viewer behavior, also read `docs/storage-sign-index.md`.
 
 ## Usual steps
 
