@@ -323,12 +323,14 @@ class NearbyStorageSignDisplayIntegrationTest {
     }
 
     @Test
-    void maxPerPlayerCapsVisibleLabels() throws Exception {
+    void globalLimitBoundsExtremeMaxPerPlayerWithoutOversizedAllocation() throws Exception {
         var world = server.addSimpleWorld("capped-display");
         world.getChunkAt(0, 0).load();
-        int original = getNearbyDisplayMaxPerPlayer();
+        int originalMaximum = getNearbyDisplayMaxPerPlayer();
+        int originalGlobalLimit = getNearbyDisplayGlobalLimit();
         try {
-            setNearbyDisplayMaxPerPlayer(1);
+            setNearbyDisplayMaxPerPlayer(Integer.MAX_VALUE);
+            setNearbyDisplayGlobalLimit(1);
             StorageSignIndex index = new StorageSignIndex(plugin, true);
             for (int z = 1; z <= 2; z++) {
                 Block block = world.getBlockAt(0, 65, z);
@@ -352,7 +354,8 @@ class NearbyStorageSignDisplayIntegrationTest {
                 display.shutdown();
             }
         } finally {
-            setNearbyDisplayMaxPerPlayer(original);
+            setNearbyDisplayMaxPerPlayer(originalMaximum);
+            setNearbyDisplayGlobalLimit(originalGlobalLimit);
         }
     }
 
@@ -1287,6 +1290,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         Object label = newLabel(mock(TextDisplay.class));
         storagesign.index.StorageSignPosition position =
             new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
+        index.upsert(position, LONG_IDENTIFIER, 1, 1L);
         putMap(display, "labels", position, label);
 
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("refreshLabels");
@@ -1295,6 +1299,53 @@ class NearbyStorageSignDisplayIntegrationTest {
 
         assertTrue(((java.util.Map<?, ?>) getField(display, "labels")).isEmpty());
         assertEquals(0, index.size());
+    }
+
+    @Test
+    void refreshLabelsDropsUnloadedDisplayButRetainsCachedIndexEntry() throws Exception {
+        var world = server.addSimpleWorld("refresh-unloaded-display");
+        world.getChunkAt(0, 0).load();
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+        storagesign.index.StorageSignPosition position =
+            new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 2);
+        index.upsert(position, LONG_IDENTIFIER, 1, 1L);
+        TextDisplay textDisplay = mock(TextDisplay.class);
+        Object label = newLabel(textDisplay);
+        putMap(display, "labels", position, label);
+        assertTrue(world.unloadChunk(0, 0));
+
+        Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("refreshLabels");
+        method.setAccessible(true);
+        method.invoke(display);
+
+        assertEquals(0, display.activeLabelCount());
+        assertEquals(1, index.size());
+        verify(textDisplay).remove();
+    }
+
+    @Test
+    void outOfRangeCheckRemovesOnlyVisibleLabelsWithoutIndexSearch() throws Exception {
+        var world = server.addSimpleWorld("out-of-range-helper-display");
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        NearbyStorageSignDisplay display = new NearbyStorageSignDisplay(plugin, index);
+        Object state = newPlayerState();
+        var position = new storagesign.index.StorageSignPosition(world.getUID(), 0, 65, 0);
+        setField(state, "visible", new HashSet<>(java.util.List.of(position)));
+        TextDisplay textDisplay = mock(TextDisplay.class);
+        Object label = newLabel(textDisplay);
+        putMap(display, "labels", position, label);
+
+        Method method = NearbyStorageSignDisplay.class.getDeclaredMethod(
+            "hideOutOfRange", org.bukkit.entity.Player.class, state.getClass(), Location.class);
+        method.setAccessible(true);
+        method.invoke(display, null, state, new Location(world, 10.5, 65.5, 0.5));
+
+        assertTrue(((java.util.Set<?>) getField(state, "visible")).isEmpty());
+        assertEquals(0, display.activeLabelCount());
+        verify(textDisplay).remove();
+        verify(index, never()).findNearby(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyDouble());
     }
 
     @Test

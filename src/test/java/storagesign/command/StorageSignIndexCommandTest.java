@@ -110,7 +110,7 @@ class StorageSignIndexCommandTest {
     }
 
     @Test
-    void rebuildAllCompletesAndReportsSaveFailureAndConcurrentRebuild() throws Exception {
+    void rebuildAllCompletesAndReportsSaveSchedulingFailure() throws Exception {
         ServerMock server = MockBukkit.mock();
         try {
             var world = server.addSimpleWorld("index-rebuild");
@@ -135,20 +135,46 @@ class StorageSignIndexCommandTest {
                 completion.accept(new StorageSignIndex.RebuildResult(1, 0, 1));
                 return true;
             });
-            when(index.saveAsync(any())).thenAnswer(invocation -> {
-                @SuppressWarnings("unchecked")
-                java.util.function.Consumer<StorageSignIndex.SaveResult> completion =
-                    invocation.getArgument(0);
-                completion.accept(new StorageSignIndex.SaveResult(false, 1, 0L, "busy"));
-                return false;
-            });
+            when(index.saveAsync(any())).thenReturn(false);
 
             new StorageSignIndexCommand(index).onCommand(
                 sender, mock(Command.class), "ssindex", new String[] {"rebuild", "all"});
 
             verify(sender).sendMessage(contains("loaded chunks=1"));
-            verify(sender).sendMessage(contains("save is already running"));
-            verify(sender).sendMessage(contains("completed but save failed"));
+            verify(sender).sendMessage(contains("save could not be scheduled"));
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void rebuildReportsAsynchronousSaveFailure() {
+        ServerMock server = MockBukkit.mock();
+        try {
+            var world = server.addSimpleWorld("index-save-failure");
+            CommandSender sender = mock(CommandSender.class);
+            when(sender.hasPermission("storagesign.index.admin")).thenReturn(true);
+            StorageSignIndex index = mock(StorageSignIndex.class);
+            when(index.isEnabled()).thenReturn(true);
+            when(index.rebuild(anyCollection(), any())).thenAnswer(invocation -> {
+                @SuppressWarnings("unchecked")
+                java.util.function.Consumer<StorageSignIndex.RebuildResult> completion =
+                    invocation.getArgument(1);
+                completion.accept(new StorageSignIndex.RebuildResult(1, 0, 1));
+                return true;
+            });
+            when(index.saveAsync(any())).thenAnswer(invocation -> {
+                @SuppressWarnings("unchecked")
+                java.util.function.Consumer<StorageSignIndex.SaveResult> completion =
+                    invocation.getArgument(0);
+                completion.accept(new StorageSignIndex.SaveResult(false, 1, 0L, "disk full"));
+                return true;
+            });
+
+            new StorageSignIndexCommand(index).onCommand(
+                sender, mock(Command.class), "ssindex", new String[] {"rebuild", world.getName()});
+
+            verify(sender).sendMessage(contains("completed but save failed: disk full"));
         } finally {
             MockBukkit.unmock();
         }

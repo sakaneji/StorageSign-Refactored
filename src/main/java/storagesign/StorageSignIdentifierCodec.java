@@ -83,15 +83,15 @@ final class StorageSignIdentifierCodec {
         StorageSign virtualSign = parseVirtualIdentifier(identifier, amount);
         if (virtualSign != null) return virtualSign;
 
-        Material specialMaterial = SpecialCaseItemSupport.materialFromIdentifier(identifier);
-        if (specialMaterial != null) {
-            short specialDamage = SpecialCaseItemSupport.parseDamageFromIdentifier(identifier);
-            return new StorageSign(specialMaterial, specialDamage, amount, null, null, false);
+        if (SpecialCaseItemSupport.isSpecialIdentifier(identifier)) {
+            Short specialDamage = SpecialCaseItemSupport.parseValidDamageFromIdentifier(identifier);
+            if (specialDamage == null) return null;
+            return new StorageSign(Material.OMINOUS_BOTTLE, specialDamage, amount, null, null, false);
         }
 
         if (identifier.startsWith("ENCHBOOK:")) {
-            String[] parts = identifier.split(":");
-            if (parts.length < 3) return null;
+            String[] parts = identifier.split(":", -1);
+            if (parts.length != 3) return null;
             Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
             if (ench == null) return null;
             short level;
@@ -101,6 +101,7 @@ final class StorageSignIdentifierCodec {
                 StorageSign.LOG.log(Level.WARNING, "parseIdentifier", "エンチャントレベルが不正: {0}", identifier);
                 return null;
             }
+            if (level <= 0) return null;
             return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
         }
 
@@ -111,26 +112,28 @@ final class StorageSignIdentifierCodec {
             return new StorageSign(potion.material(), damage, amount, potion.type(), null, false);
         }
 
-        String[] parts = identifier.split(":");
+        String[] parts = identifier.split(":", -1);
         String matName = parts[0].toUpperCase();
+        if (matName.equals("ENCHANTED_BOOK") && parts.length == 3) {
+            Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
+            if (ench == null) return null;
+            try {
+                short level = Short.parseShort(parts[2]);
+                if (level <= 0) return null;
+                return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        if (parts.length > 2) return null;
         short damage = 0;
         if (parts.length >= 2) {
             try {
                 damage = Short.parseShort(parts[1]);
             } catch (NumberFormatException e) {
-                if (matName.equals("ENCHANTED_BOOK") && parts.length >= 3) {
-                    Enchantment ench = EnchantHelper.fromPrefix(parts[1]);
-                    if (ench == null) return null;
-                    short level;
-                    try {
-                        level = Short.parseShort(parts[2]);
-                    } catch (NumberFormatException ignored) {
-                        return null;
-                    }
-                    return new StorageSign(Material.ENCHANTED_BOOK, level, amount, null, ench, false);
-                }
                 return null;
             }
+            if (damage < 0) return null;
         }
 
         Material mat = resolveMaterialFromIdentifierToken(matName);

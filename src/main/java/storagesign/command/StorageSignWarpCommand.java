@@ -1,6 +1,7 @@
 package storagesign.command;
 
 import java.util.Comparator;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -22,6 +23,7 @@ public final class StorageSignWarpCommand implements CommandExecutor {
     private static final String HAND_OPTION = "--hand";
     private static final String OPTION_ESCAPE_PREFIX = "\\";
     private static final int SUPPORT_SEARCH_DEPTH = 3;
+    private static final int MAX_CHUNK_LOADS_PER_INVOCATION = 1;
     private final StorageSignIndex index;
 
     public StorageSignWarpCommand(StorageSignIndex index) {
@@ -116,20 +118,29 @@ public final class StorageSignWarpCommand implements CommandExecutor {
 
     private WarpTarget nearestValidTarget(Location origin, String identifier) {
         if (origin == null || origin.getWorld() == null) return null;
-        return index.findByIdentifierExact(identifier).stream()
+        World world = origin.getWorld();
+        List<IndexedStorageSign> candidates = index.findByIdentifierExact(identifier).stream()
             .filter(entry -> entry.position().worldId().equals(origin.getWorld().getUID()))
             .sorted(Comparator.comparingDouble(entry -> distanceSquared(origin, entry.position())))
-            .map(entry -> validateTarget(origin.getWorld(), identifier, entry))
-            .filter(target -> target != null)
-            .findFirst()
-            .orElse(null);
+            .toList();
+        int loadedChunks = 0;
+        for (IndexedStorageSign entry : candidates) {
+            StorageSignPosition position = entry.position();
+            boolean loaded = world.isChunkLoaded(position.x() >> 4, position.z() >> 4);
+            if (!loaded && loadedChunks >= MAX_CHUNK_LOADS_PER_INVOCATION) continue;
+            if (!loaded) loadedChunks++;
+            WarpTarget target = validateTarget(world, identifier, entry, !loaded);
+            if (target != null) return target;
+        }
+        return null;
     }
 
-    private WarpTarget validateTarget(World world, String identifier, IndexedStorageSign entry) {
+    private WarpTarget validateTarget(World world, String identifier, IndexedStorageSign entry,
+                                      boolean loadChunk) {
         StorageSignPosition position = entry.position();
         int chunkX = position.x() >> 4;
         int chunkZ = position.z() >> 4;
-        if (!world.isChunkLoaded(chunkX, chunkZ)) {
+        if (loadChunk && !world.isChunkLoaded(chunkX, chunkZ)) {
             world.loadChunk(chunkX, chunkZ);
         }
         if (!world.isChunkLoaded(chunkX, chunkZ)) return null;

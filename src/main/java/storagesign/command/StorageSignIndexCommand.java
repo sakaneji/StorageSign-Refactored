@@ -44,7 +44,7 @@ public final class StorageSignIndexCommand implements CommandExecutor {
                 ? "§aStorageSign index rebuild and save complete: chunks=" + result.chunksScanned()
                     + ", signs=" + result.countAfter() + ", bytes=" + save.bytes()
                 : "§cStorageSign index rebuild completed but save failed: " + save.message()));
-            if (!saving) sender.sendMessage("§eRebuild completed; an index save is already running.");
+            if (!saving) sender.sendMessage("§cRebuild completed; the index save could not be scheduled.");
         });
         if (!started) {
             sender.sendMessage("§eA StorageSign index rebuild is already running.");

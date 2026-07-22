@@ -729,6 +729,26 @@ class StorageSignBranchCoverageTest {
     }
 
     @Test
+    void fromStoredItemRejectsDamageOutsideSerializedShortRange() {
+        ItemStack tool = mock(ItemStack.class);
+        Damageable meta = mock(Damageable.class);
+        when(tool.getType()).thenReturn(Material.DIAMOND_PICKAXE);
+        when(tool.getItemMeta()).thenReturn(meta);
+        when(meta.getDamage()).thenReturn(Short.MAX_VALUE + 1);
+
+        assertNull(StorageSign.fromStoredItem(tool));
+
+        ItemStack book = mock(ItemStack.class);
+        EnchantmentStorageMeta bookMeta = mock(EnchantmentStorageMeta.class);
+        when(book.getType()).thenReturn(Material.ENCHANTED_BOOK);
+        when(book.getItemMeta()).thenReturn(bookMeta);
+        when(bookMeta.getStoredEnchants()).thenReturn(Map.of(
+            Enchantment.SHARPNESS, Short.MAX_VALUE + 1));
+
+        assertNull(StorageSign.fromStoredItem(book));
+    }
+
+    @Test
     void isSimilarRejectsWhiteBannerWithDifferentDamage() {
         StorageSign banner = StorageSign.fromSignLines(
             new String[] {StorageSign.HEADER_LINE, "WHITE_BANNER:0", "1"});
@@ -934,9 +954,7 @@ class StorageSignBranchCoverageTest {
         assertEquals(Material.OMINOUS_BOTTLE, special.getMaterial());
         assertEquals(3, special.getDamage());
 
-        StorageSign malformedSpecial = (StorageSign) method.invoke(null, "OMINOUS_BOTTLE:x", 7);
-        assertNotNull(malformedSpecial);
-        assertEquals(0, malformedSpecial.getDamage());
+        assertNull(method.invoke(null, "OMINOUS_BOTTLE:x", 7));
 
         assertNull(method.invoke(null, "ENCHBOOK:sharp", 1));
         assertNull(method.invoke(null, "ENCHBOOK:sharp:not-a-number", 1));

@@ -8,8 +8,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,6 +20,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.mockito.MockedStatic;
@@ -153,6 +157,110 @@ class StorageSignQueryServiceTest {
     void tryAcquireReturnsFalseWhenLimitReached() {
         AtomicInteger active = new AtomicInteger(3);
         assertFalse(StorageSignQueryService.tryAcquire(active, 3));
+    }
+
+    @Test
+    void saturatedSearchDoesNotCopyTheIndexSnapshot() throws Exception {
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        when(index.isEnabled()).thenReturn(true);
+        StorageSignQueryService service = new StorageSignQueryService(
+            mock(StorageSignPlugin.class), index);
+        Field activeField = StorageSignQueryService.class.getDeclaredField("active");
+        activeField.setAccessible(true);
+        ((AtomicInteger) activeField.get(service)).set(1);
+        setMaxConcurrent(1);
+
+        assertFalse(service.search(
+            new StorageSignSearchCriteria("stone", StorageSignSearchCriteria.MatchMode.CONTAINS,
+                null, null, null),
+            result -> {}, error -> {}));
+
+        verify(index, never()).snapshot();
+        verify(index, never()).findByIdentifierExact(any());
+        setMaxConcurrent(2);
+    }
+
+    @Test
+    void snapshotFailureReleasesConcurrencySlot() throws Exception {
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        when(index.isEnabled()).thenReturn(true);
+        IllegalStateException expected = new IllegalStateException("snapshot failed");
+        when(index.snapshot()).thenThrow(expected);
+        StorageSignQueryService service = new StorageSignQueryService(
+            mock(StorageSignPlugin.class), index);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        setMaxConcurrent(1);
+
+        assertTrue(service.search(
+            new StorageSignSearchCriteria("stone", StorageSignSearchCriteria.MatchMode.CONTAINS,
+                null, null, null),
+            result -> {}, failure::set));
+
+        assertEquals(expected, failure.get());
+        Field activeField = StorageSignQueryService.class.getDeclaredField("active");
+        activeField.setAccessible(true);
+        assertEquals(0, ((AtomicInteger) activeField.get(service)).get());
+        setMaxConcurrent(2);
+    }
+
+    @Test
+    void schedulingFailureReleasesConcurrencySlotAndReportsFailure() throws Exception {
+        StorageSignPlugin plugin = mock(StorageSignPlugin.class);
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        IllegalStateException expected = new IllegalStateException("scheduler stopped");
+        when(index.isEnabled()).thenReturn(true);
+        when(index.snapshot()).thenReturn(List.of());
+        when(scheduler.runTaskAsynchronously(any(), org.mockito.ArgumentMatchers.<Runnable>any()))
+            .thenThrow(expected);
+        StorageSignQueryService service = new StorageSignQueryService(plugin, index);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        setMaxConcurrent(1);
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            assertTrue(service.search(
+                new StorageSignSearchCriteria("stone", StorageSignSearchCriteria.MatchMode.CONTAINS,
+                    null, null, null),
+                result -> {}, failure::set));
+        }
+
+        assertEquals(expected, failure.get());
+        Field activeField = StorageSignQueryService.class.getDeclaredField("active");
+        activeField.setAccessible(true);
+        assertEquals(0, ((AtomicInteger) activeField.get(service)).get());
+        setMaxConcurrent(2);
+    }
+
+    @Test
+    void completionSchedulingFailureStillReleasesConcurrencySlot() throws Exception {
+        StorageSignPlugin plugin = mock(StorageSignPlugin.class);
+        StorageSignIndex index = mock(StorageSignIndex.class);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        when(index.isEnabled()).thenReturn(true);
+        when(index.snapshot()).thenReturn(List.of());
+        doAnswer(invocation -> {
+            Runnable callback = invocation.getArgument(1);
+            callback.run();
+            return mock(BukkitTask.class);
+        }).when(scheduler).runTaskAsynchronously(any(), org.mockito.ArgumentMatchers.<Runnable>any());
+        when(scheduler.runTask(any(), org.mockito.ArgumentMatchers.<Runnable>any()))
+            .thenThrow(new IllegalStateException("scheduler stopped"));
+        StorageSignQueryService service = new StorageSignQueryService(plugin, index);
+        setMaxConcurrent(1);
+
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            assertTrue(service.search(
+                new StorageSignSearchCriteria("stone", StorageSignSearchCriteria.MatchMode.CONTAINS,
+                    null, null, null),
+                result -> {}, error -> {}));
+        }
+
+        Field activeField = StorageSignQueryService.class.getDeclaredField("active");
+        activeField.setAccessible(true);
+        assertEquals(0, ((AtomicInteger) activeField.get(service)).get());
+        setMaxConcurrent(2);
     }
 
     @Test

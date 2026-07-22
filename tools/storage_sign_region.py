@@ -163,7 +163,12 @@ def scan_chunk(chunk: dict[str, Any], world_id: str) -> list[Entry]:
             section_map[int(section_y)] = section
         except (TypeError, ValueError):
             continue
-    block_entities = root.get("block_entities") or root.get("blockEntities") or []
+    block_entities = (
+        root.get("block_entities")
+        or root.get("blockEntities")
+        or root.get("TileEntities")
+        or []
+    )
     entries: list[Entry] = []
     for block_entity in block_entities:
         if not isinstance(block_entity, dict):

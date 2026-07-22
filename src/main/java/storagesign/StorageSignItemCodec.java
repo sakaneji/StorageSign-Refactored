@@ -205,7 +205,9 @@ final class StorageSignItemCodec {
             if (stored.size() != 1) return null;
             java.util.Map.Entry<Enchantment, Integer> entry = stored.entrySet().iterator().next();
             Enchantment ench = entry.getKey();
-            short level = entry.getValue().shortValue();
+            int storedLevel = entry.getValue();
+            if (storedLevel <= 0 || storedLevel > Short.MAX_VALUE) return null;
+            short level = (short) storedLevel;
             return ifExactlyRestorable(item, new StorageSign(mat, level, 0, null, ench, false));
         }
 
@@ -247,7 +249,9 @@ final class StorageSignItemCodec {
         }
 
         if (meta instanceof Damageable damageable) {
-            return ifExactlyRestorable(item, new StorageSign(mat, (short) damageable.getDamage(), 0, null, null, false));
+            int itemDamage = damageable.getDamage();
+            if (itemDamage < 0 || itemDamage > Short.MAX_VALUE) return null;
+            return ifExactlyRestorable(item, new StorageSign(mat, (short) itemDamage, 0, null, null, false));
         }
         return ifExactlyRestorable(item, new StorageSign(mat, (short) 0, 0, null, null, false));
     }

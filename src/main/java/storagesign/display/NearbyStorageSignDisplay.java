@@ -178,8 +178,9 @@ public final class NearbyStorageSignDisplay {
     private List<StorageSignPosition> select(Player player) {
         Location eye = player.getEyeLocation();
         Vector forward = eye.getDirection().normalize();
-        int maximum = ConfigLoader.getNearbyDisplayMaxPerPlayer();
-        List<StorageSignPosition> result = new ArrayList<>(maximum);
+        int maximum = Math.min(ConfigLoader.getNearbyDisplayMaxPerPlayer(),
+            ConfigLoader.getNearbyDisplayGlobalLimit());
+        List<StorageSignPosition> result = new ArrayList<>(Math.min(maximum, 16));
         for (StorageSignPosition position : index.findNearby(eye, ConfigLoader.getNearbyDisplayDistance())) {
             Vector direction = new Vector(
                 position.x() + 0.5 - eye.getX(),
@@ -254,14 +255,16 @@ public final class NearbyStorageSignDisplay {
             StorageSignPosition position = entry.getKey();
             Label label = entry.getValue();
             World world = Bukkit.getWorld(position.worldId());
+            if (world == null || !world.isChunkLoaded(position.x() >> 4, position.z() >> 4)) {
+                removeLabel(position, label, true);
+                continue;
+            }
             StorageSign storageSign = null;
             boolean displayable = false;
-            if (world != null && world.isChunkLoaded(position.x() >> 4, position.z() >> 4)) {
-                Block block = world.getBlockAt(position.x(), position.y(), position.z());
-                storageSign = StorageSign.fromBlock(block);
-                if (storageSign != null) {
-                    displayable = shouldDisplay(storageSign, block.getType());
-                }
+            Block block = world.getBlockAt(position.x(), position.y(), position.z());
+            storageSign = StorageSign.fromBlock(block);
+            if (storageSign != null) {
+                displayable = shouldDisplay(storageSign, block.getType());
             }
             if (storageSign == null) {
                 removeLabel(position, label, true);

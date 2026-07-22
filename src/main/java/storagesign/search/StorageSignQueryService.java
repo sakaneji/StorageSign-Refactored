@@ -26,24 +26,44 @@ public final class StorageSignQueryService {
                           Consumer<StorageSignSearchResult> success,
                           Consumer<Throwable> failure) {
         if (!index.isEnabled()) return false;
-        List<IndexedStorageSign> snapshot = criteria.matchMode() == StorageSignSearchCriteria.MatchMode.EXACT
-            ? index.findByIdentifierExact(criteria.identifier()) : index.snapshot();
         if (!tryAcquire(active, ConfigLoader.getAdminSearchMaxConcurrent())) return false;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            try {
-                StorageSignSearchResult result = filter(snapshot, criteria);
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    active.decrementAndGet();
-                    success.accept(result);
-                });
-            } catch (Throwable error) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    active.decrementAndGet();
-                    failure.accept(error);
-                });
-            }
-        });
+        List<IndexedStorageSign> snapshot;
+        try {
+            snapshot = criteria.matchMode() == StorageSignSearchCriteria.MatchMode.EXACT
+                ? index.findByIdentifierExact(criteria.identifier()) : index.snapshot();
+        } catch (Throwable error) {
+            active.decrementAndGet();
+            failure.accept(error);
+            return true;
+        }
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    StorageSignSearchResult result = filter(snapshot, criteria);
+                    scheduleCompletion(() -> {
+                        active.decrementAndGet();
+                        success.accept(result);
+                    });
+                } catch (Throwable error) {
+                    scheduleCompletion(() -> {
+                        active.decrementAndGet();
+                        failure.accept(error);
+                    });
+                }
+            });
+        } catch (Throwable error) {
+            active.decrementAndGet();
+            failure.accept(error);
+        }
         return true;
+    }
+
+    private void scheduleCompletion(Runnable completion) {
+        try {
+            Bukkit.getScheduler().runTask(plugin, completion);
+        } catch (Throwable schedulingError) {
+            active.decrementAndGet();
+        }
     }
 
     static boolean tryAcquire(AtomicInteger counter, int maximum) {
