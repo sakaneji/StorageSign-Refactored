@@ -60,6 +60,8 @@ public final class StorageSignIndex implements Listener {
     private volatile long lastFileSize;
     private volatile String loadStatus = "not loaded";
     private boolean dirty;
+    private boolean savePending;
+    private final List<Consumer<SaveResult>> pendingSaveCompletions = new ArrayList<>();
 
     public StorageSignIndex(StorageSignPlugin plugin, boolean enabled) {
         this.plugin = plugin;
@@ -156,11 +158,17 @@ public final class StorageSignIndex implements Listener {
     public void register(Block block) {
         requirePrimaryThread();
         if (!enabled || block == null) return;
+        World world = block.getWorld();
+        if (world == null) return;
+        StorageSignPosition position = new StorageSignPosition(
+            world.getUID(), block.getX(), block.getY(), block.getZ());
         StorageSign sign = StorageSign.fromBlock(block);
-        if (sign == null || sign.isUnregistered()) return;
+        if (sign == null || sign.isUnregistered()) {
+            unregister(position);
+            return;
+        }
         Sign state = block.getState() instanceof Sign signState ? signState : null;
-        upsert(new StorageSignPosition(block.getWorld().getUID(), block.getX(), block.getY(), block.getZ()),
-            sign.getIdentifier(), sign.getAmount(), System.currentTimeMillis(),
+        upsert(position, sign.getIdentifier(), sign.getAmount(), System.currentTimeMillis(),
             StorageSignFacingSupport.resolveFrontFacing(state));
     }
 
@@ -183,7 +191,8 @@ public final class StorageSignIndex implements Listener {
             byIdentifier.computeIfAbsent(StorageSignIndexSupport.normalize(identifier), ignored -> new HashSet<>()).add(position);
             structureRevisions.merge(position.worldId(), 1L, Long::sum);
         }
-        if (previous == null || previous.amount() != amount || !previous.identifier().equals(identifier)) {
+        if (previous == null || previous.amount() != replacement.amount()
+            || !previous.identifier().equals(replacement.identifier())) {
             contentRevisions.merge(position.worldId(), 1L, Long::sum);
             dirty = true;
         }
@@ -249,18 +258,45 @@ public final class StorageSignIndex implements Listener {
 
     public boolean saveAsync(Consumer<SaveResult> completion) {
         requirePrimaryThread();
-        if (!enabled || saving) return false;
+        if (!enabled) return false;
+        if (saving) {
+            savePending = true;
+            if (completion != null) pendingSaveCompletions.add(completion);
+            return true;
+        }
+        return startAsyncSave(completion);
+    }
+
+    private boolean startAsyncSave(Consumer<SaveResult> completion) {
         List<IndexedStorageSign> snapshot = snapshot();
         long request = latestSaveRequest.incrementAndGet();
         saving = true;
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            SaveResult result = writeSnapshot(snapshot, request);
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                saving = false;
-                if (completion != null) completion.accept(result);
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                SaveResult result = writeSnapshot(snapshot, request);
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    boolean runPending = savePending;
+                    List<Consumer<SaveResult>> pendingCompletions = List.copyOf(pendingSaveCompletions);
+                    savePending = false;
+                    pendingSaveCompletions.clear();
+                    saving = false;
+                    if (runPending) {
+                        Consumer<SaveResult> pendingCompletion = pendingResult -> pendingCompletions.forEach(
+                            callback -> callback.accept(pendingResult));
+                        if (!startAsyncSave(pendingCompletion)) {
+                            pendingCompletion.accept(new SaveResult(false, snapshot().size(), 0,
+                                "could not schedule coalesced async save"));
+                        }
+                    }
+                    if (completion != null) completion.accept(result);
+                });
             });
-        });
-        return true;
+            return true;
+        } catch (RuntimeException error) {
+            saving = false;
+            LOG.warning("save", "StorageSign index save could not be scheduled: " + error.getMessage());
+            return false;
+        }
     }
 
     public boolean rebuild(Collection<World> worlds, Consumer<RebuildResult> completion) {
@@ -297,6 +333,8 @@ public final class StorageSignIndex implements Listener {
         rebuildTask = null;
         rebuildRemaining = 0;
         chunkRescanScheduler.clear();
+        savePending = false;
+        pendingSaveCompletions.clear();
         clearEntries();
     }
 

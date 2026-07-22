@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +32,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.SignChangeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -361,6 +361,22 @@ class StorageSignIndexTest {
     }
 
     @Test
+    void registerRemovesExistingEntryWhenBlockIsNoLongerAStorageSign() {
+        var world = server.addSimpleWorld("index-register-stale");
+        world.getChunkAt(0, 0).load();
+        Block block = createSign(world.getBlockAt(1, 64, 1), "STONE", 1);
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        index.register(block);
+        assertEquals(1, index.size());
+
+        block.setType(Material.AIR);
+        index.register(block);
+
+        assertEquals(0, index.size());
+        assertTrue(index.findByIdentifierExact("STONE").isEmpty());
+    }
+
+    @Test
     void rebuildScansLoadedChunksAcrossTicks() {
         var world = server.addSimpleWorld("index-rebuild");
         world.getChunkAt(0, 0).load();
@@ -533,14 +549,41 @@ class StorageSignIndexTest {
     }
 
     @Test
-    void saveAsyncRejectsWhenSaveIsAlreadyRunning() throws Exception {
+    void saveAsyncCoalescesWhenSaveIsAlreadyRunning() throws Exception {
         StorageSignIndex index = new StorageSignIndex(plugin, true);
         Field saving = StorageSignIndex.class.getDeclaredField("saving");
         saving.setAccessible(true);
         saving.setBoolean(index, true);
 
-        assertFalse(index.saveAsync(result -> {}));
+        assertTrue(index.saveAsync(result -> {}));
         assertTrue(index.isSaving());
+        Field pending = StorageSignIndex.class.getDeclaredField("savePending");
+        pending.setAccessible(true);
+        assertTrue(pending.getBoolean(index));
+        Field completions = StorageSignIndex.class.getDeclaredField("pendingSaveCompletions");
+        completions.setAccessible(true);
+        assertEquals(1, ((List<?>) completions.get(index)).size());
+    }
+
+    @Test
+    void saveAsyncRejectsSchedulerFailureAndClearsSavingFlag() {
+        StorageSignPlugin mockedPlugin = mock(StorageSignPlugin.class);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        when(scheduler.runTaskAsynchronously(
+            Mockito.any(), org.mockito.ArgumentMatchers.<Runnable>any()))
+            .thenThrow(new IllegalStateException("scheduler stopped"));
+        AtomicReference<StorageSignIndex.SaveResult> result = new AtomicReference<>();
+
+        try (var bukkit = Mockito.mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            StorageSignIndex index = new StorageSignIndex(mockedPlugin, true);
+
+            assertFalse(index.saveAsync(result::set));
+            assertFalse(index.isSaving());
+        }
+
+        assertNull(result.get());
     }
 
     @Test
@@ -600,6 +643,69 @@ class StorageSignIndexTest {
         assertNotNull(result.get());
         assertTrue(result.get().success());
         assertFalse(index.isSaving());
+    }
+
+    @Test
+    void saveAsyncPersistsLatestSnapshotAfterCoalescedRequest() throws Exception {
+        StorageSignIndex index = new StorageSignIndex(plugin, true);
+        var position = new StorageSignPosition(
+            server.addSimpleWorld("index-save-coalesced").getUID(), 1, 64, 1);
+        index.upsert(position, "STONE", 1, 1L);
+        AtomicReference<StorageSignIndex.SaveResult> first = new AtomicReference<>();
+        AtomicReference<StorageSignIndex.SaveResult> second = new AtomicReference<>();
+
+        assertTrue(index.saveAsync(first::set));
+        index.upsert(position, "STONE", 2, 2L);
+        assertTrue(index.saveAsync(second::set));
+
+        for (int i = 0; i < 80 && second.get() == null; i++) {
+            server.getScheduler().performTicks(1);
+            Thread.sleep(25);
+        }
+        assertNotNull(first.get());
+        assertNotNull(second.get());
+        assertTrue(first.get().success());
+        assertTrue(second.get().success());
+        assertFalse(index.isSaving());
+        Path savedPath = plugin.getDataFolder().toPath().resolve("storage-sign-index.bin");
+        assertEquals(2, new StorageSignIndexCodec().read(savedPath).getFirst().amount());
+    }
+
+    @Test
+    void coalescedSaveReportsFailureWhenFollowUpCannotBeScheduled() {
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        AtomicReference<Runnable> asynchronous = new AtomicReference<>();
+        AtomicReference<Runnable> synchronous = new AtomicReference<>();
+        AtomicReference<StorageSignIndex.SaveResult> first = new AtomicReference<>();
+        AtomicReference<StorageSignIndex.SaveResult> second = new AtomicReference<>();
+        Mockito.doAnswer(invocation -> {
+            asynchronous.set(invocation.getArgument(1));
+            return mock(org.bukkit.scheduler.BukkitTask.class);
+        }).doThrow(new IllegalStateException("scheduler stopped"))
+            .when(scheduler).runTaskAsynchronously(
+                Mockito.any(), org.mockito.ArgumentMatchers.<Runnable>any());
+        Mockito.doAnswer(invocation -> {
+            synchronous.set(invocation.getArgument(1));
+            return mock(org.bukkit.scheduler.BukkitTask.class);
+        }).when(scheduler).runTask(
+            Mockito.any(), org.mockito.ArgumentMatchers.<Runnable>any());
+
+        try (var bukkit = Mockito.mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::isPrimaryThread).thenReturn(true);
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            StorageSignIndex index = new StorageSignIndex(plugin, true);
+            assertTrue(index.saveAsync(first::set));
+            assertTrue(index.saveAsync(second::set));
+
+            asynchronous.get().run();
+            synchronous.get().run();
+        }
+
+        assertNotNull(first.get());
+        assertTrue(first.get().success());
+        assertNotNull(second.get());
+        assertFalse(second.get().success());
+        assertTrue(second.get().message().contains("coalesced"));
     }
 
     @Test

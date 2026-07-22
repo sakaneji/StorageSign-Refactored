@@ -39,6 +39,12 @@ class SpecialCaseItemSupportTest {
         assertEquals(0, SpecialCaseItemSupport.parseDamageFromIdentifier("OMINOUS_BOTTLE:"));
         assertEquals(0, SpecialCaseItemSupport.parseDamageFromIdentifier("OMINOUS_BOTTLE:not-a-number"));
         assertEquals(0, SpecialCaseItemSupport.parseDamageFromIdentifier(null));
+        assertEquals(Short.valueOf((short) 4),
+            SpecialCaseItemSupport.parseValidDamageFromIdentifier("OMINOUS_BOTTLE:4"));
+        assertNull(SpecialCaseItemSupport.parseValidDamageFromIdentifier("OMINOUS_BOTTLE:-1"));
+        assertNull(SpecialCaseItemSupport.parseValidDamageFromIdentifier("OMINOUS_BOTTLE:5"));
+        assertNull(SpecialCaseItemSupport.parseValidDamageFromIdentifier("OMINOUS_BOTTLE:1:extra"));
+        assertNull(SpecialCaseItemSupport.parseValidDamageFromIdentifier("STONE:1"));
 
         assertEquals("OMINOUS_BOTTLE:3",
             SpecialCaseItemSupport.toIdentifier(Material.OMINOUS_BOTTLE, (short) 3));

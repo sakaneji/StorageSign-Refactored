@@ -114,6 +114,22 @@ class StorageSignTest {
     void fromSignLines_rejectsNonNumericDamageSubtype() {
         assertNull(StorageSign.fromSignLines(
             new String[]{"StorageSign", "STONE:not_a_number", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE:-1", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE:1:extra", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "ENCHBOOK:sharp:5:extra", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "ENCHBOOK:sharp:0", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "ENCHANTED_BOOK:sharp:-1", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "OMINOUS_BOTTLE:not_a_number", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "OMINOUS_BOTTLE:5", "50"}));
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "OMINOUS_BOTTLE:1:extra", "50"}));
     }
 
 

@@ -59,6 +59,7 @@ nearby-display:
   field-of-view-degrees: 90.0
   idle-delay-ticks: 10
   monitor-interval-ticks: 5
+  # Effective per-player candidates never exceed global-label-limit.
   max-per-player: 3
   max-searches-per-tick: 25
   global-label-limit: 512

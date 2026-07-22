@@ -263,6 +263,24 @@ class StorageSignWarpCommandIntegrationTest {
             .anyMatch(entry -> entry.position().x() == 4));
     }
 
+    @Test
+    void playerWarpLoadsAtMostOnePreviouslyUnloadedCandidateChunk() {
+        var world = server.addSimpleWorld("warp-load-cap");
+        player.teleport(new Location(world, 0.5, 64, 0.5));
+        plugin.getStorageSignIndex().upsert(
+            new StorageSignPosition(world.getUID(), 32, 64, 0), "STONE", 1, 1, BlockFace.EAST);
+        plugin.getStorageSignIndex().upsert(
+            new StorageSignPosition(world.getUID(), 64, 64, 0), "STONE", 1, 1, BlockFace.EAST);
+        assertFalse(world.isChunkLoaded(2, 0));
+        assertFalse(world.isChunkLoaded(4, 0));
+
+        assertTrue(server.dispatchCommand(player, "sswarp STONE"));
+
+        assertTrue(world.isChunkLoaded(2, 0));
+        assertFalse(world.isChunkLoaded(4, 0));
+        assertTrue(player.nextMessage().contains("見つかりません"));
+    }
+
     private void createIndexedSign(org.bukkit.block.Block block, String identifier, BlockFace facing) {
         block.setType(Material.OAK_SIGN);
         StorageSign.fromSignLines(new String[] {StorageSign.HEADER_LINE, identifier, "7"})

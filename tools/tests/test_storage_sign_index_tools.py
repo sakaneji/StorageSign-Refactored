@@ -106,6 +106,34 @@ class StorageSignIndexTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "amount"):
             index.read_index(self.index_path)
 
+        payload = struct.pack(">IIIqqiiiiq?", index.MAGIC, index.VERSION, 1,
+                              world_msb, world_lsb, 0, 0, 0, 1, 0, False)
+        payload += struct.pack(">i", 3) + b"   "
+        write_payload(self.index_path, payload)
+        with self.assertRaisesRegex(ValueError, "identifier"):
+            index.read_index(self.index_path)
+
+        payload = struct.pack(">IIIqqiiiiq?", index.MAGIC, index.VERSION, 1,
+                              world_msb, world_lsb, 0, 0, 0, 1, 0, True)
+        payload += struct.pack(">H", 8) + b"SIDEWAYS"
+        payload += struct.pack(">i", 5) + b"STONE"
+        write_payload(self.index_path, payload)
+        with self.assertRaisesRegex(ValueError, "front facing"):
+            index.read_index(self.index_path)
+
+        with self.assertRaisesRegex(ValueError, "amount"):
+            index.write_index(self.index_path, [index.Entry(
+                str(WORLD_ID), 0, 0, 0, "STONE", -1, 0,
+            )])
+        with self.assertRaisesRegex(ValueError, "identifier"):
+            index.write_index(self.index_path, [index.Entry(
+                str(WORLD_ID), 0, 0, 0, "   ", 1, 0,
+            )])
+        with self.assertRaisesRegex(ValueError, "front facing"):
+            index.write_index(self.index_path, [index.Entry(
+                str(WORLD_ID), 0, 0, 0, "STONE", 1, 0, "SIDEWAYS",
+            )])
+
     def test_world_map_and_serializers(self) -> None:
         world_map_path = Path(self.temp_dir.name) / "worlds.json"
         world_map_path.write_text(json.dumps({str(WORLD_ID): "world"}), encoding="utf-8")
@@ -304,6 +332,26 @@ class StorageSignIndexTest(unittest.TestCase):
         }, str(WORLD_ID))
 
         self.assertEqual("POTION:minecraft:healing", entries[0].identifier)
+
+    def test_offline_region_rebuild_reads_legacy_tile_entities(self) -> None:
+        entries = region.scan_chunk({
+            "Level": {
+                "TileEntities": [{
+                    "id": "minecraft:sign",
+                    "x": 1,
+                    "y": 64,
+                    "z": 1,
+                    "Text1": json.dumps({"text": "StorageSign"}),
+                    "Text2": json.dumps({"text": "STONE"}),
+                    "Text3": json.dumps({"text": "12"}),
+                    "Text4": json.dumps({"text": ""}),
+                }],
+            },
+        }, str(WORLD_ID))
+
+        self.assertEqual(1, len(entries))
+        self.assertEqual("STONE", entries[0].identifier)
+        self.assertEqual(12, entries[0].amount)
 
     def test_offline_region_rebuild_skips_invalid_chunk_pointer(self) -> None:
         world_dir = Path(self.temp_dir.name) / "world"

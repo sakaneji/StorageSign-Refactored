@@ -35,17 +35,29 @@ public final class SpecialCaseItemSupport {
 
     /** イデンティファイアからサブタイプデータ（現在は刀豊の瓶のアンプリファイア）をパースする。 */
     public static short parseDamageFromIdentifier(String identifier) {
-        if (!isSpecialIdentifier(identifier)) return 0;
+        Short parsed = parseValidDamageFromIdentifier(identifier);
+        return parsed == null ? 0 : parsed;
+    }
 
-        String[] parts = identifier.split(":");
-        if (parts.length < 2) return 0;
+    /** Parses a complete special identifier, rejecting malformed or unsupported amplifier values. */
+    public static Short parseValidDamageFromIdentifier(String identifier) {
+        if (!isSpecialIdentifier(identifier)) return null;
+
+        String[] parts = identifier.split(":", -1);
+        if (parts.length != 2) return null;
 
         try {
-            return Short.parseShort(parts[1]);
+            short damage = Short.parseShort(parts[1]);
+            if (damage < 0 || damage > 4) {
+                LOG.log(Level.WARNING, "parseDamageFromIdentifier",
+                        "Unsupported ominous bottle amplifier: {0}", identifier);
+                return null;
+            }
+            return damage;
         } catch (NumberFormatException e) {
             LOG.log(Level.WARNING, "parseDamageFromIdentifier",
                     "Invalid special-case item identifier: {0}", identifier);
-            return 0;
+            return null;
         }
     }
 

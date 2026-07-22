@@ -26,6 +26,13 @@ DEFAULT_INDEX_PATHS = (
     REPO_ROOT / "plugins/StorageSign-Refactored/storage-sign-index.bin.tmp",
 )
 WorldMap = dict[str, str]
+VALID_BLOCK_FACES = {
+    "NORTH", "NORTH_NORTH_EAST", "NORTH_EAST", "EAST_NORTH_EAST",
+    "EAST", "EAST_SOUTH_EAST", "SOUTH_EAST", "SOUTH_SOUTH_EAST",
+    "SOUTH", "SOUTH_SOUTH_WEST", "SOUTH_WEST", "WEST_SOUTH_WEST",
+    "WEST", "WEST_NORTH_WEST", "NORTH_WEST", "NORTH_NORTH_WEST",
+    "UP", "DOWN", "SELF",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,10 +129,14 @@ def read_index(path: Path) -> list[Entry]:
             (has_front_facing,) = struct.unpack(">?", _read_exact(stream, 1))
             if has_front_facing:
                 front_facing = _read_utf(stream)
+                if front_facing not in VALID_BLOCK_FACES:
+                    raise ValueError(f"invalid front facing: {front_facing}")
         (identifier_length,) = struct.unpack(">i", _read_exact(stream, 4))
         if identifier_length <= 0 or identifier_length > MAX_IDENTIFIER_BYTES:
             raise ValueError(f"invalid identifier length: {identifier_length}")
         identifier = _read_exact(stream, identifier_length).decode("utf-8")
+        if not identifier.strip():
+            raise ValueError("identifier is required")
         world_id = str(uuid.UUID(bytes=struct.pack(">qq", world_msb, world_lsb)))
         entries.append(Entry(world_id, x, y, z, identifier, amount, verified_at, front_facing))
 
@@ -283,8 +294,10 @@ def write_index(path: Path, entries: Sequence[Entry]) -> int:
     for entry in entries:
         world_uuid = uuid.UUID(entry.world_id)
         world_msb, world_lsb = struct.unpack(">qq", world_uuid.bytes)
+        if entry.amount < 0:
+            raise ValueError(f"invalid index amount: {entry.amount}")
         identifier = entry.identifier.encode("utf-8")
-        if not identifier:
+        if not identifier.strip():
             raise ValueError("identifier is required")
         if len(identifier) > MAX_IDENTIFIER_BYTES:
             raise ValueError("identifier is too long")
@@ -292,6 +305,8 @@ def write_index(path: Path, entries: Sequence[Entry]) -> int:
                                   entry.amount, entry.verified_at))
         payload.write(struct.pack(">?", entry.front_facing is not None))
         if entry.front_facing is not None:
+            if entry.front_facing not in VALID_BLOCK_FACES:
+                raise ValueError(f"invalid front facing: {entry.front_facing}")
             facing = entry.front_facing.encode("utf-8")
             payload.write(struct.pack(">H", len(facing)))
             payload.write(facing)
