@@ -21,11 +21,11 @@ Honor an explicitly requested scope. Otherwise:
 - Run `./scripts/test.sh integration` for plugin startup, command registration, configuration, recipes, or Bukkit/Paper API integration changes.
 - Run `./scripts/test.sh coverage` to execute all JUnit tests and generate the JaCoCo HTML/XML/CSV report without enforcing a numeric threshold.
 - Run `./scripts/test.sh e2e <version> <logger-mode>` when one supported Minecraft version or Logger configuration is named. Use `with-logger`, `without-logger`, or `both`.
-- Run `./scripts/test.sh e2e` for gameplay behavior, listeners, inventory transport, persistence, Logger integration, or independent multi-version compatibility changes. This runs both Logger modes by default.
+- Run `./scripts/test.sh e2e` for gameplay behavior, listeners, inventory transport, persistence, Logger integration, or independent multi-version compatibility changes. This runs 1.21.4, 1.21.8, and 1.21.11 in both Logger modes by default.
 - Run `./scripts/test.sh banner-compat 1.21.11` for Potion and ominous-banner persistence across the supported 1.21.4 to 1.21.8 to 1.21.11 shared-world path. Use `banner-compat all` only when the held 26.x environments are explicitly being exercised.
 - Run `./scripts/test.sh all` when asked to run all tests, perform a release check, or verify the project without a narrower scope.
 
-Supported E2E versions are `1.21.4`, `1.21.8`, `1.21.11`, `26.1.2`, and `26.2`. Paper 26.2 is pinned to an experimental build until Paper publishes a stable channel build. Treat `scripts/test.sh` as authoritative if this list later changes.
+Defined E2E versions are `1.21.4`, `1.21.8`, `1.21.11`, `26.1.2`, and `26.2`. The default suite excludes the held 26.x environments because the current Mineflayer client does not support their protocol. Paper 26.2 is pinned to an experimental build until Paper publishes a stable channel build. Treat `scripts/test.sh` as authoritative if this list later changes.
 
 ## Execute and diagnose
 

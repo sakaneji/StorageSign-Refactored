@@ -19,6 +19,8 @@ assert_equals() {
 }
 
 initialize_timing_cache
+assert_equals "${DEFAULT_E2E_VERSIONS[*]}" "1.21.4 1.21.8 1.21.11"
+assert_equals "${SUPPORTED_E2E_VERSIONS[*]}" "1.21.4 1.21.8 1.21.11 26.1.2 26.2"
 timing_record first 10
 timing_record first 20
 timing_record second 5

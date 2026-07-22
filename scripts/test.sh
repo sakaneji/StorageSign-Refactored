@@ -11,6 +11,8 @@ FAILURE_TAIL_LINES="${STORAGESIGN_FAILURE_TAIL_LINES:-40}"
 TIMING_FILE="${STORAGESIGN_TIMING_FILE:-$TEST_LOG_DIR/e2e-timings.tsv}"
 TIMING_UNKNOWN_POOL_SECONDS=180
 TIMING_INITIAL_BUFFER_SECONDS=30
+DEFAULT_E2E_VERSIONS=(1.21.4 1.21.8 1.21.11)
+SUPPORTED_E2E_VERSIONS=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
 
 usage() {
   cat >&2 <<'EOF'
@@ -366,7 +368,7 @@ run_e2e_version() {
 run_e2e() {
   local requested="${1:-}"
   local requested_mode="${2:-both}"
-  local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
+  local versions=("${DEFAULT_E2E_VERSIONS[@]}")
   local modes=()
   local timing_keys=("prepare:e2e")
   local completed=0
@@ -419,10 +421,10 @@ run_e2e() {
 }
 
 run_banner_compat() {
-  local versions=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
-  case "${1:-all}" in
-    1.21.11) versions=(1.21.4 1.21.8 1.21.11) ;;
-    all) ;;
+  local versions=("${DEFAULT_E2E_VERSIONS[@]}")
+  case "${1:-1.21.11}" in
+    1.21.11) ;;
+    all) versions=("${SUPPORTED_E2E_VERSIONS[@]}") ;;
     *) usage ;;
   esac
   local timing_keys=("prepare:e2e")
@@ -509,7 +511,7 @@ main() {
     integration) run_integration ;;
     coverage) run_coverage ;;
     e2e) run_e2e "${2:-}" "${3:-both}" ;;
-    banner-compat) run_banner_compat "${2:-all}" ;;
+    banner-compat) run_banner_compat "${2:-1.21.11}" ;;
     all)
       run_unit && run_integration && run_coverage && run_e2e "" both && run_banner_compat
       ;;

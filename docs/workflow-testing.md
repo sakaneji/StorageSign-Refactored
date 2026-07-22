@@ -14,7 +14,8 @@ Read: `AGENTS.md`, `docs/test-cases.md`, `docs/test-gap-audit.md`, and `docs/run
   - `all` only if needed
 
 26.x note:
-- `e2e` と `banner-compat all` の定義済み経路には 26.1.2 / 26.2 が含まれるが、保存済み成果物では Mineflayer / `minecraft-protocol` の `unsupported protocol version` で完走確認が保留中。
+- 引数なしの `e2e`、`banner-compat`、`all` は、Mineflayer が対応する 1.21.4 / 1.21.8 / 1.21.11 だけを実行する。
+- 26.1.2 / 26.2 は `e2e <version>` または `banner-compat all` で明示実行できるが、保存済み成果物では Mineflayer / `minecraft-protocol` の `unsupported protocol version` で完走確認が保留中。
 - 26.x の通常 E2E / upgrade 完走確認は、そのプロトコル対応を再確認してから再開する。
 
 ## Rules
