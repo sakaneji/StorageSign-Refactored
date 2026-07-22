@@ -110,6 +110,12 @@ class StorageSignTest {
         assertEquals(50, ss.getAmount());
     }
 
+    @Test
+    void fromSignLines_rejectsNonNumericDamageSubtype() {
+        assertNull(StorageSign.fromSignLines(
+            new String[]{"StorageSign", "STONE:not_a_number", "50"}));
+    }
+
 
     @Test
     void fromSignLines_nonNumericAmountIsRejected() {

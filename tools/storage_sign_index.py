@@ -114,6 +114,8 @@ def read_index(path: Path) -> list[Entry]:
     for _ in range(count):
         world_msb, world_lsb = struct.unpack(">qq", _read_exact(stream, 16))
         x, y, z, amount = struct.unpack(">iiii", _read_exact(stream, 16))
+        if amount < 0:
+            raise ValueError(f"invalid index amount: {amount}")
         (verified_at,) = struct.unpack(">q", _read_exact(stream, 8))
         front_facing = None
         if version >= 2:

@@ -51,6 +51,7 @@ storage-index:
 
 # Show full stored identifiers near players after they stop moving.
 # Looking around marks the display for rescan, and labels appear only when the sign text would otherwise be shortened.
+# Once shown, a label remains visible while moving until it leaves the configured distance.
 # This feature is automatically disabled when storage-index.enabled is false.
 nearby-display:
   enabled: true

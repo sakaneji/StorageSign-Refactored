@@ -942,15 +942,8 @@ class StorageSignBranchCoverageTest {
         assertNull(method.invoke(null, "ENCHBOOK:sharp:not-a-number", 1));
         assertNull(method.invoke(null, "ENCHBOOK:unknown:5", 1));
         assertNull(method.invoke(null, "ENCHANTED_BOOK:unknown:5", 1));
-        StorageSign legacyEnchBookNoLevel = (StorageSign) method.invoke(
-            null, "ENCHANTED_BOOK:unknown", 1);
-        assertNotNull(legacyEnchBookNoLevel);
-        assertEquals(Material.ENCHANTED_BOOK, legacyEnchBookNoLevel.getMaterial());
-        assertEquals(0, legacyEnchBookNoLevel.getDamage());
-        StorageSign nonEnchBookTriple = (StorageSign) method.invoke(null, "STONE:foo:5", 1);
-        assertNotNull(nonEnchBookTriple);
-        assertEquals(Material.STONE, nonEnchBookTriple.getMaterial());
-        assertEquals(0, nonEnchBookTriple.getDamage());
+        assertNull(method.invoke(null, "ENCHANTED_BOOK:unknown", 1));
+        assertNull(method.invoke(null, "STONE:foo:5", 1));
         StorageSign legacyEnchBook = (StorageSign) method.invoke(
             null, "ENCHANTED_BOOK:sharp:5", 1);
         assertNotNull(legacyEnchBook);
@@ -961,9 +954,7 @@ class StorageSignBranchCoverageTest {
         assertNotNull(legacyEnchBookAlt);
         assertEquals(Material.ENCHANTED_BOOK, legacyEnchBookAlt.getMaterial());
         assertNotNull(legacyEnchBookAlt.getEnchantment());
-        StorageSign numericFallback = (StorageSign) method.invoke(null, "STONE:abc", 1);
-        assertNotNull(numericFallback);
-        assertEquals(Material.STONE, numericFallback.getMaterial());
+        assertNull(method.invoke(null, "STONE:abc", 1));
         assertNull(method.invoke(null, "ENCHANTED_BOOK:sharp:not-a-number", 1));
         assertNull(method.invoke(null, "NOT_A_REAL_MATERIAL", 1));
     }
