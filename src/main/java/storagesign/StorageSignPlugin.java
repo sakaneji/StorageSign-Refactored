@@ -85,7 +85,7 @@ public class StorageSignPlugin extends JavaPlugin {
         new StorageSignPluginBootstrap(this).disable();
     }
 
-    /** Public loaded-chunk position index for other StorageSign features. */
+    /** Public StorageSign position index shared by search, warp, and nearby display. */
     public StorageSignIndex getStorageSignIndex() {
         return storageSignIndex;
     }

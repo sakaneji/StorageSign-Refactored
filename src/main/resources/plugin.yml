@@ -1,11 +1,11 @@
 name: ${project.artifactId}
 main: storagesign.StorageSignPlugin
 version: ${project.version}
-description: Refactored StorageSign plugin for Spigot/Paper.
+description: Refactored StorageSign plugin for Paper servers.
 api-version: '1.21.4'
 authors:
     - hirot
-website: https://example.com/storagesign-refactored
+website: https://github.com/sakaneji/StorageSign-Refactored
 license: MIT
 softdepend:
     - Logger
@@ -18,8 +18,8 @@ commands:
             - ssgive
         permission: storagesign.give
     storagesignindex:
-        description: Inspect or rebuild the loaded-chunk StorageSign index.
-        usage: /<command> <status|rebuild [all|world]>
+        description: Inspect or rebuild the StorageSign position index.
+        usage: /<command> [status|rebuild [all|world]]
         aliases:
             - ssindex
         permission: storagesign.index.admin
@@ -78,5 +78,5 @@ permissions:
         default: op
 
     storagesign.search.admin:
-        description: Allows searching the persistent StorageSign index.
+        description: Allows searching the current StorageSign index snapshot.
         default: op

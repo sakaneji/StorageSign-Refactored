@@ -12,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import storagesign.ConfigLoader;
 import storagesign.index.StorageSignIndex;
 
-/** Administrative status and loaded-chunk rebuild command for the StorageSign index. */
+/** Administrative status and rebuild command for the StorageSign position index. */
 public final class StorageSignIndexCommand implements CommandExecutor {
     private final StorageSignIndex index;
 
