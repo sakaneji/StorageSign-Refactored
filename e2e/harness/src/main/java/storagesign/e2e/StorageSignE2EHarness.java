@@ -201,6 +201,11 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             }
             case "double-interact" -> createStorageSign(world, 0, BASE_Y, 0, "STONE", 128);
             case "attached-sign" -> createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
+            case "attached-sign-denied" -> {
+                createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
+                deniedUse = player.addAttachment(this, "storagesign.break", false);
+                deniedPlayer = player.getUniqueId();
+            }
             case "manual-import" -> {
                 createStorageSign(world, 0, BASE_Y, 0, "STONE", 0);
                 player.getInventory().setItem(0, new ItemStack(Material.STONE, 64));
@@ -818,10 +823,12 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         lastBreakDrops = event.isDropItems();
     }
 
-    private static void breakSupportBlock(Player player) {
+    private void breakSupportBlock(Player player) {
         Block support = player.getWorld().getBlockAt(0, BASE_Y - 1, 0);
         BlockBreakEvent event = new BlockBreakEvent(support, player);
         Bukkit.getPluginManager().callEvent(event);
+        lastBreakCancelled = event.isCancelled();
+        lastBreakDrops = event.isDropItems();
         if (!event.isCancelled()) support.setType(Material.AIR, false);
     }
 

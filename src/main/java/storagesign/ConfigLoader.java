@@ -3,7 +3,10 @@ package storagesign;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,6 +25,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class ConfigLoader {
     private static final String DEFAULT_CONFIG_RESOURCE = "config.default.yml";
     private static final String RUNTIME_CONFIG_FILE = "config.yml";
+    private static final String LEGACY_DATA_FOLDER = "StorageSign";
 
     // ── 設定キー定数 ────────────────────────────────────────────────────────────
     private static final String KEY_NO_PERMISSION     = "no-permisson";  // 元プラグインのタイポ — 互換のためそのまま維持
@@ -148,6 +152,22 @@ public final class ConfigLoader {
         File runtimeConfig = new File(dataFolder, RUNTIME_CONFIG_FILE);
         if (runtimeConfig.isFile()) return;
 
+        File parentFolder = dataFolder.getParentFile();
+        File legacyConfig = parentFolder == null
+            ? null
+            : new File(new File(parentFolder, LEGACY_DATA_FOLDER), RUNTIME_CONFIG_FILE);
+        if (legacyConfig != null && legacyConfig.isFile()) {
+            try {
+                copyAtomically(legacyConfig.toPath(), runtimeConfig.toPath());
+                plugin.getLogger().info(
+                    "旧版 StorageSign の config.yml を StorageSign-Refactored へ移行しました。");
+                return;
+            } catch (IOException e) {
+                throw new IllegalStateException(
+                    "Failed to migrate legacy StorageSign config: " + legacyConfig, e);
+            }
+        }
+
         try (InputStream input = plugin.getResource(DEFAULT_CONFIG_RESOURCE)) {
             if (input == null) {
                 throw new IllegalStateException("Missing default config resource: " + DEFAULT_CONFIG_RESOURCE);
@@ -155,6 +175,23 @@ public final class ConfigLoader {
             Files.copy(input, runtimeConfig.toPath());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to create runtime config from " + DEFAULT_CONFIG_RESOURCE, e);
+        }
+    }
+
+    private static void copyAtomically(Path source, Path target) throws IOException {
+        Path temporary = Files.createTempFile(
+            target.getParent(), target.getFileName().toString() + ".", ".tmp");
+        try {
+            Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                // 同一ディレクトリ内のmoveなので、atomic move非対応環境でも
+                // 完全に書き終えた一時ファイルだけを公開する。
+                Files.move(temporary, target);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

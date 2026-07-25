@@ -1,5 +1,6 @@
 package storagesign.listener;
 
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.GameMode;
@@ -51,19 +52,28 @@ public final class BlockEventListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
         Block block = event.getBlock();
+        boolean storageSign = StorageSign.isStorageSign(block);
 
-        // 権限チェックは StorageSign ブロックのみ対象（元プラグインの修正）。
-        // 元プラグインは全ブロック破壊に適用していたため、一般ブロックも坂れなくなる問題があった。
-        if (StorageSign.isStorageSign(block)) {
-            if (!player.hasPermission("storagesign.break")) {
-                player.sendMessage("§c" + ConfigLoader.getNoPermission());
-                event.setCancelled(true);
-                return;
-            }
+        if (storageSign && !player.hasPermission("storagesign.break")) {
+            player.sendMessage("§c" + ConfigLoader.getNoPermission());
+            event.setCancelled(true);
+            return;
+        }
+
+        List<SsAdjacencyMatch> attachedSigns = findAttachedStorageSigns(block);
+        // 一般ブロックには干渉しないが、StorageSign支持ブロックの破壊には権限が必要。
+        if (!storageSign && !attachedSigns.isEmpty()
+            && !player.hasPermission("storagesign.break")) {
+            player.sendMessage("§c" + ConfigLoader.getNoPermission());
+            event.setCancelled(true);
+            return;
+        }
+        if (storageSign) {
             event.setDropItems(false);
         }
 
-        dropRelativeSigns(block, index);
+        tryDropStorageSign(block, index);
+        dropAttachedStorageSigns(attachedSigns, index);
     }
 
     // ── BlockPlaceEvent ────────────────────────────────────────────────────────
@@ -144,7 +154,7 @@ public final class BlockEventListener implements Listener {
         // ベースブロック自身が StorageSign の場合のみ処理する。
         tryDropStorageSign(block, index);
 
-        dropAttachedStorageSignsByAdjacency(block, index);
+        dropAttachedStorageSigns(findAttachedStorageSigns(block), index);
     }
 
     /**
@@ -156,9 +166,18 @@ public final class BlockEventListener implements Listener {
     }
 
     public static void dropAttachedStorageSignsByAdjacency(Block block, StorageSignIndex index) {
-        for (SsAdjacencyMatch match : ADJACENCY_RESOLVER.findAll(
+        dropAttachedStorageSigns(findAttachedStorageSigns(block), index);
+    }
+
+    private static List<SsAdjacencyMatch> findAttachedStorageSigns(Block block) {
+        return ADJACENCY_RESOLVER.findAll(
             new SsAdjacencyQuery(block, null, SsAdjacencyPurpose.ATTACHED_SIGN_DROP)
-        )) {
+        );
+    }
+
+    private static void dropAttachedStorageSigns(List<SsAdjacencyMatch> matches,
+                                                 StorageSignIndex index) {
+        for (SsAdjacencyMatch match : matches) {
             dropSingleStorageSign(match.signBlock(), match.signBlock().getType(), match.storageSign(), index);
         }
     }

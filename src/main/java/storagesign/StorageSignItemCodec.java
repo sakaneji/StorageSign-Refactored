@@ -121,13 +121,16 @@ final class StorageSignItemCodec {
         if (item == null || item.getType() == Material.AIR) return false;
 
         if (sign.getMaterial() == Material.END_PORTAL && sign.getDamage() == StorageSign.DAMAGE_SS_ITEM) {
-            var horseMeta = item.getItemMeta();
-            String markerName = StorageSignIdentifierCodec.resolveVirtualIdentifier(sign.getMaterial(), sign.getDamage());
+            ItemMeta markerMeta = item.getItemMeta();
+            String markerName = StorageSignIdentifierCodec.resolveVirtualIdentifier(
+                sign.getMaterial(), sign.getDamage());
             if (markerName == null) markerName = "HorseEgg";
             return item.getType() == StorageSign.LEGACY_MARKER_ITEM_MATERIAL
-                && horseMeta != null
-                && markerName.equals(horseMeta.getDisplayName())
-                && horseMeta.hasLore();
+                && markerMeta != null
+                && markerName.equals(markerMeta.getDisplayName())
+                && List.of(StorageSign.EMPTY_MARKER).equals(markerMeta.getLore())
+                && cachedReference != null
+                && cachedReference.isSimilar(item);
         }
 
         if (item.getType() != sign.getMaterial()) return false;
@@ -141,7 +144,8 @@ final class StorageSignItemCodec {
         if (sign.getMaterial() == Material.ENCHANTED_BOOK) {
             if (!(meta instanceof EnchantmentStorageMeta esm)) return false;
             if (sign.getEnchantment() == null) return false;
-            return esm.hasStoredEnchant(sign.getEnchantment())
+            return esm.getStoredEnchants().size() == 1
+                && esm.hasStoredEnchant(sign.getEnchantment())
                 && esm.getStoredEnchantLevel(sign.getEnchantment()) == sign.getDamage();
         }
 
@@ -154,7 +158,7 @@ final class StorageSignItemCodec {
             if (!(meta instanceof BannerMeta bm)) return false;
             BannerMeta ominous = StorageSignPlugin.getOminousBannerMeta();
             if (ominous != null && bm.equals(ominous)) return true;
-            return StorageSignPlugin.isOminousBannerMeta(bm);
+            return StorageSignPlugin.isCompatibleOminousBannerMeta(bm);
         }
 
         if (sign.getDamage() == StorageSign.DAMAGE_SS_ITEM && MaterialRegistry.SIGN_MATERIALS.contains(sign.getMaterial())) {
@@ -220,8 +224,10 @@ final class StorageSignItemCodec {
 
         if (mat == Material.WHITE_BANNER) {
             if (!(meta instanceof BannerMeta bm)) return null;
-            if (StorageSignPlugin.isOminousBannerMeta(bm)) {
-                StorageSignPlugin.setOminousBannerMeta((BannerMeta) bm.clone());
+            BannerMeta canonical =
+                StorageSignPlugin.canonicalizeOminousBannerMeta(bm);
+            if (canonical != null) {
+                StorageSignPlugin.setOminousBannerMeta(canonical);
                 return new StorageSign(mat, (short) 8, 0, null, null, false);
             }
         }

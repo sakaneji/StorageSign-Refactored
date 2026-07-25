@@ -682,7 +682,55 @@ class StorageSignItemMetaIntegrationTest {
     }
 
     @Test
-    void ominousBannerSimilarityFallsBackToRegistryKeyWhenTemplateIsMissing() {
+    void existingSpecialStorageSignsRejectExtraMetadataThatWouldBeLost() {
+        StorageSign bookSign = StorageSign.fromSignLines(new String[] {
+            StorageSign.HEADER_LINE, "ENCHBOOK:sharp:5", "1"
+        });
+        ItemStack multiEnchantBook = new ItemStack(Material.ENCHANTED_BOOK);
+        EnchantmentStorageMeta bookMeta =
+            (EnchantmentStorageMeta) multiEnchantBook.getItemMeta();
+        bookMeta.addStoredEnchant(Enchantment.SHARPNESS, 5, true);
+        bookMeta.addStoredEnchant(Enchantment.MENDING, 1, true);
+        multiEnchantBook.setItemMeta(bookMeta);
+        assertFalse(bookSign.isSimilar(multiEnchantBook));
+
+        StorageSign horseSign = StorageSign.fromSignLines(new String[] {
+            StorageSign.HEADER_LINE, "HorseEgg", "1"
+        });
+        ItemStack customHorseEgg = horseSign.getContents(1);
+        ItemMeta horseMeta = customHorseEgg.getItemMeta();
+        horseMeta.setLore(List.of("custom"));
+        customHorseEgg.setItemMeta(horseMeta);
+        assertFalse(horseSign.isSimilar(customHorseEgg));
+
+        StorageSign bannerSign = StorageSign.fromSignLines(new String[] {
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"
+        });
+        ItemStack customBanner = new ItemStack(Material.WHITE_BANNER);
+        BannerMeta bannerMeta = (BannerMeta) StorageSignPlugin.getOminousBannerMeta().clone();
+        bannerMeta.setLore(List.of("custom"));
+        customBanner.setItemMeta(bannerMeta);
+        assertFalse(bannerSign.isSimilar(customBanner));
+        assertNull(StorageSign.fromStoredItem(customBanner));
+    }
+
+    @Test
+    void ominousBannerCompatibilityRestoresMissingTooltipFlagWithoutAcceptingCustomLore() {
+        StorageSign bannerSign = StorageSign.fromSignLines(new String[] {
+            StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"
+        });
+        BannerMeta upgradedMeta = (BannerMeta) StorageSignPlugin.getOminousBannerMeta().clone();
+        upgradedMeta.removeItemFlags(ItemFlag.values());
+        ItemStack upgradedBanner = new ItemStack(Material.WHITE_BANNER);
+        upgradedBanner.setItemMeta(upgradedMeta);
+
+        assertTrue(StorageSignPlugin.isCompatibleOminousBannerMeta(upgradedMeta));
+        assertTrue(bannerSign.isSimilar(upgradedBanner));
+        assertNotNull(StorageSign.fromStoredItem(upgradedBanner));
+    }
+
+    @Test
+    void ominousBannerRecoversFromValidatedItemWhenStartupTemplateIsMissing() {
         StorageSign banner = StorageSign.fromSignLines(new String[]{
             StorageSign.HEADER_LINE, "WHITE_BANNER:8", "1"});
         assertNotNull(banner);
@@ -692,10 +740,20 @@ class StorageSignItemMetaIntegrationTest {
         ItemStack item = new ItemStack(Material.WHITE_BANNER);
         item.setItemMeta(ominous.clone());
 
-        try (MockedStatic<StorageSignPlugin> mocked = mockStatic(StorageSignPlugin.class)) {
-            mocked.when(StorageSignPlugin::getOminousBannerMeta).thenReturn(null);
-            assertFalse(banner.isSimilar(item));
-        }
+        StorageSignPlugin.setOminousBannerMeta(null);
+        ItemStack custom = item.clone();
+        BannerMeta customMeta = (BannerMeta) custom.getItemMeta();
+        customMeta.setLore(List.of("custom"));
+        custom.setItemMeta(customMeta);
+        assertNull(StorageSign.fromStoredItem(custom));
+        assertNull(StorageSignPlugin.getOminousBannerMeta());
+
+        assertTrue(banner.isSimilar(item));
+        StorageSign recovered = StorageSign.fromStoredItem(item);
+        assertNotNull(recovered);
+        assertNotNull(StorageSignPlugin.getOminousBannerMeta());
+        assertTrue(StorageSignPlugin.isOminousBannerMeta(
+            StorageSignPlugin.getOminousBannerMeta()));
     }
 
     @Test

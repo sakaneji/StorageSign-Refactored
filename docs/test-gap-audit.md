@@ -6,11 +6,13 @@ method names, owning classes, and line numbers can drift or disappear from the c
 
 ## storagesign
 
-- `storagesign.StorageSignPlugin.retryOminousBanner` line 133: missed 1, covered 14
-- `storagesign.StorageSignPlugin.getStorageSignQueries` line 275: missed 1, covered 0
-- `storagesign.StorageSignPlugin.lambda$retryOminousBanner$0` line 146: missed 1, covered 0
+- `storagesign.StorageSignPlugin.retryOminousBanner` line 134: missed 1, covered 14
+- `storagesign.StorageSignPlugin.canonicalizeOminousBannerMeta` line 220: missed 2, covered 6
+- `storagesign.StorageSignPlugin.getStorageSignQueries` line 311: missed 1, covered 0
+- `storagesign.StorageSignPlugin.lambda$retryOminousBanner$0` line 147: missed 1, covered 0
 - `storagesign.StorageSign.<clinit>` line 55: missed 4, covered 23
-- `storagesign.ConfigLoader.ensureConfigExists` line 143: missed 4, covered 9
+- `storagesign.ConfigLoader.ensureConfigExists` line 147: missed 7, covered 16
+- `storagesign.ConfigLoader.copyAtomically` line 182: missed 2, covered 7
 - `storagesign.StorageSignFacingSupport.resolveFrontPosition` line 45: missed 3, covered 4
 - `storagesign.StorageSignCommandTabCompleter.onTabComplete` line 25: missed 1, covered 6
 - `storagesign.StorageSignCommandTabCompleter.completeGive` line 37: missed 1, covered 3
@@ -48,4 +50,4 @@ method names, owning classes, and line numbers can drift or disappear from the c
 
 ## storagesign/task
 
-- `storagesign.task.ExportSignTask.run` line 74: missed 2, covered 44
+- `storagesign.task.ExportSignTask.run` line 74: missed 8, covered 42

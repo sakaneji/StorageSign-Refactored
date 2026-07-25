@@ -542,12 +542,11 @@ class StorageSignBranchCoverageTest {
                 1, null, null, false);
             assertNotNull(legacyMarker);
 
-            ItemStack item = mock(ItemStack.class);
-            ItemMeta meta = mock(ItemMeta.class);
-            when(item.getType()).thenReturn(Material.GHAST_SPAWN_EGG);
-            when(item.getItemMeta()).thenReturn(meta);
-            when(meta.getDisplayName()).thenReturn("HorseEgg");
-            when(meta.hasLore()).thenReturn(true);
+            ItemStack item = new ItemStack(Material.GHAST_SPAWN_EGG);
+            ItemMeta meta = item.getItemMeta();
+            meta.setDisplayName("HorseEgg");
+            meta.setLore(List.of(StorageSign.EMPTY_MARKER));
+            item.setItemMeta(meta);
 
             assertTrue(legacyMarker.isSimilar(item));
         } finally {

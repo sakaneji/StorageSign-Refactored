@@ -223,6 +223,33 @@ class ConfigLoaderTest {
         assertEquals("existing-config", Files.readString(runtimeConfig));
     }
 
+    @Test
+    void loadMigratesLegacyConfigBeforeCreatingDefaults() throws IOException {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        FileConfiguration config = mock(FileConfiguration.class);
+        Path pluginsFolder = Files.createTempDirectory("storagesign-config-migration");
+        Path dataFolder = pluginsFolder.resolve("StorageSign-Refactored");
+        Path legacyFolder = pluginsFolder.resolve("StorageSign");
+        Files.createDirectories(legacyFolder);
+        Files.writeString(legacyFolder.resolve("config.yml"), "manual-import: false");
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml"))
+            .thenThrow(new AssertionError("default resource should not be read"));
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getLogger()).thenReturn(java.util.logging.Logger.getAnonymousLogger());
+        doNothing().when(plugin).reloadConfig();
+        when(config.getStringList("brewing-ingredient-identifiers")).thenReturn(List.of());
+
+        ConfigLoader.load(plugin);
+
+        assertEquals("manual-import: false", Files.readString(dataFolder.resolve("config.yml")));
+        assertEquals("manual-import: false", Files.readString(legacyFolder.resolve("config.yml")));
+        try (var files = Files.list(dataFolder)) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+        }
+        verify(plugin).reloadConfig();
+    }
+
     private static ConfigurationSection section(Set<String> keys, Map<String, String> values) {
         ConfigurationSection section = mock(ConfigurationSection.class);
         when(section.getKeys(false)).thenReturn(keys);

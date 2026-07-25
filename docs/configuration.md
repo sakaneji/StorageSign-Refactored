@@ -2,6 +2,10 @@
 
 `plugins/StorageSign-Refactored/config.yml` で変更できます。実際の既定値は `src/main/resources/config.default.yml` を参照してください。
 
+初回起動時に新版の `config.yml` がなく、`plugins/StorageSign/config.yml` が存在する場合は、
+元版の設定を新版フォルダへ自動コピーします。両方存在する場合は新版側を使用し、
+旧ファイルを上書き・削除しません。
+
 ## 主要キー
 
 | キー | 説明 |
@@ -40,4 +44,3 @@
 - `storage-index.enabled: false` なら近接表示も無効になります。
 - `storage-index.chunk-rescan-queue-cap` は、大量チャンク読込環境向けの逃げ道です。
 - 0 以下で既定値へ戻るキーがあります。詳細な丸め規則は `docs/storage-sign-index.md` を参照してください。
-

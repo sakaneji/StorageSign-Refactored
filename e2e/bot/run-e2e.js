@@ -429,6 +429,15 @@ async function runMainSuite() {
     assert.equal(state.droppedStorageSigns, 1)
   })
 
+  await runCase('support break permission denied preserves attached StorageSign', async () => {
+    await reset('attached-sign-denied')
+    await command('/sstest break-support attached-sign-denied', 'SSTEST SUPPORT attached-sign-denied')
+    const state = await inspect('attached-sign-denied')
+    assert.equal(state.breakCancelled, true)
+    assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '64'])
+    assert.equal(state.droppedStorageSigns, 0)
+  })
+
   await runCase('sign edit preserves StorageSign data', async () => {
     await reset('edit-protected')
     await command('/sstest edit edit-protected', 'SSTEST EDITED edit-protected')
@@ -516,9 +525,9 @@ async function runMainSuite() {
       scenario: 'legacy-sign-block',
       initialIdentifier: 'SIGN',
       initialAmount: 4,
-      normalizedIdentifier: 'OAK_SIGN',
+      normalizedIdentifier: 'OakStorageSign',
       exportItemName: 'oak_sign',
-      exportedCountField: 'playerSigns',
+      exportedCountField: 'playerEmptyStorageSigns',
     })
   })
 
