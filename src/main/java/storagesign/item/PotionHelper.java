@@ -11,6 +11,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.potion.PotionType;
 import storagesign.ConfigLoader;
+import storagesign.compat.LegacyStorageSignCompatibility;
 import storagesign.logging.PluginLogger;
 
 import static org.bukkit.potion.PotionType.*;
@@ -206,10 +207,10 @@ public final class PotionHelper {
         int potionIndex = identifier.indexOf("POTION:");
         if (potionIndex < 0) return null;
         String prefix = identifier.substring(0, potionIndex);
-        if (!(prefix.isEmpty() || PREFIX_SPLASH.equals(prefix) || PREFIX_LINGERING.equals(prefix))) {
+        if (!LegacyStorageSignCompatibility.isPotionPrefix(prefix)) {
             return null;
         }
-        Material material = materialFromPrefix(prefix);
+        Material material = LegacyStorageSignCompatibility.potionMaterial(prefix);
         String value = identifier.substring(potionIndex + "POTION:".length());
 
         PotionType canonical = resolveRegistryKey(value);
@@ -218,7 +219,9 @@ public final class PotionHelper {
         String[] legacy = value.split(":", -1);
         if (legacy.length != 2 || !legacy[1].matches("[012]")) return null;
         String shortName = normalizeName(legacy[0]);
-        PotionType type = fromSignText(shortName, legacy[1]);
+        PotionType type = LegacyStorageSignCompatibility.resolveFullPotionName(
+            shortName, legacy[1]);
+        if (type == null) type = fromSignText(shortName, legacy[1]);
         return type == null ? null : new PotionData(material, type);
     }
 

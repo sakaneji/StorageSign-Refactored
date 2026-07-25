@@ -11,6 +11,7 @@ import org.bukkit.persistence.PersistentDataType;
 import storagesign.item.EnchantHelper;
 import storagesign.item.PotionHelper;
 import storagesign.item.SpecialCaseItemSupport;
+import storagesign.compat.LegacyStorageSignCompatibility;
 import storagesign.registry.LegacyNameRegistry;
 
 final class StorageSignIdentifierCodec {
@@ -134,6 +135,14 @@ final class StorageSignIdentifierCodec {
                 return null;
             }
             if (damage < 0) return null;
+        }
+
+        LegacyStorageSignCompatibility.MaterialData legacyMaterial =
+            LegacyStorageSignCompatibility.resolveSpecialMaterial(
+                matName, parts.length >= 2, damage);
+        if (legacyMaterial != null) {
+            return new StorageSign(
+                legacyMaterial.material(), legacyMaterial.damage(), amount, null, null, false);
         }
 
         Material mat = resolveMaterialFromIdentifierToken(matName);
