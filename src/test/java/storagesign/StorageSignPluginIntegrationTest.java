@@ -92,6 +92,18 @@ class StorageSignPluginIntegrationTest {
     }
 
     @Test
+    void registersLegacyRecipeKeysForOriginalStandingSigns() {
+        for (Material sign : MaterialRegistry.SIGN_MATERIALS) {
+            NamespacedKey legacyKey =
+                storagesign.compat.LegacyStorageSignCompatibility.legacyRecipeKey(sign);
+            if (legacyKey == null) continue;
+            var recipe = server.getRecipe(legacyKey);
+            assertTrue(recipe instanceof ShapedRecipe, "Missing legacy recipe for " + sign);
+            assertEquals(sign, ((ShapedRecipe) recipe).getIngredientMap().get('S').getType());
+        }
+    }
+
+    @Test
     void hardRecipeUsesEnderChest() throws Exception {
         Field hard = ConfigLoader.class.getDeclaredField("hardrecipe");
         hard.setAccessible(true);

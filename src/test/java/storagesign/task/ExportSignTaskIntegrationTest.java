@@ -1,6 +1,7 @@
 package storagesign.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.any;
@@ -249,6 +250,7 @@ class ExportSignTaskIntegrationTest {
         when(storageSign.getAmount()).thenReturn(1);
         when(storageSign.isUnregistered()).thenReturn(false);
         when(storageSign.isSimilar(any(ItemStack.class))).thenReturn(true);
+        when(storageSign.getContents(1)).thenReturn(moved);
 
         try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
             signs.when(() -> StorageSign.fromSign(signState)).thenReturn(storageSign);
@@ -424,6 +426,47 @@ class ExportSignTaskIntegrationTest {
         }
 
         assertEquals(0, pending.size());
+    }
+
+    @Test
+    void successfulRunBuildsRefillFromStorageSignInsteadOfMovedItemMetadata() {
+        Block block = mock(Block.class);
+        World world = mock(World.class);
+        Sign sign = mock(Sign.class);
+        StorageSign storageSign = mock(StorageSign.class);
+        Inventory inventory = mock(Inventory.class);
+        ItemStack moved = mockItem(Material.ENCHANTED_BOOK, 1, 1);
+        ItemStack canonical = mock(ItemStack.class);
+        ItemStack canonicalClone = mock(ItemStack.class);
+        Set<Block> pending = new HashSet<>();
+        pending.add(block);
+
+        when(block.getWorld()).thenReturn(world);
+        when(block.getX()).thenReturn(0);
+        when(block.getZ()).thenReturn(0);
+        when(world.isChunkLoaded(0, 0)).thenReturn(true);
+        when(block.getState()).thenReturn(sign);
+        when(storageSign.getAmount()).thenReturn(1);
+        when(storageSign.isUnregistered()).thenReturn(false);
+        when(storageSign.getContents(1)).thenReturn(canonical);
+        when(canonical.getMaxStackSize()).thenReturn(1);
+        when(canonical.clone()).thenReturn(canonicalClone);
+        when(canonicalClone.getType()).thenReturn(Material.ENCHANTED_BOOK);
+        when(canonicalClone.getMaxStackSize()).thenReturn(1);
+        when(inventory.getType()).thenReturn(InventoryType.CHEST);
+        when(inventory.getContents()).thenReturn(new ItemStack[] { null });
+        when(inventory.addItem(any(ItemStack.class))).thenReturn(new HashMap<>());
+
+        try (MockedStatic<StorageSign> signs = Mockito.mockStatic(StorageSign.class)) {
+            signs.when(() -> StorageSign.fromSign(sign)).thenReturn(storageSign);
+            new ExportSignTask(block, inventory, moved, pending).run();
+        }
+
+        ArgumentCaptor<ItemStack> inserted = ArgumentCaptor.forClass(ItemStack.class);
+        verify(inventory).addItem(inserted.capture());
+        assertSame(canonicalClone, inserted.getValue());
+        verify(canonicalClone).setAmount(1);
+        verify(storageSign).setAmount(0);
     }
 
     @Test

@@ -52,6 +52,20 @@ public final class OminousBannerCodec {
         return true;
     }
 
+    /**
+     * 現行サーバーの空BannerMetaへ、検証済みの不吉な旗の模様だけを移す。
+     *
+     * <p>起動時のレジストリからの再構築が失敗しても、DataFixerを通過した実物から
+     * 独自Lore等を持ち込まずに正規メタを復旧できる。
+     */
+    public BannerMeta canonicalize(BannerMeta source) {
+        if (!matches(source)) return null;
+        ItemMeta itemMeta = new ItemStack(Material.WHITE_BANNER).getItemMeta();
+        if (!(itemMeta instanceof BannerMeta canonical)) return null;
+        canonical.setPatterns(source.getPatterns());
+        return canonical;
+    }
+
     public static boolean matches(List<DyeColor> colors, List<NamespacedKey> keys) {
         if (colors.size() != DEFINITION.size() || keys.size() != DEFINITION.size()) return false;
         for (int index = 0; index < DEFINITION.size(); index++) {
@@ -73,6 +87,12 @@ public final class OminousBannerCodec {
             if (expected.equals(registryKey)) return true;
         } catch (LinkageError | RuntimeException ignored) {
             // Some registry implementations only support forward lookup.
+        }
+        try {
+            PatternType registered = Registry.BANNER_PATTERN.get(expected);
+            if (registered != null && registered.equals(type)) return true;
+        } catch (LinkageError | RuntimeException ignored) {
+            // Fall through to older PatternType#getKey implementations.
         }
         try {
             Object key = PatternType.class.getMethod("getKey").invoke(type);

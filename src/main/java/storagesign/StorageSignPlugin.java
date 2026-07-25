@@ -13,6 +13,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import storagesign.compat.ItemMetaDecorationAdapter;
+import storagesign.compat.LegacyStorageSignCompatibility;
 import storagesign.compat.OminousBannerCodec;
 import storagesign.compat.SignEditGuard;
 import storagesign.listener.BlockEventListener;
@@ -197,6 +198,36 @@ public class StorageSignPlugin extends JavaPlugin {
         }
     }
 
+    /**
+     * 保存品として安全に正規化できる不吉な旗か検証する。
+     *
+     * <p>DataFixerが落とす名前・tooltip flagは補完して比較する一方、
+     * 独自名・Lore・Enchant等が残る旗は拒否する。起動時キャッシュには依存しないため、
+     * APIによる初期構築が失敗しても実物の旗から自己復旧できる。
+     */
+    public static boolean isCompatibleOminousBannerMeta(BannerMeta meta) {
+        return canonicalizeOminousBannerMeta(meta) != null;
+    }
+
+    /**
+     * 実物の不吉な旗を、現行サーバーの既定メタと8模様だけから正規化する。
+     *
+     * <p>入力由来の独自メタをキャッシュへ持ち込まず、将来版で追加された既定メタは
+     * 現行サーバーが生成する空BannerMetaから引き継ぐ。
+     */
+    public static BannerMeta canonicalizeOminousBannerMeta(BannerMeta meta) {
+        try {
+            BannerMeta canonical = OMINOUS_BANNER_CODEC.canonicalize(meta);
+            if (canonical == null) return null;
+            BannerMeta normalizedCanonical = normalizeOminousBannerMeta(canonical);
+            return normalizeOminousBannerMeta(meta).equals(normalizedCanonical)
+                ? normalizedCanonical
+                : null;
+        } catch (LinkageError | RuntimeException e) {
+            return null;
+        }
+    }
+
     /** 模様だけで構築した場合でも、通常の White Banner 名で搬出されないようにする。 */
     private static BannerMeta normalizeOminousBannerMeta(BannerMeta source) {
         BannerMeta normalized = (BannerMeta) source.clone();
@@ -220,21 +251,26 @@ public class StorageSignPlugin extends JavaPlugin {
     void registerRecipes() {
         for (Material signMat : MaterialRegistry.SIGN_MATERIALS) {
             NamespacedKey key = new NamespacedKey(this, "storagesign_" + signMat.name().toLowerCase());
-            // リロード時の重複登録を防ぐため、同じキーのレシピは一度削除する
-            Bukkit.removeRecipe(key);
-
             ItemStack result = StorageSign.createStorageSignItem(signMat, StorageSign.EMPTY_MARKER, 1);
+            registerRecipe(key, signMat, result);
 
-            ShapedRecipe recipe = new ShapedRecipe(key, result);
-            recipe.shape("CCC", "CSC", "CHC");
-            recipe.setIngredient('C', Material.CHEST);
-            recipe.setIngredient('S', signMat);
-            recipe.setIngredient('H', ConfigLoader.getHardrecipe() ? Material.ENDER_CHEST : Material.CHEST);
-            recipe.setCategory(CraftingBookCategory.MISC);
-            recipe.setGroup("StorageSign");
-            Bukkit.addRecipe(recipe);
+            NamespacedKey legacyKey = LegacyStorageSignCompatibility.legacyRecipeKey(signMat);
+            if (legacyKey != null) registerRecipe(legacyKey, signMat, result);
         }
         LOG.info("registerRecipes", MaterialRegistry.SIGN_MATERIALS.size() + " 種類の StorageSign レシピを登録しました。");
+    }
+
+    private static void registerRecipe(NamespacedKey key, Material signMat, ItemStack result) {
+        // リロード時の重複登録を防ぐため、同じキーのレシピは一度削除する。
+        Bukkit.removeRecipe(key);
+        ShapedRecipe recipe = new ShapedRecipe(key, result);
+        recipe.shape("CCC", "CSC", "CHC");
+        recipe.setIngredient('C', Material.CHEST);
+        recipe.setIngredient('S', signMat);
+        recipe.setIngredient('H', ConfigLoader.getHardrecipe() ? Material.ENDER_CHEST : Material.CHEST);
+        recipe.setCategory(CraftingBookCategory.MISC);
+        recipe.setGroup("StorageSign");
+        Bukkit.addRecipe(recipe);
     }
 
     // ── イベントリスナー ────────────────────────────────────────────────────────────

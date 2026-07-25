@@ -91,7 +91,12 @@ public final class ExportSignTask extends BukkitRunnable {
             return;
         }
 
-        int maxStack = movedItem.getMaxStackSize();
+        ItemStack refillTemplate = ss.getContents(1);
+        if (refillTemplate == null) {
+            traceSkip("stored-item-cannot-be-restored");
+            return;
+        }
+        int maxStack = refillTemplate.getMaxStackSize();
 
         // 早期リターン: SS の兇存アイテムがホッパー 1 回分未満 — 追加する意味がない。
         if (ss.getAmount() < movedItem.getAmount()) {
@@ -134,9 +139,8 @@ public final class ExportSignTask extends BukkitRunnable {
             return;
         }
 
-        // movedItem はスケジュール時に isSimilar で検証済み。
-        // クローンすることでメタデータを保持し、再度の isSimilar チェックを不要にする。
-        ItemStack refill = movedItem.clone();
+        // 搬送イベントのItemMetaを複製せず、StorageSignの保存表現から正規品を生成する。
+        ItemStack refill = refillTemplate.clone();
         refill.setAmount(addAmount);
 
         int actualAdded = addToSource(refill, addAmount);
