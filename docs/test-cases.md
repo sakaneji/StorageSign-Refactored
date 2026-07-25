@@ -1,6 +1,6 @@
 # StorageSign テストケース一覧
 
-最終レビュー日: 2026-07-03
+最終レビュー日: 2026-07-25
 
 この文書は、実装済みテスト、手動確認項目、未カバー領域を同じ表で管理し、要件とテストの見落としを発見するための一覧である。
 
@@ -19,10 +19,10 @@
 
 | 項目 | 結果 |
 |---|---:|
-| JUnit Unit | 2026-07-01 保存ログ: 628件成功、失敗0、エラー0、スキップ1 |
-| JUnit Integration | 2026-07-01 保存ログ: 210件成功、失敗0、エラー0、スキップ33 |
+| JUnit Unit | 2026-07-25 保存ログ: 637件成功、失敗0、エラー0、スキップ1 |
+| JUnit Integration | 2026-07-25 保存ログ: 228件成功、失敗0、エラー0、スキップ33 |
 | Pythonツール | 2026-07-01 保存ログ: 22件成功、失敗0、エラー0 |
-| カバレッジ | 2026-06-27 保存レポート: lines 98.5%、branches 93.0% |
+| カバレッジ | 2026-07-25 保存レポート: 865件成功、lines 97.7%、branches 91.8% |
 | Paper 1.21.4 / 1.21.8 / 1.21.11 | ローカル E2E / banner-upgrade 成果物あり |
 | Paper 26.1.2 / 26.2 | ローカル成果物では Java 25 起動とプラグイン有効化までは確認済み。保存済み bot ログでは Mineflayer / `minecraft-protocol` の `unsupported protocol version` で停止しており、main/restart 完走確認は別途必要 |
 
@@ -46,6 +46,7 @@
 | CFG-14 | `/reload`相当で再初期化する | 古いLogger登録、旗メタ、設定値を持ち越さない | Integration/E2E | ✅ |
 | CFG-15 | プラグインを停止する | Logger登録と不吉な旗の保留タスクを解除する | Unit | ✅ |
 | CFG-16 | 0以下や不正値の設定を読み込む | 一部は既定値へ戻し、FOVだけは1～360度へ丸める | Unit | ✅ |
+| CFG-17 | 新版設定がなく旧版`plugins/StorageSign/config.yml`だけが存在する | 一時ファイルから切り替えて新版へ移行し、旧ファイルは変更せず一時ファイルを残さない | Unit | ✅ |
 
 ## 2. コマンド・レシピ・権限
 
@@ -66,6 +67,7 @@
 | RCP-02 | クラフト権限がない | StorageSignのクラフトだけをキャンセルする | Unit | ✅ |
 | RCP-03 | クラフト権限がある | クラフトをキャンセルしない | Unit | ✅ |
 | RCP-04 | 通常アイテムをクラフトする | StorageSign権限判定が干渉しない | Unit | ✅ |
+| RCP-05 | 元版で発見済みの立て看板レシピキーを読む | `storagesign:ssr<material>`でも同じレシピを解決する | Integration | ✅ |
 
 ## 3. StorageSignデータ形式・数量
 
@@ -107,6 +109,8 @@
 | MAT-11 | Material名が削除・変更されたワールドを開く | 設定エイリアスで現行Materialへ移行できる | Unit | ✅ |
 | MAT-12 | 実行時Registryの全PotionTypeを列挙する | NamespacedKey形式でMaterialとPotionTypeを全件往復する | Unit | ✅ |
 | MAT-13 | Potionキーが改名・削除される | `potion-key-aliases`で現行Registryキーへ移行する | Unit | ✅ |
+| MAT-14 | 元版の`SIGN`、bare/明示damage付き`STONE_SLAB`を読む | 空StorageSign、Smooth Stone Slab、Stone Slabの意味を混同しない | Integration | ✅ |
+| MAT-15 | 元版StorageSignアイテムのPotion Loreを読む | 完全Material prefixと完全PotionType名を現行Potionへ復元する | Integration | ✅ |
 
 ## 5. 手動搬入・搬出
 
@@ -185,6 +189,7 @@
 | BLK-14 | BUD物理更新が発生する | `no-bud`有効時にStorageSignだけを保護する | Unit | ✅ |
 | BLK-15 | 数量0の壁看板StorageSignを破壊する | 対応する素材の空StorageSignアイテムを落とす | Unit | ✅ |
 | BLK-16 | Wall Hanging StorageSignを破壊する | 対応するHanging Signアイテムへ変換して落とす | Unit | ✅ |
+| BLK-17 | `storagesign.break`がないプレイヤーがStorageSign支持ブロックを壊す | 破壊をキャンセルし、StorageSignと数量を維持する | Unit/Paper E2E | ✅ |
 
 ## 7. 自動搬送・コンテナ
 
@@ -214,6 +219,7 @@
 | INV-22 | Chest Minecartから搬入する | Entity Inventoryとして認識し、数量を同期する | Paper E2E | ✅ |
 | INV-23 | InventoryPickupがキャンセル済み・無効設定・満杯スタック未満 | 隣接探索やInventory変更を行わない | Unit | ✅ |
 | INV-24 | 遅延搬出時にチャンクまたは看板が無効になる | 数量を変更せず、次回搬出用の予約を解除する | Integration | ✅ |
+| INV-25 | 搬送イベントItemにStorageSignでは保存できない追加メタがある | イベントItemを複製せず、StorageSignから復元した正規Itemだけを補充する | Integration | ✅ |
 
 ## 8. Entity・自動収集・物理イベント
 
@@ -252,6 +258,8 @@
 | SPC-16 | 実行時Registryの全Enchantを短縮キーで往復する | キー衝突がなく、種類とレベルを完全復元する | Integration | ✅ |
 | SPC-17 | 空・未知・不正レベルのEnchant識別子を読む | 復元不能データとして安全に拒否する | Unit/Integration | ✅ |
 | SPC-18 | 汎用識別子PDCが欠落・破損している | 欠落時は旧表示を読み、破損値は誤復元せず拒否する | Integration | ✅ |
+| SPC-19 | 単一Enchant本、HorseEgg、不吉な旗へ追加メタ付きItemを搬入する | 復元不能な追加Enchant・Lore・独自メタを一致扱いしない | Integration | ✅ |
+| SPC-20 | ワールド更新で不吉な旗のtooltip flagだけが失われる | flagを補完して受理し、独自Lore付きの同一模様旗は拒否する | Integration/Upgrade E2E | ✅ |
 
 ## 10. 不吉な旗
 
@@ -264,11 +272,11 @@
 | BNR-05 | 名前・ツールチップAPIが欠落 | 8模様本体を維持し、装飾機能だけ劣化する | Unit | ✅ |
 | BNR-06 | 起動時に旗メタ生成が一時失敗 | 1 tick後に再試行し、以後は5秒間隔で復旧を継続する | Unit | ✅ |
 | BNR-07 | 再試行も失敗 | 無限ループではなく、5秒間隔の再試行を維持する | Unit | ✅ |
-| BNR-08 | 再試行前に実物旗から復旧 | 取得済みメタを維持し、不要な生成をしない | Unit | ✅ |
+| BNR-08 | 起動時キャッシュがない状態で実物旗から復旧 | 8模様を現行の空BannerMetaへ移してキャッシュを復旧し、独自メタは持ち込まない | Unit/Integration | ✅ |
 | BNR-09 | サーバー停止時に再試行保留 | タスクをキャンセルする | Unit | ✅ |
 | BNR-10 | 不吉な旗を搬出・再取込する | 8模様、名前、数量、ツールチップを維持する | Paper E2E | ✅ |
 | BNR-11 | 1.21.4→1.21.8→1.21.11でワールド更新する | 旧旗を取込・再搬出し、8模様と不吉な旗名を維持し、再搬出後は現行のツールチップ非表示フラグを再付与する | Upgrade E2E | ✅ |
-| BNR-12 | 1.21.11→26.1.2→26.2でワールド更新する | 同一処理で旗互換性を維持し、再試行挙動も崩れない | Upgrade E2E | ⏸️ |
+| BNR-12 | 1.21.11→26.1.2→26.2でワールド更新する | 同一処理で旗互換性を維持し、再試行挙動も崩れない | Upgrade E2E | ⏸️（両版のAPI生成は✅、Mineflayerの26.xプロトコル対応待ち） |
 
 ## 11. Logger・診断ログ
 

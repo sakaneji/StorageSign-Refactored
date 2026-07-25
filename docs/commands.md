@@ -37,9 +37,8 @@
 | `storagesign.use` | 全員 | StorageSign のインタラクション |
 | `storagesign.craft` | 全員 | クラフトの許可 |
 | `storagesign.place` | 全員 | 看板としての設置 |
-| `storagesign.break` | 全員 | StorageSign ブロックの破壊 |
+| `storagesign.break` | 全員 | StorageSign本体、および取り付け先の支持ブロックの破壊 |
 | `storagesign.give` | 全員 | `/storagesigngive` の使用 |
 | `storagesign.autocollect` | 全員 | 自動収集 |
 | `storagesign.index.admin` | OP | 位置索引の状態確認・手動再構築 |
 | `storagesign.search.admin` | OP | 位置索引スナップショットの検索 |
-
