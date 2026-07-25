@@ -62,7 +62,7 @@ permissions:
         default: true
 
     storagesign.break:
-        description: Allows breaking StorageSign blocks.
+        description: Allows breaking StorageSign blocks and their support blocks.
         default: true
 
     storagesign.give:

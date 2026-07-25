@@ -1,6 +1,7 @@
 package storagesign.listener;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -91,6 +92,35 @@ class ListenerPolicyTest {
 
         assertFalse(event.isCancelled());
         verify(player, never()).hasPermission("storagesign.break");
+    }
+
+    @Test
+    void supportBreakWithoutPermissionIsCancelledBeforeAttachedStorageSignDrops() {
+        MockBukkit.mock();
+        try {
+            var world = MockBukkit.getMock().addSimpleWorld("support-break-denied");
+            Block support = world.getBlockAt(0, 64, 0);
+            support.setType(Material.STONE);
+            Block signBlock = world.getBlockAt(0, 65, 0);
+            signBlock.setType(Material.OAK_SIGN);
+            Sign sign = (Sign) signBlock.getState();
+            sign.getSide(Side.FRONT).setLine(0, StorageSign.HEADER_LINE);
+            sign.getSide(Side.FRONT).setLine(1, "STONE");
+            sign.getSide(Side.FRONT).setLine(2, "12");
+            sign.update();
+
+            Player player = mock(Player.class);
+            when(player.hasPermission("storagesign.break")).thenReturn(false);
+            BlockBreakEvent event = new BlockBreakEvent(support, player);
+
+            new BlockEventListener(null).onBlockBreak(event);
+
+            assertTrue(event.isCancelled());
+            assertEquals(Material.OAK_SIGN, signBlock.getType());
+            verify(player).sendMessage(org.mockito.ArgumentMatchers.anyString());
+        } finally {
+            MockBukkit.unmock();
+        }
     }
 
     @Test
