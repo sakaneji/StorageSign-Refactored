@@ -33,7 +33,7 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | Pythonツール | 2026-08-08 保存ログ: 28件成功、失敗0、エラー0 |
 | カバレッジ | 2026-07-25 保存値: 865件成功、lines 97.7%、branches 91.8%。現行artifactは再生成待ち |
 | Paper 1.21.4 / 1.21.8 / 1.21.11 | 2026-07-25のローカル E2E / banner-upgrade 成果物あり。旧要約形式のため `synthetic_fallbacks` / `observation` は未記録で、client-onlyの根拠には用いない |
-| Paper 26.1.2 / 26.2 | ローカル成果物では Java 25 起動とプラグイン有効化までは確認済み。保存済み bot ログでは Mineflayer / `minecraft-protocol` の `unsupported protocol version` で停止しており、main/restart 完走確認は別途必要 |
+| Paper 26.1.2 / 26.2 | プラグイン対応済み。ローカル成果物で Java 25 起動とプラグイン有効化を確認済み。Mineflayer / `minecraft-protocol` の未対応により、main/restart E2Eの完走確認だけが未完了 |
 
 現行runnerは各JUnit skipを `classname#testname` で照合する。未登録skipは失敗させ、
 テスト側で解消するか、理由をレビューした不可避なケースだけを明示allowlistへ追加する。
@@ -289,7 +289,7 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | BNR-09 | サーバー停止時に再試行保留 | タスクをキャンセルする | Unit | ✅ |
 | BNR-10 | 不吉な旗を搬出・再取込する | 8模様、名前、数量、ツールチップを維持する | Paper E2E | ✅ |
 | BNR-11 | 1.21.4→1.21.8→1.21.11でワールド更新する | 旧旗を取込・再搬出し、8模様と不吉な旗名を維持し、再搬出後は現行のツールチップ非表示フラグを再付与する | Upgrade E2E | ✅ |
-| BNR-12 | 1.21.11→26.1.2→26.2でワールド更新する | 同一処理で旗互換性を維持し、再試行挙動も崩れない | Upgrade E2E | ⏸️（両版のAPI生成は✅、Mineflayerの26.xプロトコル対応待ち） |
+| BNR-12 | 1.21.11→26.1.2→26.2でワールド更新する | 同一処理で旗互換性を維持し、再試行挙動も崩れない | Upgrade E2E | ⏸️（プラグインは両版対応済み、API生成は✅、Mineflayer制約でE2E完走のみ未確認） |
 
 ## 11. Logger・診断ログ
 
@@ -313,8 +313,8 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | VER-01 | Paper 1.21.4、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ✅ |
 | VER-02 | Paper 1.21.8、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ✅ |
 | VER-03 | Paper 1.21.11、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ✅ |
-| VER-04 | Paper 26.1.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
-| VER-05 | Paper 26.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
+| VER-04 | Paper 26.1.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️（対応済み、Mineflayer制約でE2E未完走） |
+| VER-05 | Paper 26.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️（対応済み、Mineflayer制約でE2E未完走） |
 | VER-06 | 26.xをJava 25で起動する | Java要件を満たし、プラグインが有効化される | Paper startup artifact | ✅ |
 | VER-07 | 1.21.4→1.21.8→1.21.11でワールド更新する | 仕込み済みの不吉な旗 StorageSign と Potion StorageSign について、表示行・Potion PDC・旗データを維持する | Upgrade E2E | ✅ |
 | VER-08 | 新版ワールドを旧版で開く | 非対応と事前バックアップ必須が文書化されている | Documentation | ✅ |
@@ -334,7 +334,7 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | TST-08 | E2Eが失敗・中断する | 失敗時間を平均へ混入させない | Runner self-test | ✅ |
 | TST-09 | 成功ログを扱う | 構造化された`PASS`要約を表示する | Runner | ✅ |
 | TST-10 | 失敗ログを扱う | 既定40行の抜粋と`diagnose:`先を表示する | Runner | ✅ |
-| TST-11 | 引数なしのE2E / 全テストを実行する | Mineflayer対応済みの1.21.4 / 1.21.8 / 1.21.11だけを実行し、保留中の26.xは明示指定時だけ実行する | Runner self-test | ✅ |
+| TST-11 | 引数なしのE2E / 全テストを実行する | Mineflayer対応済みの1.21.4 / 1.21.8 / 1.21.11だけを実行し、プラグイン対応済みだがE2E未完走の26.xは明示指定時だけ実行する | Runner self-test | ✅ |
 | TST-12 | JUnitが未登録のskipを含む | skipした`classname#testname`を表示して失敗し、許可リストとXML集計が一致する場合だけ継続する | Runner self-test | ✅ |
 | TST-13 | E2E case filterが対象phaseで0件一致する | main/restartを完走扱いせず非0終了する | Runner/Bot | ⏳ |
 | TST-14 | E2Eが合成event fallbackを使う | `synthetic_fallbacks`と`observation=mixed-client-and-synthetic`を要約へ出す | Runner/Bot | ⏳ |
@@ -396,7 +396,7 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 
 | 観点 | 確定内容 |
 |---|---|
-| 26.x | Java 25 サーバー起動はできるが、保存済み成果物では Mineflayer / `minecraft-protocol` が `unsupported protocol version` で停止するため、その対応待ちで保留する |
+| 26.x | プラグインは対応済みで、Java 25でのサーバー起動と有効化を確認済み。Mineflayer / `minecraft-protocol` の未対応により、ゲームプレイE2Eの完走確認だけを保留する |
 | 数量整合性 | 処理順は規定せず、成功した移動の総数量保存と重複タスク防止を保証する |
 | 数量上限 | `Integer.MAX_VALUE`まで部分搬入し、余剰を元の場所へ残す |
 | 壊れたデータ | 例外を出さず、安全値へ変換できない形式は拒否する |
@@ -414,5 +414,5 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | World指定 | `--world` は現在ロード中のWorld名のみ受け付ける |
 | 折り返し | 近接表示文面は内部28文字折り返しで枠外表示を避ける |
 
-自動化の残作業は、Mineflayer / `minecraft-protocol` の 26.x 対応後に再開する VER-04～05 と BNR-12 に加え、IDX-07/09 の多人数負荷試験である。
+自動化の残作業は、プラグイン対応済み26.xについて Mineflayer / `minecraft-protocol` の対応後に完走確認を再開する VER-04～05 と BNR-12 に加え、IDX-07/09 の多人数負荷試験である。
 LOG-10は意図的に手動障害注入として維持する。

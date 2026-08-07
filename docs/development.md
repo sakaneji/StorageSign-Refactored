@@ -36,6 +36,8 @@ mvn package
 
 Java 系と Paper E2E は Docker を使い、Python ツールテストだけはホストの `python3` で実行します。Python ツール群は `python3` 3.10 以上が必要です。
 
+引数なしの `e2e` は、E2E完走確認済みの 1.21.4 / 1.21.8 / 1.21.11 を Logger あり・なしの両方で実行します。個別実行では version と `with-logger` / `without-logger` / `both` を指定できます。プラグイン対応済みの 26.1.2 / 26.2 は、Mineflayerのプロトコル未対応によりE2E完走確認が未完了のため、明示指定時だけ通常E2Eの対象になります。`banner-compat 1.21.11` はE2E完走確認済み3版の共有ワールドupgradeを、`banner-compat all` は26.xを含む全定義版を対象にします。
+
 JUnit の `skipped` は成功件数へ含めません。`scripts/test.sh` に理由と
 `classname#testname` が明示された既知ケースだけを許可し、未登録の skip、
 Surefire XML の集計不一致、XML を生成しない実行は失敗します。

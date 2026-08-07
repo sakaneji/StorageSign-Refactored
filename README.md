@@ -11,4 +11,6 @@ Paper 向け Minecraft プラグインです。看板に保管アイテムの種
 - 位置索引・検索・warp・近接表示: [docs/storage-sign-index.md](docs/storage-sign-index.md)
 - 変更時の参照先: [docs/documentation-update-guide.md](docs/documentation-update-guide.md)
 
+Paper 26.1.2 / 26.2 に対応しています。両版とも起動とプラグイン有効化を確認済みですが、Mineflayer のプロトコル未対応によりゲームプレイ E2E の完走確認は未完了です。これはプラグイン本体の未対応を示すものではありません。
+
 外部 Logger は任意です。新しい Minecraft 版で保存・更新したワールドを古い版で開くダウングレードは非対応です。
