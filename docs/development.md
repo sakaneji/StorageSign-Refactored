@@ -28,6 +28,9 @@ mvn package
 ./scripts/test.sh integration
 ./scripts/test.sh coverage
 ./scripts/test.sh e2e
+./scripts/test.sh e2e 1.21.11 with-logger
+./scripts/test.sh banner-compat 1.21.11
+./scripts/test.sh banner-compat all
 ./scripts/test.sh all
 ```
 

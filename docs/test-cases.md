@@ -32,7 +32,7 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | JUnit Integration | 2026-08-08 保存ログ: 228件成功、失敗0、エラー0、スキップ0 |
 | Pythonツール | 2026-08-08 保存ログ: 28件成功、失敗0、エラー0 |
 | カバレッジ | 2026-07-25 保存値: 865件成功、lines 97.7%、branches 91.8%。現行artifactは再生成待ち |
-| Paper 1.21.4 / 1.21.8 / 1.21.11 | ローカル E2E / banner-upgrade 成果物あり |
+| Paper 1.21.4 / 1.21.8 / 1.21.11 | 2026-07-25のローカル E2E / banner-upgrade 成果物あり。旧要約形式のため `synthetic_fallbacks` / `observation` は未記録で、client-onlyの根拠には用いない |
 | Paper 26.1.2 / 26.2 | ローカル成果物では Java 25 起動とプラグイン有効化までは確認済み。保存済み bot ログでは Mineflayer / `minecraft-protocol` の `unsupported protocol version` で停止しており、main/restart 完走確認は別途必要 |
 
 現行runnerは各JUnit skipを `classname#testname` で照合する。未登録skipは失敗させ、

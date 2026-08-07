@@ -28,7 +28,7 @@
 
 ## 索引・近接表示
 
-索引と近接表示の詳細は [docs/storage-sign-index.md](docs/storage-sign-index.md) を参照してください。
+索引と近接表示の詳細は [storage-sign-index.md](storage-sign-index.md) を参照してください。
 
 ## 互換設定
 
@@ -43,4 +43,4 @@
 
 - `storage-index.enabled: false` なら近接表示も無効になります。
 - `storage-index.chunk-rescan-queue-cap` は、大量チャンク読込環境向けの逃げ道です。
-- 0 以下で既定値へ戻るキーがあります。詳細な丸め規則は `docs/storage-sign-index.md` を参照してください。
+- 0 以下で既定値へ戻るキーがあります。詳細な丸め規則は [storage-sign-index.md](storage-sign-index.md) を参照してください。

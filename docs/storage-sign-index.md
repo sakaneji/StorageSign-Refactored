@@ -161,7 +161,7 @@ StorageSign search 'STONE': matches=12, totalAmount=98765, page=1/2
 
 プレイヤーの位置が`idle-delay-ticks`の間変化しなかった場合に検索します。視点変更は再検索対象にしますが、位置が十分止まっていれば次の監視周期で再検索できます。標準設定では、3ブロック以内、前方90度、遮蔽物のないStorageSignから最寄り3件を候補にし、その看板本文だけでは完全識別子を表示しきれない場合にだけ近接 TextDisplay を出します。
 
-上限制御では、表示件数が `max-per-player` を超えた分は次回以降に回し、`max-searches-per-tick` と `global-label-limit` に達しても既存の表示は維持します。負荷が落ち着くと未処理分を再試行します。
+`max-per-player` を超える候補は選択対象外です。`max-searches-per-tick` による検索待ちと、`global-label-limit` により確保できなかった選択済み候補は、余力ができた際に再試行します。上限に達しても既存の表示は維持します。
 
 表示内容:
 

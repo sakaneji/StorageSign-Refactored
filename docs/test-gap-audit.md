@@ -1,8 +1,9 @@
 # Test Gap Audit
 
-This file lists the saved coverage gaps from the latest stored `target/site/jacoco/jacoco.xml` artifact.
-If source changes after that `./scripts/test.sh coverage` run, the entries here are historical artifact summaries:
-method names, owning classes, and line numbers can drift or disappear from the current source tree until coverage is rerun and this file is refreshed.
+This file lists coverage gaps transcribed from the saved 2026-07-25 coverage summary.
+The source `target/site/jacoco/jacoco.xml` artifact is not retained in the current worktree.
+The entries below are historical reference data until `./scripts/test.sh coverage` is rerun:
+method names, owning classes, and line numbers can drift or disappear from the current source tree and must not be treated as current coverage evidence.
 
 ## storagesign
 

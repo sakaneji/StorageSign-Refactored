@@ -19,15 +19,15 @@
 
 ### `/storagesignindex` / `/ssindex`
 
-ロード済みチャンクの StorageSign 位置索引を確認・再構築します。詳細は [docs/storage-sign-index.md](docs/storage-sign-index.md) を参照してください。
+ロード済みチャンクの StorageSign 位置索引を確認・再構築します。詳細は [storage-sign-index.md](storage-sign-index.md) を参照してください。
 
 ### `/storagesignsearch` / `/sssearch`
 
-位置索引スナップショットから完全識別子を検索します。詳細は [docs/storage-sign-index.md](docs/storage-sign-index.md) を参照してください。
+位置索引スナップショットから完全識別子を検索します。詳細は [storage-sign-index.md](storage-sign-index.md) を参照してください。
 
 ### `/storagesignwarp` / `/sswarp`
 
-最寄りの StorageSign の前面へワープします。詳細は [docs/storage-sign-index.md](docs/storage-sign-index.md) を参照してください。
+最寄りの StorageSign の前面へワープします。詳細は [storage-sign-index.md](storage-sign-index.md) を参照してください。
 
 ## 権限
 

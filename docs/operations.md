@@ -23,5 +23,4 @@
 
 - 手動実動作確認は `docker/manual/compose.yml` を使います。
 - `docker/manual/local/ops.json` はローカル用の op 一覧です。
-- 詳細な手順は [docs/runtime-validation-checklist.md](docs/runtime-validation-checklist.md) を参照してください。
-
+- 詳細な手順は [runtime-validation-checklist.md](runtime-validation-checklist.md) を参照してください。
