@@ -18,6 +18,12 @@ assert_equals() {
   [ "$1" = "$2" ] || fail "expected '$2', got '$1'"
 }
 
+assert_fails() {
+  if "$@"; then
+    fail "command unexpectedly succeeded: $*"
+  fi
+}
+
 initialize_timing_cache
 assert_equals "${DEFAULT_E2E_VERSIONS[*]}" "1.21.4 1.21.8 1.21.11"
 assert_equals "${SUPPORTED_E2E_VERSIONS[*]}" "1.21.4 1.21.8 1.21.11 26.1.2 26.2"
@@ -56,5 +62,33 @@ esac
 [ ! -s "$TIMING_FILE" ] || fail "invalid cache was not replaced with an empty cache"
 invalid_count="$(find "$TEMP_DIR" -name 'e2e-timings.tsv.invalid.*' | wc -l | tr -d ' ')"
 assert_equals "$invalid_count" "1"
+
+junit_dir="$TEMP_DIR/junit"
+mkdir -p "$junit_dir"
+printf '%s\n' \
+  '<?xml version="1.0" encoding="UTF-8"?>' \
+  '<testsuite tests="1" skipped="1">' \
+  '  <testcase classname="example.Sample" name="skippedCase"><skipped/></testcase>' \
+  '</testsuite>' >"$junit_dir/TEST-example.Sample.xml"
+JUNIT_SKIPPED_TEST_ALLOWLIST=()
+assert_fails validate_junit_skips "$junit_dir"
+JUNIT_SKIPPED_TEST_ALLOWLIST=("example.Sample#skippedCase")
+validate_junit_skips "$junit_dir" || fail "allowlisted JUnit skip was rejected"
+
+bot_summary_log="$TEMP_DIR/bot.log"
+printf '%s\n' \
+  'E2E PASS minecraft=1.21.4 phase=main logger=without-logger selected=2 executed=2 synthetic_fallbacks=0 observation=client' \
+  >"$bot_summary_log"
+assert_equals "$(assert_bot_summary "$bot_summary_log" main)" \
+  'E2E PASS minecraft=1.21.4 phase=main logger=without-logger selected=2 executed=2 synthetic_fallbacks=0 observation=client'
+assert_fails assert_bot_summary "$bot_summary_log" restart
+printf '%s\n' \
+  'E2E PASS minecraft=1.21.4 phase=main logger=without-logger selected=2 executed=1 synthetic_fallbacks=0 observation=client' \
+  >"$bot_summary_log"
+assert_fails assert_bot_summary "$bot_summary_log" main
+printf '%s\n' \
+  'E2E PASS minecraft=1.21.4 phase=main logger=without-logger selected=0 executed=0 synthetic_fallbacks=0 observation=client' \
+  >"$bot_summary_log"
+assert_fails assert_bot_summary "$bot_summary_log" main
 
 echo "PASS runner-selftest"

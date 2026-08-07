@@ -13,6 +13,13 @@ TIMING_UNKNOWN_POOL_SECONDS=180
 TIMING_INITIAL_BUFFER_SECONDS=30
 DEFAULT_E2E_VERSIONS=(1.21.4 1.21.8 1.21.11)
 SUPPORTED_E2E_VERSIONS=(1.21.4 1.21.8 1.21.11 26.1.2 26.2)
+# Skipped tests are only tolerated when their exact `classname#name` is listed
+# here. Keep this deliberately small; each entry requires an unavoidable reason.
+JUNIT_SKIPPED_TEST_ALLOWLIST=(
+  'storagesign.OminousBannerMetaTest#matchesKeyAcceptsRegistryPatternTypeAndRejectsNull'
+)
+ACTIVE_E2E_PROJECT=""
+ACTIVE_E2E_LOG=""
 
 usage() {
   cat >&2 <<'EOF'
@@ -170,7 +177,51 @@ summarize_surefire() {
     echo "FAIL $scope; Surefire reports were not created" >&2
     return 1
   fi
+  validate_junit_skips "$report_dir" || return 1
   echo "PASS $scope tests=$tests failures=$failures errors=$errors skipped=$skipped"
+}
+
+validate_junit_skips() {
+  local report_dir="$1"
+  local allowlist
+  allowlist="$(printf '%s\n' "${JUNIT_SKIPPED_TEST_ALLOWLIST[@]}")"
+  JUNIT_SKIP_ALLOWLIST="$allowlist" python3 - "$report_dir" <<'PY'
+import glob
+import os
+import sys
+import xml.etree.ElementTree as ET
+
+report_dir = sys.argv[1]
+allowlist = {item for item in os.environ.get("JUNIT_SKIP_ALLOWLIST", "").splitlines() if item}
+skipped = []
+declared_skips = 0
+for path in glob.glob(os.path.join(report_dir, "TEST-*.xml")):
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError) as error:
+        print(f"FAIL JUnit skip audit; unreadable report={path}: {error}", file=sys.stderr)
+        sys.exit(1)
+    suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+    for suite in suites:
+        try:
+            declared_skips += int(suite.get("skipped", "0"))
+        except ValueError:
+            print(f"FAIL JUnit skip audit; invalid skipped count report={path}", file=sys.stderr)
+            sys.exit(1)
+    for testcase in root.iter("testcase"):
+        if testcase.find("skipped") is not None:
+            skipped.append(f"{testcase.get('classname', '')}#{testcase.get('name', '')}")
+if declared_skips != len(skipped):
+    print(f"FAIL JUnit skip audit; declared_skipped={declared_skips} testcase_skipped={len(skipped)}", file=sys.stderr)
+    sys.exit(1)
+unexpected = sorted(set(skipped) - allowlist)
+if unexpected:
+    print("FAIL JUnit skip audit; unexpected skipped tests:", file=sys.stderr)
+    print(*unexpected, sep="\n", file=sys.stderr)
+    sys.exit(1)
+if skipped:
+    print(f"PASS JUnit skip audit skipped={len(skipped)} allowlisted={len(allowlist)}")
+PY
 }
 
 run_unit() {
@@ -284,7 +335,45 @@ copy_e2e_plugins() {
 
 capture_server_log() {
   local output="$1"
-  docker compose -f "$COMPOSE_FILE" logs --no-color server >"$output" 2>&1 || true
+  docker compose -f "$COMPOSE_FILE" logs --no-color server >"$output" 2>&1
+}
+
+cleanup_e2e_project() {
+  local project="$1"
+  local log_file="$2"
+  COMPOSE_PROJECT_NAME="$project" docker compose -f "$COMPOSE_FILE" down -v --remove-orphans >>"$log_file" 2>&1
+}
+
+cleanup_active_e2e() {
+  if [ -n "$ACTIVE_E2E_PROJECT" ]; then
+    cleanup_e2e_project "$ACTIVE_E2E_PROJECT" "$ACTIVE_E2E_LOG" || \
+      echo "FAIL E2E cleanup project=$ACTIVE_E2E_PROJECT; log=$ACTIVE_E2E_LOG" >&2
+    ACTIVE_E2E_PROJECT=""
+    ACTIVE_E2E_LOG=""
+  fi
+}
+
+install_e2e_cleanup_traps() {
+  trap 'cleanup_active_e2e' EXIT
+  trap 'cleanup_active_e2e; exit 130' INT
+  trap 'cleanup_active_e2e; exit 143' TERM
+}
+
+assert_bot_summary() {
+  local log_file="$1"
+  local expected_phase="$2"
+  local summary
+  summary="$(grep -E "^E2E PASS .* phase=${expected_phase}( |$)" "$log_file" | tail -n 1)" || return 1
+  [ -n "$summary" ] || return 1
+  case "$summary" in
+    *"selected="*" executed="*" synthetic_fallbacks="*" observation="*) ;;
+    *) return 1 ;;
+  esac
+  if [[ ! "$summary" =~ selected=([1-9][0-9]*)\ executed=([1-9][0-9]*)\ synthetic_fallbacks=([0-9]+)\ observation=(client|mixed-client-and-synthetic) ]]; then
+    return 1
+  fi
+  [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[2]}" ] || return 1
+  printf '%s\n' "$summary"
 }
 
 run_e2e_version() {
@@ -308,16 +397,19 @@ run_e2e_version() {
   export MC_SERVER_IMAGE="$(minecraft_server_image "$version")"
   export E2E_DATA_DIR="$runtime_dir/data"
   export E2E_PLUGIN_DIR="$runtime_dir/plugins"
-  export E2E_PORT="${E2E_PORT:-25565}"
   export LOGGER_MODE="$logger_mode"
   export COMPOSE_PROJECT_NAME="$project"
+  ACTIVE_E2E_PROJECT="$project"
+  ACTIVE_E2E_LOG="$runner_log"
+
+  cleanup_e2e_project "$project" "$runner_log" || result=1
 
   if [ "$result" -eq 0 ]; then
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" build bot || result=1
   fi
   if [ "$result" -eq 0 ]; then
     echo "WAIT_HINT scope=e2e stage=minecraft-startup version=$version logger=$logger_mode estimate_seconds=60 wait_seconds=60 source=fixed"
-    run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build server || result=1
+    run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate server || result=1
   fi
   if [ "$result" -eq 0 ] && ! wait_for_server; then
     echo "Paper server did not become healthy" >>"$runner_log"
@@ -327,6 +419,10 @@ run_e2e_version() {
   if [ "$result" -eq 0 ]; then
     E2E_PHASE=main docker compose -f "$COMPOSE_FILE" run --rm bot \
       >"$artifact_dir/bot-main.log" 2>&1 || result=1
+    if [ "$result" -eq 0 ] && ! assert_bot_summary "$artifact_dir/bot-main.log" main >>"$runner_log"; then
+      echo "Missing or invalid main bot completion summary" >>"$runner_log"
+      result=1
+    fi
   fi
 
   if [ "$result" -eq 0 ]; then
@@ -337,9 +433,13 @@ run_e2e_version() {
   if [ "$result" -eq 0 ]; then
     E2E_PHASE=restart docker compose -f "$COMPOSE_FILE" run --rm bot \
       >"$artifact_dir/bot-restart.log" 2>&1 || result=1
+    if [ "$result" -eq 0 ] && ! assert_bot_summary "$artifact_dir/bot-restart.log" restart >>"$runner_log"; then
+      echo "Missing or invalid restart bot completion summary" >>"$runner_log"
+      result=1
+    fi
   fi
 
-  capture_server_log "$artifact_dir/paper.log"
+  capture_server_log "$artifact_dir/paper.log" || result=1
   if [ "$logger_mode" = "with-logger" ] \
      && grep -q "外部 Logger の初期化に失敗" "$artifact_dir/paper.log"; then
     echo "External Logger initialization failed on Paper $version" >&2
@@ -350,7 +450,9 @@ run_e2e_version() {
     echo "StorageSign message did not reach the external Logger sink on Paper $version" >&2
     result=1
   fi
-  run_step "$runner_log" docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
+  cleanup_e2e_project "$project" "$runner_log" || result=1
+  ACTIVE_E2E_PROJECT=""
+  ACTIVE_E2E_LOG=""
 
   if [ "$result" -ne 0 ]; then
     echo "FAIL e2e version=$version logger=$logger_mode; artifacts=$artifact_dir" >&2
@@ -360,7 +462,13 @@ run_e2e_version() {
   else
     local logger_state="absent"
     [ "$logger_mode" = "with-logger" ] && logger_state="registered"
-    echo "PASS e2e version=$version logger=$logger_mode externalLogger=$logger_state phases=main,restart"
+    local main_summary restart_summary
+    main_summary="$(assert_bot_summary "$artifact_dir/bot-main.log" main)" || return 1
+    restart_summary="$(assert_bot_summary "$artifact_dir/bot-restart.log" restart)" || return 1
+    local synthetic_fallbacks=$(( $(sed -nE 's/.*synthetic_fallbacks=([0-9]+).*/\1/p' <<<"$main_summary" | tail -n 1) + $(sed -nE 's/.*synthetic_fallbacks=([0-9]+).*/\1/p' <<<"$restart_summary" | tail -n 1) ))
+    local observation="client"
+    [ "$synthetic_fallbacks" -eq 0 ] || observation="mixed-client-and-synthetic"
+    echo "PASS e2e version=$version logger=$logger_mode externalLogger=$logger_state phases=main,restart synthetic_fallbacks=$synthetic_fallbacks observation=$observation"
   fi
   return "$result"
 }
@@ -457,9 +565,14 @@ run_banner_compat() {
 
   export E2E_DATA_DIR="$runtime_dir/data"
   export E2E_PLUGIN_DIR="$runtime_dir/plugins"
-  export E2E_PORT="${E2E_PORT:-25565}"
   export LOGGER_MODE="without-logger"
   export COMPOSE_PROJECT_NAME="$project"
+  ACTIVE_E2E_PROJECT="$project"
+  ACTIVE_E2E_LOG="$artifact_root/runner.log"
+
+  mkdir -p "$artifact_root"
+  : >"$ACTIVE_E2E_LOG"
+  cleanup_e2e_project "$project" "$ACTIVE_E2E_LOG" || return 1
 
   for version in "${versions[@]}"; do
     started="$(date +%s)"
@@ -476,15 +589,19 @@ run_banner_compat() {
     run_step "$runner_log" docker compose -f "$COMPOSE_FILE" build bot || result=1
     if [ "$result" -eq 0 ]; then
       echo "WAIT_HINT scope=banner-compat stage=minecraft-startup version=$version estimate_seconds=60 wait_seconds=60 source=fixed"
-      run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build server || result=1
+      run_step "$runner_log" docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate server || result=1
     fi
     if [ "$result" -eq 0 ] && ! wait_for_server; then result=1; fi
     if [ "$result" -eq 0 ]; then
       E2E_PHASE="$phase" docker compose -f "$COMPOSE_FILE" run --rm bot \
         >"$artifact_dir/bot.log" 2>&1 || result=1
+      if [ "$result" -eq 0 ] && ! assert_bot_summary "$artifact_dir/bot.log" "$phase" >>"$runner_log"; then
+        echo "Missing or invalid $phase bot completion summary" >>"$runner_log"
+        result=1
+      fi
     fi
-    capture_server_log "$artifact_dir/paper.log"
-    run_step "$runner_log" docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
+    capture_server_log "$artifact_dir/paper.log" || result=1
+    cleanup_e2e_project "$project" "$runner_log" || result=1
 
     if [ "$result" -ne 0 ]; then
       echo "FAIL banner-compat version=$version; artifacts=$artifact_dir" >&2
@@ -496,13 +613,20 @@ run_banner_compat() {
     actual=$(($(date +%s) - started))
     timing_record "banner:$version" "$actual"
     completed=$((completed + 1))
+    local bot_summary synthetic_fallbacks observation
+    bot_summary="$(assert_bot_summary "$artifact_dir/bot.log" "$phase")" || return 1
+    synthetic_fallbacks="$(sed -nE 's/.*synthetic_fallbacks=([0-9]+).*/\1/p' <<<"$bot_summary" | tail -n 1)"
+    observation="client"
+    [ "$synthetic_fallbacks" -eq 0 ] || observation="mixed-client-and-synthetic"
     if [ "$phase" = "banner-seed" ]; then
-      echo "PASS banner-compat version=$version phase=$phase persisted=passed"
+      echo "PASS banner-compat version=$version phase=$phase persisted=passed synthetic_fallbacks=$synthetic_fallbacks observation=$observation"
     else
-      echo "PASS banner-compat version=$version phase=$phase import=passed reexport=passed"
+      echo "PASS banner-compat version=$version phase=$phase import=passed reexport=passed synthetic_fallbacks=$synthetic_fallbacks observation=$observation"
     fi
     emit_wait_hint banner-compat remaining "$completed" "$total" 0 "${timing_keys[@]:$completed}"
   done
+  ACTIVE_E2E_PROJECT=""
+  ACTIVE_E2E_LOG=""
 }
 
 main() {
@@ -520,5 +644,6 @@ main() {
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  install_e2e_cleanup_traps
   main "$@"
 fi

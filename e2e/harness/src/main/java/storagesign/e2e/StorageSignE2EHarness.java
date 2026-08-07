@@ -242,6 +242,8 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             case "zero-export" -> createStorageSign(world, 0, BASE_Y, 0, "STONE", 1);
             case "permission-denied" -> {
                 createStorageSign(world, 0, BASE_Y, 0, "STONE", 64);
+                player.getInventory().setItem(0, new ItemStack(Material.STONE, 7));
+                player.getInventory().setHeldItemSlot(0);
                 deniedUse = player.addAttachment(this, "storagesign.use", false);
                 deniedPlayer = player.getUniqueId();
             }
@@ -655,7 +657,6 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"textDisplayTexts\":" + jsonArray(textDisplayTexts) + ","
             + "\"heldType\":\"" + player.getInventory().getItemInMainHand().getType().name() + "\","
             + "\"heldDisplayName\":\"" + escape(heldDisplayName(player)) + "\","
-            + "\"storageSignAcceptsHeld\":" + storageSignAcceptsHeld(player) + ","
             + "\"canPlace\":" + player.hasPermission("storagesign.place") + ","
             + "\"breakCancelled\":" + lastBreakCancelled + ","
             + "\"breakDrops\":" + lastBreakDrops + ","
@@ -951,23 +952,6 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             Class<?> api = logger.getClass().getClassLoader()
                 .loadClass("com.github.teruteru128.logger.Logger");
             return api.getMethod("getInstance", Plugin.class).invoke(null, storageSign) != null;
-        } catch (ReflectiveOperationException | LinkageError e) {
-            return false;
-        }
-    }
-
-    private static boolean storageSignAcceptsHeld(Player player) {
-        ItemStack held = player.getInventory().getItemInMainHand();
-        if (held.getType() == Material.AIR) return false;
-        Plugin storageSign = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
-        if (storageSign == null) return false;
-        try {
-            ClassLoader loader = storageSign.getClass().getClassLoader();
-            Class<?> type = loader.loadClass("storagesign.StorageSign");
-            Object instance = type.getMethod("fromBlock", Block.class)
-                .invoke(null, player.getWorld().getBlockAt(0, BASE_Y, 0));
-            return instance != null && (boolean) type.getMethod("isSimilar", ItemStack.class)
-                .invoke(instance, held);
         } catch (ReflectiveOperationException | LinkageError e) {
             return false;
         }

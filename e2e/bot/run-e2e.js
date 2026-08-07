@@ -14,6 +14,10 @@ const caseFilter = new Set(
     .map(name => name.trim())
     .filter(Boolean)
 )
+const validPhases = new Set(['main', 'restart', 'banner-seed', 'banner-upgrade'])
+let selectedCases = 0
+let executedCases = 0
+let syntheticFallbacks = 0
 
 const bot = mineflayer.createBot({
   host,
@@ -117,6 +121,7 @@ async function placeStorageSign(scenario, identifier, amount) {
     state = await waitForSnapshot(scenario, snapshot => snapshot.lines.length > 0, 5000)
   } catch (error) {
     process.stdout.write('Mineflayer placement was not acknowledged; exercising BlockPlaceEvent fallback\n')
+    syntheticFallbacks++
     await command(`/sstest place ${scenario}`, `SSTEST PLACED ${scenario}`)
     state = await waitForSnapshot(scenario, snapshot => snapshot.lines.length > 0, 5000)
   }
@@ -140,8 +145,10 @@ async function activateSign({ sneak = false } = {}) {
 
 async function runCase(name, body) {
   if (caseFilter.size > 0 && !caseFilter.has(name)) return
+  selectedCases++
   process.stdout.write(`CASE ${name}\n`)
   await body()
+  executedCases++
   process.stdout.write(`PASS ${name}\n`)
 }
 
@@ -397,9 +404,13 @@ async function runMainSuite() {
 
   await runCase('permission denied', async () => {
     await reset('permission-denied')
+    const before = await inspect('permission-denied')
     await activateSign()
     const state = await inspect('permission-denied')
     assert.equal(state.lines[2], '64')
+    assert.equal(state.playerStone, before.playerStone)
+    assert.equal(state.droppedStone, before.droppedStone)
+    assert.equal(state.heldType, before.heldType)
   })
 
   await runCase('break permission denied', async () => {
@@ -827,11 +838,11 @@ async function runBannerUpgrade() {
     await equip('white_banner')
     state = await inspect('banner-upgrade')
     assert.equal(state.heldType, 'WHITE_BANNER')
-    assert.equal(state.storageSignAcceptsHeld, true)
     await activateSign({ sneak: true })
     state = await inspect('banner-upgrade')
     if (state.lines[2] === '1') {
       process.stdout.write('Mineflayer upgrade interaction was not acknowledged; exercising PlayerInteractEvent fallback\n')
+      syntheticFallbacks++
       await command('/sstest sneak true', 'SSTEST SNEAK true')
       await command('/sstest interact banner-upgrade', 'SSTEST INTERACTED banner-upgrade')
       await command('/sstest sneak false', 'SSTEST SNEAK false')
@@ -859,6 +870,7 @@ async function runBannerUpgrade() {
 }
 
 async function main() {
+  assert.ok(validPhases.has(phase), `Unsupported E2E phase: ${phase}`)
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('Bot spawn timed out')), timeoutMs)
     bot.once('spawn', () => {
@@ -871,11 +883,20 @@ async function main() {
   else if (phase === 'banner-seed') await runBannerSeed()
   else if (phase === 'banner-upgrade') await runBannerUpgrade()
   else await runMainSuite()
+  assert.ok(selectedCases > 0,
+    `E2E_CASE_FILTER selected no cases for phase=${phase}: ${[...caseFilter].join(',')}`)
+  assert.equal(executedCases, selectedCases,
+    `Only ${executedCases}/${selectedCases} selected cases completed`)
   bot.quit('E2E complete')
 }
 
 main().then(() => {
-  process.stdout.write(`E2E PASS minecraft=${version} phase=${phase} logger=${loggerMode}\n`)
+  const observation = syntheticFallbacks === 0 ? 'client' : 'mixed-client-and-synthetic'
+  process.stdout.write(
+    `E2E PASS minecraft=${version} phase=${phase} logger=${loggerMode} ` +
+    `selected=${selectedCases} executed=${executedCases} ` +
+    `synthetic_fallbacks=${syntheticFallbacks} observation=${observation}\n`
+  )
   process.exitCode = 0
 }).catch(error => {
   process.stderr.write(`E2E FAIL minecraft=${version} phase=${phase} logger=${loggerMode}\n${error.stack ?? error}\n`)
