@@ -315,6 +315,11 @@ def write_index(path: Path, entries: Sequence[Entry]) -> int:
     raw = payload.getvalue()
     crc = zlib.crc32(raw) & 0xFFFFFFFF
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_bytes(raw + struct.pack(">I", crc))
-    temporary.replace(path)
+    try:
+        temporary.write_bytes(raw + struct.pack(">I", crc))
+        temporary.replace(path)
+    finally:
+        # A failed write or replace must neither replace the current index nor
+        # leave the staging path behind for the default-reader fallback.
+        temporary.unlink(missing_ok=True)
     return path.stat().st_size

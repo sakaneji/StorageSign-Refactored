@@ -70,6 +70,65 @@ class StorageSignIndexTest(unittest.TestCase):
         self.assertEqual([index.Entry(str(WORLD_ID), -10, 64, 30, "STONE", 128,
                                       1_700_000_000_000)], entries)
 
+    def test_writer_matches_fixed_v2_binary_golden_and_round_trips(self) -> None:
+        """Keep the production writer honest against an independently fixed wire oracle."""
+        entry = index.Entry(
+            str(WORLD_ID), -2_147_483_648, -64, 2_147_483_647,
+            "POTION:HEAL:0", 2_147_483_647, -1, "NORTH_EAST",
+        )
+        output = Path(self.temp_dir.name) / "golden.bin"
+        # This is a literal Java DataOutputStream-compatible v2 record plus its
+        # CRC32; it deliberately does not use the production serializer/constants.
+        golden = bytes.fromhex(
+            "53534958000000020000000112345678123456789abcdef012345678"
+            "80000000ffffffc07fffffff7fffffffffffffffffffffff01000a4e4f5254485f45415354"
+            "0000000d504f54494f4e3a4845414c3a30ba68cc10"
+        )
+
+        index.write_index(output, (entry,))
+
+        self.assertEqual(golden, output.read_bytes())
+        self.assertEqual(b"SSIX", golden[:4])
+        self.assertEqual(2, struct.unpack(">I", golden[4:8])[0])
+        self.assertEqual(1, struct.unpack(">I", golden[8:12])[0])
+        self.assertEqual(
+            (0x1234567812345678, -0x6543210FEDCBA988),
+            struct.unpack(">qq", golden[12:28]),
+        )
+        self.assertEqual(
+            (-2_147_483_648, -64, 2_147_483_647, 2_147_483_647),
+            struct.unpack(">iiii", golden[28:44]),
+        )
+        self.assertEqual(-1, struct.unpack(">q", golden[44:52])[0])
+        self.assertEqual(0xBA68CC10, struct.unpack(">I", golden[-4:])[0])
+        self.assertEqual((entry,), tuple(index.read_index(output)))
+
+    def test_writer_failure_preserves_existing_index_and_removes_staging_file(self) -> None:
+        original = self.index_path.read_bytes()
+        temporary = self.index_path.with_name(self.index_path.name + ".tmp")
+        replacement = (index.Entry(str(WORLD_ID), 1, 2, 3, "DIRT", 64, 5),)
+
+        temporary.write_bytes(b"partial write from an interrupted attempt")
+        with mock.patch.object(Path, "write_bytes", side_effect=OSError("write failed")):
+            with self.assertRaisesRegex(OSError, "write failed"):
+                index.write_index(self.index_path, replacement)
+        self.assertEqual(original, self.index_path.read_bytes())
+        self.assertFalse(temporary.exists())
+
+        with mock.patch.object(Path, "replace", side_effect=OSError("replace failed")):
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                index.write_index(self.index_path, replacement)
+        self.assertEqual(original, self.index_path.read_bytes())
+        self.assertFalse(temporary.exists())
+
+    def test_default_index_path_uses_tmp_only_when_bin_is_absent(self) -> None:
+        temporary = self.index_path.with_name(self.index_path.name + ".tmp")
+        temporary.write_bytes(self.index_path.read_bytes())
+        with mock.patch.object(index, "DEFAULT_INDEX_PATHS", (self.index_path, temporary)):
+            self.assertEqual(self.index_path, index.default_index_path())
+            self.index_path.unlink()
+            self.assertEqual(temporary, index.default_index_path())
+
     def test_rejects_crc_mismatch(self) -> None:
         raw = bytearray(self.index_path.read_bytes())
         raw[12] ^= 0x01
