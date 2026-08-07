@@ -133,6 +133,20 @@ class StorageSignIndexCodecTest {
     }
 
     @Test
+    void writerMatchesIndependentVersion2BinarySpecificationBytes() throws Exception {
+        UUID world = UUID.fromString("12345678-1234-5678-9abc-def012345678");
+        IndexedStorageSign entry = new IndexedStorageSign(
+            new StorageSignPosition(world, -10, 64, 30), "STONE", 128, 1_700_000_000_000L,
+            BlockFace.NORTH);
+        Path file = temporary.resolve("writer-golden.bin");
+
+        new StorageSignIndexCodec().writeAtomic(file, List.of(entry));
+
+        assertEquals(Base64.getEncoder().encodeToString(independentV2Bytes(entry)),
+            Base64.getEncoder().encodeToString(Files.readAllBytes(file)));
+    }
+
+    @Test
     void failedReplacementLeavesPreviousValidFileReadable() throws Exception {
         Path file = temporary.resolve("storage-sign-index.bin");
         StorageSignIndexCodec codec = new StorageSignIndexCodec();
@@ -240,5 +254,29 @@ class StorageSignIndexCodecTest {
             if (e.getCause() instanceof IOException io) throw io;
             throw new AssertionError(e.getCause());
         }
+    }
+
+    private static byte[] independentV2Bytes(IndexedStorageSign entry) throws IOException {
+        ByteArrayOutputStream payload = new ByteArrayOutputStream();
+        try (DataOutputStream output = new DataOutputStream(payload)) {
+            output.writeInt(0x53534958); // SSIX
+            output.writeInt(2);
+            output.writeInt(1);
+            output.writeLong(entry.position().worldId().getMostSignificantBits());
+            output.writeLong(entry.position().worldId().getLeastSignificantBits());
+            output.writeInt(entry.position().x()); output.writeInt(entry.position().y());
+            output.writeInt(entry.position().z()); output.writeInt(entry.amount());
+            output.writeLong(entry.verifiedAtEpochMillis());
+            output.writeBoolean(true); output.writeUTF("NORTH");
+            byte[] identifier = "STONE".getBytes(StandardCharsets.UTF_8);
+            output.writeInt(identifier.length); output.write(identifier);
+        }
+        CRC32 crc = new CRC32();
+        byte[] content = payload.toByteArray();
+        crc.update(content);
+        try (DataOutputStream output = new DataOutputStream(payload)) {
+            output.writeInt((int) crc.getValue());
+        }
+        return payload.toByteArray();
     }
 }

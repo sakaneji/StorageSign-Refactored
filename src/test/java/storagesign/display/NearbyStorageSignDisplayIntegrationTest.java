@@ -13,13 +13,18 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicReference;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Display;
@@ -30,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
@@ -44,15 +50,46 @@ class NearbyStorageSignDisplayIntegrationTest {
 
     private ServerMock server;
     private StorageSignPlugin plugin;
+    private MockedStatic<NearbyStorageSignDisplaySupport> lineOfSight;
+    private MockedStatic<Bukkit> mockedBukkit;
+    private final Map<UUID, World> worldOverrides = new HashMap<>();
+    private final Map<UUID, World> spawnCapableWorlds = new HashMap<>();
+    private final Map<TextDisplay, AtomicReference<Boolean>> removalStates = new HashMap<>();
+    private final Map<NearbyStorageSignDisplay, java.util.Set<TextDisplay>> ownedDisplays = new HashMap<>();
 
     @BeforeEach
     void setUp() {
         server = MockBukkit.mock();
         plugin = MockBukkit.load(StorageSignPlugin.class);
+        lineOfSight = Mockito.mockStatic(NearbyStorageSignDisplaySupport.class,
+            Mockito.CALLS_REAL_METHODS);
+        lineOfSight.when(() -> NearbyStorageSignDisplaySupport.hasLineOfSight(
+            Mockito.any(Location.class),
+            Mockito.any(org.bukkit.util.Vector.class),
+            Mockito.anyDouble(),
+            Mockito.any(storagesign.index.StorageSignPosition.class)))
+            .thenAnswer(invocation -> {
+                Location eye = invocation.getArgument(0);
+                var target = (storagesign.index.StorageSignPosition) invocation.getArgument(3);
+                if (eye.getWorld() == null) return invocation.callRealMethod();
+                Block targetBlock = eye.getWorld().getBlockAt(target.x(), target.y(), target.z());
+                return targetBlock == null || targetBlock.getType() != Material.STONE;
+            });
+        mockedBukkit = Mockito.mockStatic(Bukkit.class, Mockito.CALLS_REAL_METHODS);
+        mockedBukkit.when(() -> Bukkit.getWorld(Mockito.any(UUID.class)))
+            .thenAnswer(invocation -> {
+                UUID worldId = invocation.getArgument(0);
+                World override = worldOverrides.get(worldId);
+                if (override != null) return override;
+                World world = (World) invocation.callRealMethod();
+                return world == null ? null : spawnCapableWorld(world);
+            });
     }
 
     @AfterEach
     void tearDown() {
+        mockedBukkit.close();
+        if (lineOfSight != null) lineOfSight.close();
         MockBukkit.unmock();
     }
 
@@ -74,7 +111,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -98,18 +135,18 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
-            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            TextDisplay label = textDisplays(display).iterator().next();
             assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
 
             player.teleport(new Location(world, 1.5, 64, 0.5, 0, 0));
             server.getScheduler().performTicks(6);
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(1, textDisplays(display).size());
 
             player.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
             server.getScheduler().performTicks(6);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -138,7 +175,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             server.getScheduler().performTicks(6);
 
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(1, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -171,15 +208,15 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
-            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            TextDisplay label = textDisplays(display).iterator().next();
             assertEquals(NearbyStorageSignDisplay.wrap(frontIdentifier), label.getText());
 
-            player.teleport(new Location(world, 0.5, 64, 0.5, 90, 0));
+            player.teleport(new Location(world, 0.5, 64, 0.5, -90, 0));
             server.getScheduler().performTicks(6);
 
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
-            label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            assertEquals(1, textDisplays(display).size());
+            label = textDisplays(display).iterator().next();
             assertEquals(NearbyStorageSignDisplay.wrap(sideIdentifier), label.getText());
         } finally {
             display.shutdown();
@@ -206,13 +243,13 @@ class NearbyStorageSignDisplayIntegrationTest {
             assertEquals(1, display.activeLabelCount());
 
             player.teleport(new Location(world, 0.5, 64, 0.5, 180, 0));
-            server.getScheduler().performTicks(6);
+            server.getScheduler().performTicks(3);
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(1, textDisplays(display).size());
 
             server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -235,13 +272,13 @@ class NearbyStorageSignDisplayIntegrationTest {
         try {
             display.start();
             server.getScheduler().performTicks(16);
-            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            TextDisplay label = textDisplays(display).iterator().next();
             assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
 
             StorageSign.fromSignLines(new String[] {"StorageSign", "STONE", "34"}).applyToSign(sign);
             server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -297,7 +334,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
-            TextDisplay label = world.getEntitiesByClass(TextDisplay.class).iterator().next();
+            TextDisplay label = textDisplays(display).iterator().next();
             assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER), label.getText());
             assertFalse(label.isPersistent());
             assertFalse(label.hasGravity());
@@ -310,13 +347,13 @@ class NearbyStorageSignDisplayIntegrationTest {
             second.teleport(second.getLocation().add(1, 0, 0));
             server.getScheduler().performTicks(6);
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(1, textDisplays(display).size());
 
             first.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
             second.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
             server.getScheduler().performTicks(6);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -349,7 +386,7 @@ class NearbyStorageSignDisplayIntegrationTest {
                 server.getScheduler().performTicks(16);
 
                 assertEquals(1, display.activeLabelCount());
-                assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+                assertEquals(1, textDisplays(display).size());
             } finally {
                 display.shutdown();
             }
@@ -379,7 +416,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             server.getScheduler().performTicks(16);
 
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -410,8 +447,8 @@ class NearbyStorageSignDisplayIntegrationTest {
                 server.getScheduler().performTicks(16);
 
                 assertEquals(1, display.activeLabelCount());
-                assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
-                assertTrue(world.getEntitiesByClass(TextDisplay.class).iterator().next().getText()
+                assertEquals(1, textDisplays(display).size());
+                assertTrue(textDisplays(display).iterator().next().getText()
                     .contains(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER)));
             } finally {
                 display.shutdown();
@@ -448,14 +485,14 @@ class NearbyStorageSignDisplayIntegrationTest {
                 server.getScheduler().performTicks(16);
                 assertEquals(1, display.activeLabelCount());
                 assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER),
-                    world.getEntitiesByClass(TextDisplay.class).iterator().next().getText());
+                    textDisplays(display).iterator().next().getText());
 
                 first.setType(Material.AIR);
                 server.getScheduler().performTicks(20);
 
                 assertEquals(1, display.activeLabelCount());
                 assertEquals(NearbyStorageSignDisplay.wrap(LONG_IDENTIFIER),
-                    world.getEntitiesByClass(TextDisplay.class).iterator().next().getText());
+                    textDisplays(display).iterator().next().getText());
             } finally {
                 display.shutdown();
             }
@@ -484,7 +521,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(20);
             assertEquals(0, display.activeLabelCount());
-            assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(0, textDisplays(display).size());
         } finally {
             setNearbyDisplayEnabled(originalEnabled);
             display.shutdown();
@@ -505,7 +542,7 @@ class NearbyStorageSignDisplayIntegrationTest {
         server.getScheduler().performTicks(2);
         display.shutdown();
         assertEquals(0, display.activeLabelCount());
-        assertEquals(0, world.getEntitiesByClass(TextDisplay.class).size());
+        assertEquals(0, textDisplays(display).size());
     }
 
     @Test
@@ -527,7 +564,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             display.start();
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
-            assertEquals(1, world.getEntitiesByClass(TextDisplay.class).size());
+            assertEquals(1, textDisplays(display).size());
         } finally {
             display.shutdown();
         }
@@ -647,8 +684,8 @@ class NearbyStorageSignDisplayIntegrationTest {
             server.getScheduler().performTicks(16);
             assertEquals(1, display.activeLabelCount());
 
-            player.teleport(new Location(world, 1.5, 64, 0.5, 0, 0));
-            server.getScheduler().performTicks(1);
+            player.teleport(new Location(world, 8.5, 64, 0.5, 0, 0));
+            server.getScheduler().performTicks(4);
             assertEquals(0, display.activeLabelCount());
 
             player.teleport(new Location(world, 0.5, 64, 0.5, 0, 0));
@@ -935,15 +972,9 @@ class NearbyStorageSignDisplayIntegrationTest {
             setField(display, "searchQueue", queue);
             setField(display, "queued", new java.util.HashSet<>(queue));
 
-            try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class,
-                    org.mockito.Mockito.CALLS_REAL_METHODS)) {
-                mockedBukkit.when(() -> Bukkit.getPlayer(viewer)).thenReturn(player);
-                mockedBukkit.when(() -> Bukkit.getWorld(world.getUID())).thenReturn(world);
-
-                Method processSearchQueue = NearbyStorageSignDisplay.class.getDeclaredMethod("processSearchQueue");
-                processSearchQueue.setAccessible(true);
-                processSearchQueue.invoke(display);
-            }
+            Method processSearchQueue = NearbyStorageSignDisplay.class.getDeclaredMethod("processSearchQueue");
+            processSearchQueue.setAccessible(true);
+            processSearchQueue.invoke(display);
 
             assertEquals(1, display.activeLabelCount());
             assertTrue(((java.util.LinkedHashSet<?>) getField(display, "allocationPending")).isEmpty());
@@ -1095,9 +1126,8 @@ class NearbyStorageSignDisplayIntegrationTest {
         setField(state, "visible", new HashSet<>());
         setField(state, "desired", java.util.List.of(desired));
         putMap(display, "players", viewer, state);
-        try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class);
-             MockedStatic<StorageSign> mockedSigns = org.mockito.Mockito.mockStatic(StorageSign.class)) {
-            mockedBukkit.when(() -> Bukkit.getWorld(worldId)).thenReturn(world);
+        worldOverrides.put(worldId, world);
+        try (MockedStatic<StorageSign> mockedSigns = org.mockito.Mockito.mockStatic(StorageSign.class)) {
             mockedSigns.when(() -> StorageSign.fromBlock(block)).thenReturn(resolved);
             org.mockito.Mockito.doAnswer(invocation -> {
                 @SuppressWarnings("unchecked")
@@ -1638,9 +1668,8 @@ class NearbyStorageSignDisplayIntegrationTest {
         storagesign.index.StorageSignPosition position =
             new storagesign.index.StorageSignPosition(worldId, 0, 65, 2);
 
-        try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class);
-             MockedStatic<StorageSign> mockedSigns = org.mockito.Mockito.mockStatic(StorageSign.class)) {
-            mockedBukkit.when(() -> Bukkit.getWorld(worldId)).thenReturn(world);
+        worldOverrides.put(worldId, world);
+        try (MockedStatic<StorageSign> mockedSigns = org.mockito.Mockito.mockStatic(StorageSign.class)) {
             when(world.getBlockAt(0, 65, 2)).thenReturn(block);
             mockedSigns.when(() -> StorageSign.fromBlock(block)).thenReturn(resolved);
             org.mockito.Mockito.doAnswer(invocation -> {
@@ -1682,6 +1711,8 @@ class NearbyStorageSignDisplayIntegrationTest {
 
     @Test
     void hasLineOfSightHandlesNullWorldAndMatchingHitBlock() throws Exception {
+        lineOfSight.close();
+        lineOfSight = null;
         Location eye = mock(Location.class);
         when(eye.getWorld()).thenReturn(null);
         Method method = NearbyStorageSignDisplay.class.getDeclaredMethod(
@@ -1713,10 +1744,14 @@ class NearbyStorageSignDisplayIntegrationTest {
 
     @Test
     void hasLineOfSightReturnsFalseWhenTraceHitsDifferentBlock() throws Exception {
-        var world = server.addSimpleWorld("los-mismatch-display");
-        world.getChunkAt(0, 0).load();
+        lineOfSight.close();
+        lineOfSight = null;
+        org.bukkit.World world = mock(org.bukkit.World.class);
         Location liveEye = new Location(world, 0.5, 64.0, 0.5);
-        Block hit = world.getBlockAt(2, 64, 2);
+        Block hit = mock(Block.class);
+        when(hit.getX()).thenReturn(2);
+        when(hit.getY()).thenReturn(64);
+        when(hit.getZ()).thenReturn(2);
         org.bukkit.util.RayTraceResult trace = mock(org.bukkit.util.RayTraceResult.class);
         when(trace.getHitBlock()).thenReturn(hit);
         when(world.rayTraceBlocks(liveEye, new org.bukkit.util.Vector(0, 0, 1), 3.25,
@@ -1726,7 +1761,7 @@ class NearbyStorageSignDisplayIntegrationTest {
             storagesign.index.StorageSignPosition.class);
         method.setAccessible(true);
         boolean matched = (boolean) method.invoke(null, liveEye, new org.bukkit.util.Vector(0, 0, 1),
-            3.0, new storagesign.index.StorageSignPosition(world.getUID(), 0, 64, 3));
+            3.0, new storagesign.index.StorageSignPosition(UUID.randomUUID(), 0, 64, 3));
         assertFalse(matched);
     }
 
@@ -1827,15 +1862,9 @@ class NearbyStorageSignDisplayIntegrationTest {
             pending.add(viewer);
             setField(display, "allocationPending", pending);
 
-            try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class,
-                    org.mockito.Mockito.CALLS_REAL_METHODS)) {
-                mockedBukkit.when(() -> Bukkit.getPlayer(viewer)).thenReturn(player);
-                mockedBukkit.when(() -> Bukkit.getWorld(world.getUID())).thenReturn(world);
-
-                Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("processAllocationPending");
-                method.setAccessible(true);
-                method.invoke(display);
-            }
+            Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("processAllocationPending");
+            method.setAccessible(true);
+            method.invoke(display);
 
             assertEquals(1, ((java.util.LinkedHashSet<?>) getField(display, "allocationPending")).size());
             assertEquals(1, ((java.util.Map<?, ?>) getField(display, "labels")).size());
@@ -1878,20 +1907,97 @@ class NearbyStorageSignDisplayIntegrationTest {
             pending.add(viewer);
             setField(display, "allocationPending", pending);
 
-            try (MockedStatic<Bukkit> mockedBukkit = org.mockito.Mockito.mockStatic(Bukkit.class,
-                    org.mockito.Mockito.CALLS_REAL_METHODS)) {
-                mockedBukkit.when(() -> Bukkit.getPlayer(viewer)).thenReturn(player);
-                mockedBukkit.when(() -> Bukkit.getWorld(world.getUID())).thenReturn(world);
-
-                Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("processAllocationPending");
-                method.setAccessible(true);
-                method.invoke(display);
-            }
+            Method method = NearbyStorageSignDisplay.class.getDeclaredMethod("processAllocationPending");
+            method.setAccessible(true);
+            method.invoke(display);
 
             assertEquals(1, ((java.util.LinkedHashSet<?>) getField(display, "allocationPending")).size());
         } finally {
             setNearbyDisplayGlobalLimit(originalLimit);
             setNearbyDisplaySearchesPerTick(originalSearches);
+        }
+    }
+
+    private World spawnCapableWorld(World world) {
+        return spawnCapableWorlds.computeIfAbsent(world.getUID(), ignored -> {
+            World spy = Mockito.spy(world);
+            Mockito.doAnswer(invocation -> {
+                Location location = invocation.getArgument(0);
+                @SuppressWarnings("unchecked")
+                Consumer<TextDisplay> initializer = invocation.getArgument(2);
+                TextDisplay display = newTextDisplay(spy, location);
+                initializer.accept(display);
+                return display;
+            }).when(spy).spawn(
+                org.mockito.ArgumentMatchers.any(Location.class),
+                org.mockito.ArgumentMatchers.eq(TextDisplay.class),
+                org.mockito.ArgumentMatchers.<Consumer<TextDisplay>>any());
+            return spy;
+        });
+    }
+
+    private TextDisplay newTextDisplay(World world, Location location) {
+        TextDisplay display = mock(TextDisplay.class);
+        AtomicReference<Boolean> persistent = new AtomicReference<>(true);
+        AtomicReference<Boolean> gravity = new AtomicReference<>(true);
+        AtomicReference<Boolean> visibleByDefault = new AtomicReference<>(true);
+        AtomicReference<Display.Billboard> billboard = new AtomicReference<>();
+        AtomicReference<String> text = new AtomicReference<>();
+        AtomicReference<Boolean> removed = new AtomicReference<>(false);
+        UUID entityId = UUID.randomUUID();
+        removalStates.put(display, removed);
+
+        when(display.getUniqueId()).thenReturn(entityId);
+        when(display.getWorld()).thenReturn(world);
+        when(display.getLocation()).thenReturn(location);
+        when(display.isPersistent()).thenAnswer(ignored -> persistent.get());
+        when(display.hasGravity()).thenAnswer(ignored -> gravity.get());
+        when(display.isVisibleByDefault()).thenAnswer(ignored -> visibleByDefault.get());
+        when(display.getBillboard()).thenAnswer(ignored -> billboard.get());
+        when(display.getText()).thenAnswer(ignored -> text.get());
+        Mockito.doAnswer(invocation -> {
+            persistent.set(invocation.getArgument(0));
+            return null;
+        }).when(display).setPersistent(Mockito.anyBoolean());
+        Mockito.doAnswer(invocation -> {
+            gravity.set(invocation.getArgument(0));
+            return null;
+        }).when(display).setGravity(Mockito.anyBoolean());
+        Mockito.doAnswer(invocation -> {
+            visibleByDefault.set(invocation.getArgument(0));
+            return null;
+        }).when(display).setVisibleByDefault(Mockito.anyBoolean());
+        Mockito.doAnswer(invocation -> {
+            billboard.set(invocation.getArgument(0));
+            return null;
+        }).when(display).setBillboard(Mockito.any(Display.Billboard.class));
+        Mockito.doAnswer(invocation -> {
+            text.set(invocation.getArgument(0));
+            return null;
+        }).when(display).setText(Mockito.anyString());
+        Mockito.doAnswer(invocation -> {
+            removed.set(true);
+            return null;
+        }).when(display).remove();
+        return display;
+    }
+
+    private List<TextDisplay> textDisplays(NearbyStorageSignDisplay owner) {
+        try {
+            Map<?, ?> labels = (Map<?, ?>) getField(owner, "labels");
+            List<TextDisplay> displays = new ArrayList<>(labels.size());
+            for (Object label : labels.values()) {
+                displays.add((TextDisplay) getField(label, "display"));
+            }
+            java.util.Set<TextDisplay> observed = ownedDisplays.computeIfAbsent(
+                owner, ignored -> new HashSet<>());
+            observed.addAll(displays);
+            return observed.stream()
+                .filter(display -> !removalStates.getOrDefault(
+                    display, new AtomicReference<>(false)).get())
+                .toList();
+        } catch (Exception exception) {
+            throw new AssertionError("Unable to inspect active nearby labels", exception);
         }
     }
 

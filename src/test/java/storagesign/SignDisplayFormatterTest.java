@@ -13,6 +13,10 @@ import org.junit.jupiter.api.Test;
 import storagesign.compat.SignDisplayFormatter;
 
 class SignDisplayFormatterTest {
+    private static final Map<Character, Integer> VANILLA_GLYPH_ADVANCES = Map.ofEntries(
+        Map.entry(':', 2), Map.entry('!', 2), Map.entry('.', 2), Map.entry(',', 2),
+        Map.entry('I', 4), Map.entry('1', 4), Map.entry('i', 4), Map.entry('l', 4));
+
     @AfterEach
     void clearVirtualIdentifiers() throws Exception {
         setVirtualIdentifiers(Map.of());
@@ -31,8 +35,8 @@ class SignDisplayFormatterTest {
                 new String[] {"StorageSign", material.name(), "1"});
             assertNotNull(sign, material.name());
             String display = sign.getDisplayIdentifier();
-            assertTrue(SignDisplayFormatter.width(display) <= SignDisplayFormatter.MAX_VANILLA_WIDTH,
-                () -> material + " => " + display + " width=" + SignDisplayFormatter.width(display));
+            assertTrue(testSideWidth(display) <= 87,
+                () -> material + " => " + display + " width=" + testSideWidth(display));
         }
     }
 
@@ -45,7 +49,7 @@ class SignDisplayFormatterTest {
             "StorageSign", "Very_Long_Configured_Compatibility_Identifier", "3"});
         assertNotNull(sign);
         assertEquals("Very_Long_Configured_Compatibility_Identifier", sign.getIdentifier());
-        assertTrue(SignDisplayFormatter.width(sign.getDisplayIdentifier()) <= SignDisplayFormatter.MAX_VANILLA_WIDTH);
+        assertTrue(testSideWidth(sign.getDisplayIdentifier()) <= 87);
     }
 
     @Test
@@ -68,7 +72,7 @@ class SignDisplayFormatterTest {
         String fitted = SignDisplayFormatter.fit(
             "VERY_LONG_NAME_WITH_MANY_PARTS_AND_EXTRA_DETAILS_IDENTIFIER:7");
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
@@ -85,27 +89,27 @@ class SignDisplayFormatterTest {
     void leadingAndTrailingEmptyUnderscoreSegmentsAreIgnored() {
         String fitted = SignDisplayFormatter.fit("___VERY_LONG_NAME___");
         assertEquals("VL:NAME", fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
     void overlongUnderscoredIdentifiersWithoutSuffixStillFallBackToEllipsis() {
         String fitted = SignDisplayFormatter.fit(String.join("_", Collections.nCopies(20, "LONGWORD")));
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
     void overlongIdentifiersWithSuffixButNoUnderscoresStillFallBackToEllipsis() {
         String fitted = SignDisplayFormatter.fit("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:7");
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
     void compactedIdentifiersRespectWidthBoundaryBeforeTruncation() {
         String fitted = SignDisplayFormatter.fit("A_LONG_IDENTIFIER_WITH_SUFFIX:123");
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
@@ -137,7 +141,7 @@ class SignDisplayFormatterTest {
         String value = "ABCDEFGHIJKLMNOPQRSTUVWXYABCDEFGHIJKLMNOPQRSTUVWXY";
         String fitted = SignDisplayFormatter.fit(value);
         assertTrue(fitted.endsWith("..."), fitted);
-        assertTrue(SignDisplayFormatter.width(fitted) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, fitted);
+        assertTrue(testSideWidth(fitted) <= 87, fitted);
     }
 
     @Test
@@ -151,13 +155,25 @@ class SignDisplayFormatterTest {
             "StorageSign", "STONE", Integer.toString(Integer.MAX_VALUE)});
         assertNotNull(sign);
         String[] lines = sign.getSignLines();
-        assertTrue(SignDisplayFormatter.width(lines[2]) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, lines[2]);
-        assertTrue(SignDisplayFormatter.width(lines[3]) <= SignDisplayFormatter.MAX_VANILLA_WIDTH, lines[3]);
+        assertTrue(testSideWidth(lines[2]) <= 87, lines[2]);
+        assertTrue(testSideWidth(lines[3]) <= 87, lines[3]);
     }
 
     private static void setVirtualIdentifiers(Map<String, String> values) throws Exception {
         Field field = ConfigLoader.class.getDeclaredField("virtualItemIdentifiers");
         field.setAccessible(true);
         field.set(null, values);
+    }
+
+    /**
+     * Fixed vanilla glyph fixture, expressed as data rather than mirroring the production switch.
+     * Characters absent from this fixture use the vanilla six-pixel advance.
+     */
+    private static int testSideWidth(String value) {
+        int result = 0;
+        for (int index = 0; index < value.length(); index++) {
+            result += VANILLA_GLYPH_ADVANCES.getOrDefault(value.charAt(index), 6);
+        }
+        return result;
     }
 }

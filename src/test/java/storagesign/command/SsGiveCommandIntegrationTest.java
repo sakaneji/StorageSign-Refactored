@@ -10,12 +10,14 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Arrays;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Item;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -77,54 +79,82 @@ class SsGiveCommandIntegrationTest {
     @Test
     void nonCreativePlayerIsRejectedWithoutReceivingAnItem() {
         player.setGameMode(GameMode.SURVIVAL);
+        ItemStack[] before = inventorySnapshot();
+        long dropsBefore = worldDropCount();
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1"));
 
-        assertEquals(0, player.getInventory().getContents().length == 0
-            ? 0 : player.getInventory().all(Material.OAK_SIGN).size());
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount(), "Rejected command must not create world drops");
         assertTrue(player.nextMessage().contains("クリエイティブ"));
     }
 
     @Test
     void invalidAmountAndIdentifierAreRejected() {
+        ItemStack[] before = inventorySnapshot();
+        long dropsBefore = worldDropCount();
         assertTrue(server.dispatchCommand(player, "ssgive STONE nope"));
         assertTrue(player.nextMessage().contains("整数"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive UNKNOWN_IDENTIFIER 1"));
         assertTrue(player.nextMessage().contains("itemIdentifier"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
     }
 
     @Test
     void emptyMarkerIdentifierIsRejectedAsUnregisteredStorageSign() {
+        ItemStack[] before = inventorySnapshot();
+        long dropsBefore = worldDropCount();
         assertTrue(server.dispatchCommand(player, "ssgive Empty 1"));
         assertTrue(player.nextMessage().contains("itemIdentifier"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
     }
 
     @Test
     void invalidArgumentsPermissionAndSignTypeAreRejected() {
+        ItemStack[] before = inventorySnapshot();
+        long dropsBefore = worldDropCount();
         assertTrue(server.dispatchCommand(player, "ssgive STONE"));
         assertTrue(player.nextMessage().contains("使い方"));
         player.nextMessage(); // 使用例
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1 OAK_SIGN extra"));
         assertTrue(player.nextMessage().contains("使い方"));
         player.nextMessage(); // 使用例
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE -1"));
         assertTrue(player.nextMessage().contains("0 以上"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1 STONE"));
         assertTrue(player.nextMessage().contains("看板種類"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1 not-a-real-sign"));
         assertTrue(player.nextMessage().contains("看板種類"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1 OAK_WALL_SIGN"));
         assertTrue(player.nextMessage().contains("看板種類"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
 
         player.addAttachment(plugin, "storagesign.give", false);
         assertTrue(server.dispatchCommand(player, "ssgive STONE 1"));
         assertTrue(player.nextMessage().contains("permission"));
+        assertInventoryUnchanged(before);
+        assertEquals(dropsBefore, worldDropCount());
     }
 
     @Test
@@ -171,5 +201,20 @@ class SsGiveCommandIntegrationTest {
 
     private ItemStack firstItem(Material material) {
         return player.getInventory().all(material).values().stream().findFirst().orElse(null);
+    }
+
+    private ItemStack[] inventorySnapshot() {
+        return Arrays.stream(player.getInventory().getContents())
+            .map(item -> item == null ? null : item.clone())
+            .toArray(ItemStack[]::new);
+    }
+
+    private void assertInventoryUnchanged(ItemStack[] before) {
+        assertTrue(Arrays.equals(before, player.getInventory().getContents()),
+            "Rejected command must not mutate the inventory");
+    }
+
+    private long worldDropCount() {
+        return player.getWorld().getEntities().stream().filter(Item.class::isInstance).count();
     }
 }

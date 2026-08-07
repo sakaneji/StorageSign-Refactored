@@ -141,5 +141,10 @@ class StorageSignPluginIntegrationTest {
         plugin.onEnable();
 
         assertNotNull(StorageSignPlugin.getOminousBannerMeta());
+        assertEquals("DEBUG", ConfigLoader.getLogLevel());
+        assertFalse(ConfigLoader.getStorageIndexEnabled());
+        assertTrue(ConfigLoader.getNearbyDisplayEnabled());
+        assertFalse(ConfigLoader.getEffectiveNearbyDisplayEnabled());
+        assertTrue(ConfigLoader.getNoBud());
     }
 }

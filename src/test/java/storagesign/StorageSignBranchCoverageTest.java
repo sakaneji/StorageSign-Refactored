@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
@@ -1480,6 +1481,8 @@ class StorageSignBranchCoverageTest {
 
         StorageSign.empty().applyToSign(sign);
 
+        verify(pdc).remove(new NamespacedKey("storagesign", "storage_identifier"));
+        verify(pdc).remove(new NamespacedKey("storagesign", "potion_identifier"));
         assertNull(pdc.get(new NamespacedKey("storagesign", "storage_identifier"),
             PersistentDataType.STRING));
         assertNull(pdc.get(new NamespacedKey("storagesign", "potion_identifier"),

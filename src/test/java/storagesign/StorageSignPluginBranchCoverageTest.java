@@ -3,6 +3,8 @@ package storagesign;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,6 +12,9 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.function.Function;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.inventory.meta.BannerMeta;
@@ -192,12 +197,38 @@ class StorageSignPluginBranchCoverageTest {
     @Test
     void logDegradedBannerDecorationsIsReachableWithBothFlagsFalse() throws Exception {
         StorageSignPlugin plugin = mock(StorageSignPlugin.class, Mockito.CALLS_REAL_METHODS);
+        Server server = mock(Server.class);
+        PluginManager manager = mock(PluginManager.class);
+        java.util.logging.Logger julLogger = java.util.logging.Logger.getLogger(
+            "StorageSignPluginBranchCoverageTest.degradedBannerDecorations"
+        );
+        when(plugin.getServer()).thenReturn(server);
+        when(server.getPluginManager()).thenReturn(manager);
+        when(manager.getPlugin("Logger")).thenReturn(null);
+        when(plugin.getLogger()).thenReturn(julLogger);
+        PluginLogger.initialize(plugin, "DEBUG");
         setField(plugin, "ominousBannerNameAvailable", false);
         setField(plugin, "ominousBannerTooltipAvailable", false);
+        java.util.List<LogRecord> records = new java.util.ArrayList<>();
+        Handler handler = new Handler() {
+            @Override public void publish(LogRecord record) { records.add(record); }
+            @Override public void flush() { }
+            @Override public void close() { }
+        };
+        julLogger.addHandler(handler);
 
-        Method method = StorageSignPlugin.class.getDeclaredMethod("logDegradedBannerDecorations");
-        method.setAccessible(true);
-        method.invoke(plugin);
+        try {
+            Method method = StorageSignPlugin.class.getDeclaredMethod("logDegradedBannerDecorations");
+            method.setAccessible(true);
+            method.invoke(plugin);
+        } finally {
+            julLogger.removeHandler(handler);
+            PluginLogger.shutdown();
+        }
+        assertEquals(2, records.size());
+        assertTrue(records.stream().allMatch(record -> record.getLevel().equals(Level.WARNING)));
+        assertTrue(records.stream().anyMatch(record -> record.getMessage().contains("名前API")));
+        assertTrue(records.stream().anyMatch(record -> record.getMessage().contains("ツールチップAPI")));
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

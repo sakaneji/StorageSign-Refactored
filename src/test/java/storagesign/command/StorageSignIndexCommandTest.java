@@ -1,7 +1,6 @@
 package storagesign.command;
 
 import static org.mockito.ArgumentMatchers.contains;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -14,6 +13,7 @@ import java.util.List;
 import java.util.Collection;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import storagesign.ConfigLoader;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
@@ -41,11 +41,16 @@ class StorageSignIndexCommandTest {
         CommandSender sender = mock(CommandSender.class);
         Command command = mock(Command.class);
         when(sender.hasPermission("storagesign.index.admin")).thenReturn(false);
+        String original = getNoPermission();
+        setNoPermission("denied-by-contract");
+        try {
+            new StorageSignIndexCommand(new StorageSignIndex(null, false)).onCommand(
+                sender, command, "ssindex", new String[] {"status"});
+        } finally {
+            setNoPermission(original);
+        }
 
-        new StorageSignIndexCommand(new StorageSignIndex(null, false)).onCommand(
-            sender, command, "ssindex", new String[] {"status"});
-
-        verify(sender).sendMessage(anyString());
+        verify(sender).sendMessage("§cdenied-by-contract");
     }
 
     @Test
@@ -209,6 +214,8 @@ class StorageSignIndexCommandTest {
     @Test
     void statusReportsNearbyDisplayDisabledWhenGateIsOff() throws Exception {
         ServerMock server = MockBukkit.mock();
+        boolean originalNearbyDisplayEnabled = getStaticBoolean(
+            storagesign.ConfigLoader.class, "nearbyDisplayEnabled");
         try {
             CommandSender sender = mock(CommandSender.class);
             when(sender.hasPermission("storagesign.index.admin")).thenReturn(true);
@@ -229,7 +236,8 @@ class StorageSignIndexCommandTest {
 
             verify(sender).sendMessage(contains("Nearby display: disabled"));
         } finally {
-            setStaticBoolean(storagesign.ConfigLoader.class, "nearbyDisplayEnabled", true);
+            setStaticBoolean(storagesign.ConfigLoader.class, "nearbyDisplayEnabled",
+                originalNearbyDisplayEnabled);
             MockBukkit.unmock();
         }
     }
@@ -372,5 +380,31 @@ class StorageSignIndexCommandTest {
         Field field = type.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.setBoolean(null, value);
+    }
+
+    private static boolean getStaticBoolean(Class<?> type, String fieldName) throws Exception {
+        Field field = type.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return field.getBoolean(null);
+    }
+
+    private static String getNoPermission() {
+        try {
+            Field field = ConfigLoader.class.getDeclaredField("noPermission");
+            field.setAccessible(true);
+            return (String) field.get(null);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static void setNoPermission(String value) {
+        try {
+            Field field = ConfigLoader.class.getDeclaredField("noPermission");
+            field.setAccessible(true);
+            field.set(null, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 }

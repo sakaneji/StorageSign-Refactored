@@ -22,6 +22,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.mockito.Mockito;
 import org.mockito.MockedStatic;
 import org.bukkit.Bukkit;
@@ -33,6 +35,17 @@ import storagesign.StorageSignPlugin;
 import storagesign.index.StorageSignIndex;
 
 class StorageSignQueryServiceTest {
+    private int originalMaxConcurrent;
+
+    @BeforeEach
+    void captureMaxConcurrent() {
+        originalMaxConcurrent = getMaxConcurrent();
+    }
+
+    @AfterEach
+    void restoreMaxConcurrent() {
+        setMaxConcurrent(originalMaxConcurrent);
+    }
     @Test
     void exactAndContainsMatchingAreCaseInsensitive() {
         UUID world = UUID.randomUUID();
@@ -488,6 +501,16 @@ class StorageSignQueryServiceTest {
             var field = storagesign.ConfigLoader.class.getDeclaredField("adminSearchMaxConcurrent");
             field.setAccessible(true);
             field.setInt(null, value);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static int getMaxConcurrent() {
+        try {
+            var field = storagesign.ConfigLoader.class.getDeclaredField("adminSearchMaxConcurrent");
+            field.setAccessible(true);
+            return field.getInt(null);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }

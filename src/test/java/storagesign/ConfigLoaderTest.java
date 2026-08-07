@@ -12,17 +12,50 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 
 class ConfigLoaderTest {
+
+    @Test
+    void loadCreatesRuntimeConfigFromThePackagedDefaultAndReadsRepresentativeValues() throws Exception {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        Path dataFolder = tempDataFolder();
+        Path defaultResource = Path.of("src/main/resources/config.default.yml");
+        FileConfiguration parsedDefault = YamlConfiguration.loadConfiguration(defaultResource.toFile());
+        when(plugin.getDataFolder()).thenReturn(dataFolder.toFile());
+        when(plugin.getResource("config.default.yml")).thenAnswer(invocation ->
+            Files.newInputStream(defaultResource));
+        when(plugin.getConfig()).thenReturn(parsedDefault);
+        doNothing().when(plugin).reloadConfig();
+
+        ConfigLoader.load(plugin);
+
+        assertArrayEquals(Files.readAllBytes(defaultResource),
+            Files.readAllBytes(dataFolder.resolve("config.yml")));
+        assertEquals("INFO", ConfigLoader.getLogLevel());
+        assertTrue(ConfigLoader.getManualImport());
+        assertEquals(345600, ConfigLoader.getDivideLimit());
+        assertTrue(ConfigLoader.getStorageIndexEnabled());
+        assertEquals(3.0, ConfigLoader.getNearbyDisplayDistance());
+        assertEquals(Map.of("HorseEgg", "END_PORTAL:1", "EmptySign", "OAK_SIGN:1"),
+            ConfigLoader.getVirtualItemIdentifiers());
+    }
 
     @Test
     void loadCachesAllScalarsAndSanitizedCompatibilityMaps() throws IOException {
@@ -250,6 +283,55 @@ class ConfigLoaderTest {
         verify(plugin).reloadConfig();
     }
 
+    @Test
+    void failedLegacyCopyPreservesSourceTargetAndCleansTemporaryFile() throws Exception {
+        Path folder = tempDataFolder();
+        Path source = folder.resolve("legacy.yml");
+        Path target = folder.resolve("config.yml");
+        Files.writeString(source, "legacy-source-config");
+
+        IOException error;
+        try (MockedStatic<Files> files = Mockito.mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.copy(Mockito.eq(source), Mockito.any(Path.class),
+                    Mockito.eq(StandardCopyOption.REPLACE_EXISTING)))
+                .thenThrow(new IOException("injected copy failure"));
+
+            error = assertThrows(IOException.class, () -> invokeCopyAtomically(source, target));
+        }
+
+        assertEquals("injected copy failure", error.getMessage());
+        assertEquals("legacy-source-config", Files.readString(source));
+        assertFalse(Files.exists(target));
+        try (var files = Files.list(folder)) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+        }
+    }
+
+    @Test
+    void legacyCopyFallsBackFromAtomicMoveWithoutChangingTheSource() throws Exception {
+        Path folder = tempDataFolder();
+        Path source = folder.resolve("legacy.yml");
+        Path target = folder.resolve("config.yml");
+        Files.writeString(source, "legacy-content");
+
+        try (MockedStatic<Files> files = Mockito.mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.move(Mockito.any(Path.class), Mockito.any(Path.class),
+                    Mockito.eq(StandardCopyOption.ATOMIC_MOVE)))
+                .thenThrow(new AtomicMoveNotSupportedException(source.toString(), target.toString(), "unsupported"));
+
+            invokeCopyAtomically(source, target);
+
+            files.verify(() -> Files.move(Mockito.any(Path.class), Mockito.eq(target),
+                Mockito.eq(StandardCopyOption.ATOMIC_MOVE)));
+            files.verify(() -> Files.move(Mockito.any(Path.class), Mockito.eq(target)));
+        }
+        assertEquals("legacy-content", Files.readString(source));
+        assertEquals("legacy-content", Files.readString(target));
+        try (var files = Files.list(folder)) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+        }
+    }
+
     private static ConfigurationSection section(Set<String> keys, Map<String, String> values) {
         ConfigurationSection section = mock(ConfigurationSection.class);
         when(section.getKeys(false)).thenReturn(keys);
@@ -264,6 +346,17 @@ class ConfigLoaderTest {
             return Files.createTempDirectory("storagesign-config-test");
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void invokeCopyAtomically(Path source, Path target) throws Exception {
+        Method method = ConfigLoader.class.getDeclaredMethod("copyAtomically", Path.class, Path.class);
+        method.setAccessible(true);
+        try {
+            method.invoke(null, source, target);
+        } catch (InvocationTargetException exception) {
+            if (exception.getCause() instanceof IOException ioException) throw ioException;
+            throw new AssertionError(exception.getCause());
         }
     }
 }
