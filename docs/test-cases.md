@@ -1,6 +1,6 @@
 # StorageSign テストケース一覧
 
-最終レビュー日: 2026-07-25
+最終レビュー日: 2026-08-08
 
 この文書は、実装済みテスト、手動確認項目、未カバー領域を同じ表で管理し、要件とテストの見落としを発見するための一覧である。
 
@@ -15,16 +15,28 @@
 | 🧑 | 手動チェックリストのみ |
 | ❌ | テスト未定義、または要件の確認が必要 |
 
+### Paperテストの観測区分
+
+Paper上で実行するシナリオには、Mineflayerのクライアント操作で到達したケースと、
+テストハーネスが同じPaperプロセス内でBukkit eventを発火するケースがある。
+E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走したことを示す。
+`observation=mixed-client-and-synthetic` は、クライアント操作に加えて合成event経路を
+使ったことを示し、クライアントpacket自体の確認とは扱わない。ケースフィルタが
+0件一致した実行と、未登録のJUnit skipは成功扱いしない。
+
 ## 保存済みローカル成果物の要約
 
 | 項目 | 結果 |
 |---|---:|
-| JUnit Unit | 2026-07-25 保存ログ: 637件成功、失敗0、エラー0、スキップ1 |
-| JUnit Integration | 2026-07-25 保存ログ: 228件成功、失敗0、エラー0、スキップ33 |
-| Pythonツール | 2026-07-01 保存ログ: 22件成功、失敗0、エラー0 |
-| カバレッジ | 2026-07-25 保存レポート: 865件成功、lines 97.7%、branches 91.8% |
+| JUnit Unit | 2026-08-08 保存ログ: 643件成功、失敗0、エラー0、スキップ1。既知のMockBukkit未実装1件だけをexact allowlistで監査 |
+| JUnit Integration | 2026-08-08 保存ログ: 228件成功、失敗0、エラー0、スキップ0 |
+| Pythonツール | 2026-08-08 保存ログ: 28件成功、失敗0、エラー0 |
+| カバレッジ | 2026-07-25 保存値: 865件成功、lines 97.7%、branches 91.8%。現行artifactは再生成待ち |
 | Paper 1.21.4 / 1.21.8 / 1.21.11 | ローカル E2E / banner-upgrade 成果物あり |
 | Paper 26.1.2 / 26.2 | ローカル成果物では Java 25 起動とプラグイン有効化までは確認済み。保存済み bot ログでは Mineflayer / `minecraft-protocol` の `unsupported protocol version` で停止しており、main/restart 完走確認は別途必要 |
+
+現行runnerは各JUnit skipを `classname#testname` で照合する。未登録skipは失敗させ、
+テスト側で解消するか、理由をレビューした不可避なケースだけを明示allowlistへ追加する。
 
 ## 1. 起動・停止・設定
 
@@ -47,6 +59,7 @@
 | CFG-15 | プラグインを停止する | Logger登録と不吉な旗の保留タスクを解除する | Unit | ✅ |
 | CFG-16 | 0以下や不正値の設定を読み込む | 一部は既定値へ戻し、FOVだけは1～360度へ丸める | Unit | ✅ |
 | CFG-17 | 新版設定がなく旧版`plugins/StorageSign/config.yml`だけが存在する | 一時ファイルから切り替えて新版へ移行し、旧ファイルは変更せず一時ファイルを残さない | Unit | ✅ |
+| CFG-18 | 旧設定のコピーまたは切替に失敗する | 例外として起動を止め、旧設定を変更せず、不完全な新版設定や一時ファイルを公開しない | Unit | ✅ |
 
 ## 2. コマンド・レシピ・権限
 
@@ -104,7 +117,7 @@
 | MAT-06 | 旧Material名を解決する | SIGN、ROSE_RED、STONE_SLAB等を互換変換する | Unit | ✅ |
 | MAT-07 | 設定追加した任意エイリアスを解析する | ソフト変更なしで現行Materialへ解決する | Unit | ✅ |
 | MAT-08 | 設定追加した仮想識別子を解析する | ソフト変更なしでバッキングMaterialへ解決する | Unit | ✅ |
-| MAT-09 | 製品コードにPaperやMinecraft版別分岐がない | バージョン固有import・文字列分岐を持たない | Architecture | ✅ |
+| MAT-09 | 製品コードが特定のPaper/Minecraft版へ直接リンクしない | Paper/CraftBukkit固有import、実行時版取得、数値版による条件分岐を持たない | Architecture | ✅ |
 | MAT-10 | 将来追加Materialを保管する | 通常Materialは動的レジストリとBukkit解決だけで扱う | Architecture | ✅ |
 | MAT-11 | Material名が削除・変更されたワールドを開く | 設定エイリアスで現行Materialへ移行できる | Unit | ✅ |
 | MAT-12 | 実行時Registryの全PotionTypeを列挙する | NamespacedKey形式でMaterialとPotionTypeを全件往復する | Unit | ✅ |
@@ -302,7 +315,7 @@
 | VER-03 | Paper 1.21.11、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ✅ |
 | VER-04 | Paper 26.1.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
 | VER-05 | Paper 26.2、Loggerなし・あり | mainとrestartの全シナリオが成功する | Paper E2E | ⏸️ |
-| VER-06 | 26.xをJava 25で起動する | Java要件を満たし、プラグインが有効化される | Paper E2E | ✅ |
+| VER-06 | 26.xをJava 25で起動する | Java要件を満たし、プラグインが有効化される | Paper startup artifact | ✅ |
 | VER-07 | 1.21.4→1.21.8→1.21.11でワールド更新する | 仕込み済みの不吉な旗 StorageSign と Potion StorageSign について、表示行・Potion PDC・旗データを維持する | Upgrade E2E | ✅ |
 | VER-08 | 新版ワールドを旧版で開く | 非対応と事前バックアップ必須が文書化されている | Documentation | ✅ |
 | VER-09 | Spigotで実行する | 製品保証・リリース試験の対象外である | Documentation | ✅ |
@@ -322,6 +335,10 @@
 | TST-09 | 成功ログを扱う | 構造化された`PASS`要約を表示する | Runner | ✅ |
 | TST-10 | 失敗ログを扱う | 既定40行の抜粋と`diagnose:`先を表示する | Runner | ✅ |
 | TST-11 | 引数なしのE2E / 全テストを実行する | Mineflayer対応済みの1.21.4 / 1.21.8 / 1.21.11だけを実行し、保留中の26.xは明示指定時だけ実行する | Runner self-test | ✅ |
+| TST-12 | JUnitが未登録のskipを含む | skipした`classname#testname`を表示して失敗し、許可リストとXML集計が一致する場合だけ継続する | Runner self-test | ✅ |
+| TST-13 | E2E case filterが対象phaseで0件一致する | main/restartを完走扱いせず非0終了する | Runner/Bot | ⏳ |
+| TST-14 | E2Eが合成event fallbackを使う | `synthetic_fallbacks`と`observation=mixed-client-and-synthetic`を要約へ出す | Runner/Bot | ⏳ |
+| TST-15 | 前回E2EのCompose projectが残る、または終了cleanup・ログ取得に失敗する | 開始前に残骸を削除してserverを再生成し、cleanupまたはログ取得失敗を成功扱いしない | Runner | ⏳ |
 
 ## 14. 位置索引・近接表示
 
@@ -372,6 +389,8 @@
 | EXT-08 | offline region から索引を再構築する | `uid.dat` または `level.dat` と `region/*.mca` の現行`block_entities`・旧`TileEntities`から索引を生成し、PDCの完全識別子を表示行より優先してWorld UUID・座標・数量・前面方向とともに保存する | Python Unit | ✅ |
 | EXT-09 | 壊れた region/chunk や欠落した world が混在する | 警告して継続し、有効な world / chunk だけを出力する | Python Unit | ✅ |
 | EXT-10 | offline region CLI を既定引数・互換 alias・警告付きで実行する | 既定出力先を使い、`rebuild` alias を受け付け、警告時は標準エラーへ warning を出して終了コード 1 を返す | Python Unit | ✅ |
+| EXT-11 | 索引の一時書込または最終置換に失敗する | 既存の有効な索引をbyte単位で維持し、今回生成した`.tmp`を残さない | Python Unit | ✅ |
+| EXT-12 | Python writerでv2索引を生成する | 独立した固定binary oracleとmagic、version、UUID、負座標、数量、時刻、前面方向、識別子、CRCが完全一致する | Python Unit | ✅ |
 
 ## 確定した要件と残作業
 

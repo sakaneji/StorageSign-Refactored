@@ -67,6 +67,11 @@ python3 tools/storage_sign_region_cli.py /path/to/world --output /path/to/storag
 
 `rebuild` も互換 alias として受け付けます。`--output` を省略した場合は `plugins/StorageSign-Refactored/storage-sign-index.bin` を優先し、`.bin` が無く `.bin.tmp` だけ存在する場合はその `.bin.tmp` を既定出力先として使います。入力ワールドごとに `uid.dat` を優先し、必要に応じて `level.dat` も参照して UUID を読み、`region` 配下の `.mca` を走査します。完全識別子は看板の PersistentDataContainer を優先し、PDCを持たない旧データだけ表示行へフォールバックします。存在しない world や壊れた region/chunk は警告して続行し、警告が出た場合は標準エラーへ警告内容と `warning: rebuild completed with warnings` を出し、終了コード 1 になります。出力は既存の `storage-sign-index.bin` と同じ形式です。
 
+索引は同じディレクトリの `.tmp` へ全内容とCRCを書き終えてから置換します。
+書込または置換に失敗した場合は既存の `.bin` を変更せず、今回生成した `.tmp` を
+削除して非0終了します。プロセスの強制終了などで過去の `.tmp` だけが残った場合に
+限り、上記の既定入力・出力先fallbackを復旧用として利用できます。
+
 ## アイテム名検索コマンド
 
 権限は`storagesign.search.admin`、デフォルトはOPです。短縮形は`/sssearch`です。
