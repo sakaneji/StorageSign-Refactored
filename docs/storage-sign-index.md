@@ -157,6 +157,13 @@ StorageSign search 'STONE': matches=12, totalAmount=98765, page=1/2
 
 存在しないWorldの保存エントリはWorld UUIDで表示されます。`--world`には現在ロードされているWorld名を指定してください。
 
+状態付きアイテムも完全識別子で区別します。例えば
+`COPPER_GOLEM_STATUE[copper_golem_pose=sitting]` と
+`COPPER_GOLEM_STATUE[copper_golem_pose=running]` は別の検索対象です。
+プロパティの順序は保存時に辞書順へ正規化されます。手持ちの像で `/sswarp --hand` を
+使うと、その状態に対応するStorageSignを検索します。索引の保存形式は従来と同じです。
+外部CLIへ角括弧付き識別子を渡す場合は、シェル展開を避けるため引用符で囲みます。
+
 ## 近接表示
 
 プレイヤーの位置が`idle-delay-ticks`の間変化しなかった場合に検索します。視点変更は再検索対象にしますが、位置が十分止まっていれば次の監視周期で再検索できます。標準設定では、3ブロック以内、前方90度、遮蔽物のないStorageSignから最寄り3件を候補にし、その看板本文だけでは完全識別子を表示しきれない場合にだけ近接 TextDisplay を出します。

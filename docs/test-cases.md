@@ -124,6 +124,69 @@ E2E要約の `synthetic_fallbacks=0 observation=client` は前者だけで完走
 | MAT-13 | Potionキーが改名・削除される | `potion-key-aliases`で現行Registryキーへ移行する | Unit | ✅ |
 | MAT-14 | 元版の`SIGN`、bare/明示damage付き`STONE_SLAB`を読む | 空StorageSign、Smooth Stone Slab、Stone Slabの意味を混同しない | Integration | ✅ |
 | MAT-15 | 元版StorageSignアイテムのPotion Loreを読む | 完全Material prefixと完全PotionType名を現行Potionへ復元する | Integration | ✅ |
+### 4.1 銅ゴーレムの像
+
+| ID | テストケース | 期待結果 | レベル | 状態 |
+|---|---|---|---|---|
+| MAT-20 | 銅ゴーレムの像の酸化4段階×ワックス有無を採掘ドロップから登録・搬入・搬出する | 登録時に手持ちを消費せず、16個を同一Materialの通常品として往復できる | Paper E2E | ✅ |
+| MAT-21 | 独自名またはPDCを付けた酸化した銅ゴーレムの像を登録する | 登録を拒否し、手持ち16個とメタデータを保持する | Paper E2E | ✅ |
+| MAT-22 | 8素材×4ポーズの像を採掘し、各ポーズを空SSへ登録・搬入・搬出する | 32組すべて同じポーズで16個往復し、各素材の4ポーズは別識別子になる。異なるポーズは混入しない | Paper E2E | ✅ |
+| MAT-23 | 複数プロパティを持つ銅ゴーレム以外のアイテムを保存し、追加メタ付きも試す | 明示状態だけを辞書順で保存・復元し、独自名・PDC等の追加情報は失わず拒否する | Integration/Paper E2E | ✅ |
+| MAT-24 | ポーズ別SSの分割・再統合とサーバー再起動を行う | SSアイテムLoreと看板PDCを経由しても種類・ポーズ・数量を維持する | Paper E2E | ✅ |
+
+像のMaterialが存在するサーバーでのみ実行する。対象確認コマンドは
+`./scripts/test.sh e2e 1.21.11 without-logger`。2026-09-11にDocker復旧後の実行で成功し、
+外部Loggerなしのmain・restart両フェーズが完走した。スイート全体で合成イベントへの
+切り替えが6回あり、観測区分は `mixed-client-and-synthetic`。
+併せて `./scripts/test.sh integration` は235件成功（失敗・エラー・スキップ0）。
+この実行時点のMAT-20/21は採掘ドロップの既定ポーズを対象とした。
+名前付きMobから像への変化、別プラグインによるMobのアイテム化は対象外。
+
+MAT-22は `standing` / `sitting` / `running` / `star` を持つ実ブロックの採掘ドロップを使う。
+対応前の2026-10-16の診断実行 `./scripts/test.sh e2e 1.21.11 without-logger` はmain・restartとも成功し、
+`synthetic_fallbacks=30 observation=mixed-client-and-synthetic`。
+32組の登録診断ではstandingの8組だけが登録・同ポーズで往復でき、他の24組は登録拒否・
+入力保持。さらに各素材のstanding在庫への別ポーズ搬入24組でも混入せず、手持ちを保持した。
+この診断結果を受けてブロック状態の保存・復元を追加し、MAT-22は登録拒否を成功扱いしない
+全ポーズ必須の回帰テストへ変更した。
+
+対応後の2026-10-17実行:
+
+- `./scripts/test.sh unit`: Python tools成功、JUnit 643件・失敗0・エラー0・既知のskip 1。
+- `./scripts/test.sh integration`: 242成功・失敗0・エラー0・skip 0。
+- `./scripts/test.sh e2e 1.21.11 without-logger`: main・restart成功、外部Loggerなし、
+  synthetic fallback 9回（mixed-client-and-synthetic）。32組の個別登録と16個の往復、
+  異なるポーズの混入防止、独自名/PDCの拒否、4ポーズのSS分割・再統合を確認した。
+  再起動後は看板PDCから復元した4ポーズの識別子・在庫16個と、復元アイテムが
+  実採掘ドロップと完全一致することを確認した。階段は明示した2プロパティだけを保持した。
+- `./scripts/test.sh e2e 1.21.4 without-logger`: main・restart成功、外部Loggerなし、
+  synthetic fallback 5回（mixed-client-and-synthetic）。銅ゴーレム未導入の版でも
+  階段の明示状態の保存・復元と既存機能の回帰テストが成功した。
+
+fallbackはクライアント操作で変化がなかった場合に実Paper上のBukkitイベントを発火する。
+全操作がクライアントパケットだけで完了した結果ではない。
+
+### 4.2 ミツバチの巣・養蜂箱の蜜の量
+
+| ID | テストケース | 期待結果 | レベル | 状態 |
+|---|---|---|---|---|
+| MAT-25 | ミツバチなしの巣・養蜂箱を蜜レベル0～5でシルクタッチ採掘し、空SSへ登録・搬入・搬出する | 2素材×6段階の12組すべてで16個を完全一致するItemMetaで往復でき、蜜レベルごとに別識別子になる | Paper E2E | ✅ |
+
+蜜の量は共通のブロック状態保存処理で扱う。ミツバチ個体は別データなので、
+ミツバチ入りの巣・養蜂箱の新規登録は拒否し、この往復テストはミツバチなしを対象にする。
+蜜レベル0は実採掘ドロップで状態指定が省略される場合があり、その場合は素材名だけの
+識別子を期待する。蜜レベル1～5は明示された `honey_level` を必須とし、
+いずれも元の採掘ドロップとのItemMeta完全一致を検証する。
+
+2026-10-17に次の絞り込み実行が成功した（製品コードの追加変更なし）。
+
+```sh
+E2E_CASE_FILTER='beehive and bee nest retain all six honey levels,prepare restart persistence,restart persistence' ./scripts/test.sh e2e 1.21.11 without-logger
+```
+
+全12組の登録・16個の搬入・搬出が成功。蜜レベル0は両素材とも状態指定なしの実物だった。
+main・restart成功、外部Loggerなし、synthetic fallback 1回（mixed-client-and-synthetic）。
+この絞り込みのrestartは既存のSTONE在庫確認であり、蜜の量の再起動保持を検証するものではない。
 
 ## 5. 手動搬入・搬出
 

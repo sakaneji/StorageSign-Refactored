@@ -94,6 +94,8 @@ public final class StorageSign {
     // リッチサブタイプフィールド（material によりいずれか 1 つのみ設定される）
     private final PotionType  potionType;
     private final Enchantment enchantment;
+    /** Canonical identifier with explicit BlockDataMeta properties, or null for legacy items. */
+    private final String blockDataIdentifier;
     private boolean           unregistered;  // non-final: 数量が 0 になると登録解除状態に切り替わる
 
     /**
@@ -183,11 +185,18 @@ public final class StorageSign {
 
     StorageSign(Material material, short damage, int amount,
                PotionType potionType, Enchantment enchantment, boolean isUnregistered) {
+        this(material, damage, amount, potionType, enchantment, isUnregistered, null);
+    }
+
+    StorageSign(Material material, short damage, int amount,
+               PotionType potionType, Enchantment enchantment, boolean isUnregistered,
+               String blockDataIdentifier) {
         this.material    = material;
         this.damage      = damage;
         this.amount      = amount;
         this.potionType  = potionType;
         this.enchantment = enchantment;
+        this.blockDataIdentifier = blockDataIdentifier;
         this.unregistered = isUnregistered;
     }
 
@@ -200,6 +209,7 @@ public final class StorageSign {
 
     public PotionType  getPotionType()  { return potionType;  }
     public Enchantment getEnchantment() { return enchantment; }
+    String getBlockDataIdentifier() { return blockDataIdentifier; }
     public boolean isSignAsItem()       { return LegacyNameRegistry.MATERIAL_TO_NAME.containsKey(material)
                                                  && damage == DAMAGE_SS_ITEM; }
 

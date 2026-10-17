@@ -5,6 +5,11 @@ The source `target/site/jacoco/jacoco.xml` artifact is not retained in the curre
 The entries below are historical reference data until `./scripts/test.sh coverage` is rerun:
 method names, owning classes, and line numbers can drift or disappear from the current source tree and must not be treated as current coverage evidence.
 
+The copper-golem pose change adds regression cases for explicit block-property identity,
+metadata rejection, all 32 statue variants, and pose persistence (MAT-22–24 in
+`test-cases.md`). These cases do not refresh the historical JaCoCo figures below;
+their execution results are recorded separately in `test-cases.md`.
+
 ## storagesign
 
 - `storagesign.StorageSignPlugin.retryOminousBanner` line 134: missed 1, covered 14

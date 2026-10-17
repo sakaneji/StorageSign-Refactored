@@ -143,6 +143,71 @@ async function activateSign({ sneak = false } = {}) {
   }
 }
 
+function slabInteractionState(state) {
+  return JSON.stringify([
+    state.lines, state.signKey, state.heldType, state.heldLore,
+    state.stoneSlabs, state.smoothStoneSlabs, state.playerSigns, state.slabInputPreserved,
+    state.golemItems, state.golemInputPreserved
+  ])
+}
+
+async function activateSlabSign(scenario, { sneak = false } = {}) {
+  const before = await inspect(scenario)
+  await activateSign({ sneak })
+  let state = await inspect(scenario)
+  // An unchanged state also covers expected registration rejection. Dispatch a
+  // counted synthetic event so that a missing packet cannot masquerade as
+  // rejection. A wrong quantity or material must not be hidden by a retry.
+  if (slabInteractionState(state) === slabInteractionState(before)) {
+    process.stdout.write('Mineflayer slab interaction produced no observable change; exercising PlayerInteractEvent fallback\n')
+    syntheticFallbacks++
+    if (sneak) await command('/sstest sneak true', 'SSTEST SNEAK true')
+    try {
+      await command(`/sstest interact ${scenario}`, `SSTEST INTERACTED ${scenario}`)
+      await sleep(600)
+    } finally {
+      if (sneak) await command('/sstest sneak false', 'SSTEST SNEAK false')
+    }
+    state = await inspect(scenario)
+  }
+  return state
+}
+
+function assertPlainSlabs(state, field, expected) {
+  const slabs = state[field]
+  assert.equal(slabs.player + slabs.dropped, expected)
+  assert.equal(slabs.plain, expected, 'Exported slabs must stack with plain items')
+  assert.equal(slabs.damaged, 0, 'The legacy subtype marker is not item damage')
+  const other = state[field === 'stoneSlabs' ? 'smoothStoneSlabs' : 'stoneSlabs']
+  assert.equal(other.player + other.dropped, 0, 'Stone and smooth stone slabs must remain distinct')
+}
+
+async function runSlabTransfer({ scenario, itemName, field, identifier, register = false }) {
+  await reset(scenario)
+  await equip(itemName)
+  let state = await inspect(scenario)
+  assert.equal(state.signKey, '', 'The fixture must start without modern PDC')
+  assertPlainSlabs(state, field, 16)
+  if (register) {
+    state = await activateSlabSign(scenario)
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.signKey, identifier)
+    assertPlainSlabs(state, field, 16)
+  }
+
+  // Each interaction reconstructs StorageSign from the persisted block state.
+  state = await activateSlabSign(scenario, { sneak: true })
+  assert.equal(state.lines[2], register ? '16' : '80')
+  assert.equal(state.signKey, identifier)
+  assertPlainSlabs(state, field, 0)
+
+  await emptyHand()
+  state = await activateSlabSign(scenario)
+  assert.equal(state.lines[2], register ? '0' : '16')
+  assert.equal(state.signKey, identifier)
+  assertPlainSlabs(state, field, register ? 16 : 64)
+}
+
 async function runCase(name, body) {
   if (caseFilter.size > 0 && !caseFilter.has(name)) return
   selectedCases++
@@ -300,6 +365,260 @@ async function runMainSuite() {
     const state = await inspect('manual-import')
     assert.equal(state.lines[2], '80')
     assert.equal(state.playerStone, 0)
+  })
+
+  // Resolve by runtime registry so older supported servers still run this suite.
+  if (bot.registry.itemsByName.copper_golem_statue) {
+    await runCase('mined copper golem statues register import and export all eight variants', async () => {
+      for (const wax of ['', 'waxed_']) {
+        for (const oxidation of ['', 'exposed_', 'weathered_', 'oxidized_']) {
+          const itemName = `${wax}${oxidation}copper_golem_statue`
+          const scenario = `golem-${itemName}`
+          await reset(scenario)
+          await equip(itemName)
+          let state = await activateSlabSign(scenario)
+          assert.equal(state.signKey, itemName.toUpperCase(), `${itemName} registration`)
+          assert.equal(state.lines[2], '0')
+          assert.equal(state.golemInputPreserved, true, 'Registration must preserve the input')
+          state = await activateSlabSign(scenario, { sneak: true })
+          assert.equal(state.lines[2], '16', `${itemName} import`)
+          assert.equal(state.golemItems.player + state.golemItems.dropped, 0)
+          await emptyHand()
+          state = await activateSlabSign(scenario)
+          assert.equal(state.signKey, itemName.toUpperCase())
+          assert.equal(state.lines[2], '0', `${itemName} export`)
+          assert.equal(state.golemItems.player + state.golemItems.dropped, 16)
+          assert.equal(state.golemItems.plain, 16, 'Exported statues must stack with plain items')
+        }
+      }
+    })
+
+    await runCase('copper golem statues with name or plugin data are rejected without consuming input', async () => {
+      for (const metadata of ['name', 'pdc']) {
+        const scenario = `golem-oxidized_copper_golem_statue~${metadata}`
+        await reset(scenario)
+        await equip('oxidized_copper_golem_statue')
+        const before = await inspect(scenario)
+        assert.equal(before.golemItems.plain, 0, `${metadata} fixture must carry custom data`)
+        const state = await activateSlabSign(scenario)
+        assert.equal(state.signKey, '')
+        assert.equal(state.lines[1], '')
+        assert.equal(state.lines[2], '0')
+        assert.equal(state.golemInputPreserved, true)
+        assert.equal(state.golemItems.player, 16)
+        assert.equal(state.golemItems.dropped, 0)
+      }
+    })
+
+    await runCase('copper golem poses register store and round trip all thirty two variants', async () => {
+      const poses = ['standing', 'sitting', 'running', 'star']
+      const results = []
+      for (const wax of ['', 'waxed_']) {
+        for (const oxidation of ['', 'exposed_', 'weathered_', 'oxidized_']) {
+          const itemName = `${wax}${oxidation}copper_golem_statue`
+          const identifiers = new Set()
+          for (const pose of poses) {
+            const scenario = `golem-${itemName}~pose-${pose}`
+            await reset(scenario)
+            await equip(itemName)
+            let state = await inspect(scenario)
+            assert.equal(state.golemInputPose, pose, 'Actual mined item must retain the fixture pose')
+            assert.equal(state.golemHeldPose, pose)
+            assert.equal(state.golemHeldSimilar, true, 'Fixture should be similar to its held drop')
+            assert.equal(state.golemPoseCounts[pose], 16)
+            state = await activateSlabSign(scenario)
+            const identifier = pose === 'standing'
+              ? itemName.toUpperCase()
+              : `${itemName.toUpperCase()}[copper_golem_pose=${pose}]`
+            assert.equal(state.golemInputPreserved, true)
+            assert.equal(state.signKey, identifier, `${itemName} ${pose} registration`)
+            assert.equal(identifiers.has(state.signKey), false, 'Each pose needs a distinct identifier')
+            identifiers.add(state.signKey)
+            assert.equal(state.lines[2], '0')
+            state = await activateSlabSign(scenario, { sneak: true })
+            assert.equal(state.lines[2], '16')
+            assert.equal(state.golemItems.player + state.golemItems.dropped, 0)
+            await emptyHand()
+            state = await activateSlabSign(scenario)
+            assert.equal(state.lines[2], '0')
+            assert.equal(state.golemPoseCounts[pose], 16, 'Export must preserve the registered pose')
+            assert.equal(state.golemSimilarCount, 16, 'Exported stack must retain all item metadata')
+            results.push({ item: itemName, pose, identifier, roundTrip: true })
+          }
+          assert.equal(identifiers.size, 4)
+        }
+      }
+
+      // Every ordered pair of distinct poses must stay in separate storage.
+      for (const [source, held] of poses.flatMap(source => poses
+        .filter(target => target !== source).map(target => [source, target]))) {
+        const itemName = 'copper_golem_statue'
+        const scenario = `golem-${itemName}~pose-${source}`
+        await reset(scenario)
+        await equip(itemName)
+        let state = await activateSlabSign(scenario)
+        const identifier = source === 'standing' ? 'COPPER_GOLEM_STATUE'
+          : `COPPER_GOLEM_STATUE[copper_golem_pose=${source}]`
+        assert.equal(state.signKey, identifier)
+        state = await activateSlabSign(scenario, { sneak: true })
+        assert.equal(state.lines[2], '16')
+        await command(`/sstest golem-input ${held}`, `SSTEST GOLEM INPUT ${held}`)
+        state = await inspect(scenario)
+        assert.equal(state.golemInputPose, held)
+        assert.equal(state.golemInputPreserved, true)
+        state = await activateSlabSign(scenario)
+        assert.equal(state.lines[2], '0', `${held} must not merge with ${source} stock`)
+        assert.equal(state.golemInputPreserved, true)
+        assert.equal(state.golemPoseCounts[held], 16)
+        assert.equal(state.golemPoseCounts[source], 16)
+      }
+
+      // Keep the existing coverage for every standing statue material.
+      for (const wax of ['', 'waxed_']) {
+        for (const oxidation of ['', 'exposed_', 'weathered_', 'oxidized_']) {
+          const itemName = `${wax}${oxidation}copper_golem_statue`
+          for (const held of poses.slice(1)) {
+            const scenario = `golem-${itemName}~pose-standing`
+            await reset(scenario)
+            await equip(itemName)
+            let state = await activateSlabSign(scenario)
+            assert.equal(state.signKey, itemName.toUpperCase())
+            state = await activateSlabSign(scenario, { sneak: true })
+            assert.equal(state.lines[2], '16')
+            await command(`/sstest golem-input ${held}`, `SSTEST GOLEM INPUT ${held}`)
+            state = await activateSlabSign(scenario)
+            assert.equal(state.lines[2], '0', `${held} must not merge with standing stock`)
+            assert.equal(state.golemInputPreserved, true)
+            assert.equal(state.golemPoseCounts[held], 16)
+            assert.equal(state.golemPoseCounts.standing, 16)
+          }
+        }
+      }
+      assert.equal(results.length, 32)
+      process.stdout.write(`GOLEM_POSE_RESULT ${JSON.stringify(results)}\n`)
+    })
+
+    await runCase('sitting copper golem registration rejects custom name and plugin data', async () => {
+      for (const metadata of ['name', 'pdc']) {
+        const scenario = `golem-oxidized_copper_golem_statue~pose-sitting-${metadata}`
+        await reset(scenario)
+        await equip('oxidized_copper_golem_statue')
+        const before = await inspect(scenario)
+        assert.equal(before.golemInputPose, 'sitting')
+        assert.equal(before.golemHeldPose, 'sitting')
+        assert.equal(before.golemItems.plain, 0, `${metadata} fixture must carry custom data`)
+        const state = await activateSlabSign(scenario)
+        assert.equal(state.signKey, '')
+        assert.equal(state.lines[1], '')
+        assert.equal(state.lines[2], '0')
+        assert.equal(state.golemInputPreserved, true)
+        assert.equal(state.golemHeldSimilar, true)
+        assert.equal(state.golemItems.player, 16)
+        assert.equal(state.golemItems.dropped, 0)
+      }
+    })
+
+    await runCase('copper golem pose division lore and merge round trip', async () => {
+      for (const pose of ['standing', 'sitting', 'running', 'star']) {
+        const scenario = `golem-pose-divide-${pose}`
+        await reset(scenario)
+        let state = await inspect(scenario)
+        const identifier = pose === 'standing' ? 'COPPER_GOLEM_STATUE'
+          : `COPPER_GOLEM_STATUE[copper_golem_pose=${pose}]`
+        assert.equal(state.signKey, identifier)
+        await equip('oak_sign')
+        state = await activateSlabSign(scenario)
+        assert.equal(state.lines[2], '34')
+        assert.ok(state.heldLore.includes(`${identifier} 33`))
+        assert.equal(state.playerPoseStorageSigns, 2)
+        state = await activateSlabSign(scenario)
+        assert.equal(state.lines[2], '100')
+        assert.equal(state.playerPoseStorageSigns, 0)
+      }
+    })
+    await runCase('sitting copper golem rejects same-state custom items on import', async () => {
+      for (const metadata of ['name', 'pdc']) {
+        const scenario = `golem-import-sitting-${metadata}`
+        await reset(scenario)
+        await command(`/sstest golem-input sitting-${metadata}`, `SSTEST GOLEM INPUT sitting-${metadata}`)
+        let state = await inspect(scenario)
+        assert.equal(state.golemHeldPose, 'sitting')
+        assert.equal(state.golemItems.plain, 0)
+        state = await activateSlabSign(scenario, { sneak: true })
+        assert.equal(state.signKey, 'COPPER_GOLEM_STATUE[copper_golem_pose=sitting]')
+        assert.equal(state.lines[2], '15', `${metadata} item must not merge with sitting stock`)
+        assert.equal(state.golemInputPreserved, true)
+        assert.equal(state.golemHeldSimilar, true)
+        assert.equal(state.golemItems.player, 17)
+        assert.equal(state.golemSimilarCount, 16, 'Custom items must remain intact after export')
+        assert.equal(state.golemPoseCounts.sitting, 17)
+      }
+    })
+  }
+
+  await runCase('beehive and bee nest retain all six honey levels', async () => {
+    for (const itemName of ['beehive', 'bee_nest']) {
+      const identifiers = new Set()
+      for (const level of [5, 4, 3, 2, 1, 0]) {
+        const scenario = `honey-${itemName}~${level}`
+        await reset(scenario)
+        await equip(itemName)
+        let state = await inspect(scenario)
+        const hasState = state.statefulInputData !== ''
+        // The actual server drop can omit honey_level=0, its default state.
+        assert.ok((level === 0 && !hasState)
+          || state.statefulInputData.includes(`honey_level=${level}`))
+        assert.equal(state.statefulInputPreserved, true)
+        state = await activateSlabSign(scenario)
+        const identifier = hasState
+          ? `${itemName.toUpperCase()}[honey_level=${level}]` : itemName.toUpperCase()
+        assert.equal(state.signKey, identifier, `${itemName} honey ${level} registration`)
+        assert.equal(state.lines[2], '0')
+        assert.equal(state.statefulInputPreserved, true)
+        identifiers.add(state.signKey)
+        state = await activateSlabSign(scenario, { sneak: true })
+        assert.equal(state.lines[2], '16')
+        assert.equal(state.statefulSimilarCount, 0)
+        await emptyHand()
+        state = await activateSlabSign(scenario)
+        assert.equal(state.lines[2], '0')
+        assert.equal(state.statefulSimilarCount, 16,
+          `${itemName} honey ${level} export must retain all mined item metadata`)
+      }
+      assert.equal(identifiers.size, 6, 'Honey levels must have distinct identifiers')
+    }
+  })
+
+  await runCase('generic stateful block item registers exact block properties', async () => {
+    const scenario = 'stateful-stairs'
+    await reset(scenario)
+    await equip('oak_stairs')
+    let state = await inspect(scenario)
+    assert.equal(state.statefulInputPreserved, true)
+    assert.ok(state.statefulInputData.includes('facing=east'))
+    assert.ok(state.statefulInputData.includes('half=top'))
+    state = await activateSlabSign(scenario)
+    assert.equal(state.signKey,
+      'OAK_STAIRS[facing=east,half=top]')
+    assert.equal(state.statefulInputPreserved, true)
+    state = await activateSlabSign(scenario, { sneak: true })
+    assert.equal(state.lines[2], '16')
+    assert.equal(state.statefulSimilarCount, 0)
+    await emptyHand()
+    state = await activateSlabSign(scenario)
+    assert.equal(state.lines[2], '0')
+    assert.equal(state.statefulSimilarCount, 16)
+    assert.ok(state.statefulInputData.includes('facing=east'))
+    assert.ok(state.statefulInputData.includes('half=top'))
+
+    const customScenario = 'stateful-stairs-pdc'
+    await reset(customScenario)
+    await equip('oak_stairs')
+    const before = await inspect(customScenario)
+    assert.equal(before.statefulInputPreserved, true)
+    const rejected = await activateSlabSign(customScenario)
+    assert.equal(rejected.signKey, '')
+    assert.equal(rejected.statefulInputPreserved, true)
   })
 
   await runCase('manual import stops at Integer maximum', async () => {
@@ -735,6 +1054,24 @@ async function runMainSuite() {
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
   })
 
+  if (bot.registry.itemsByName.copper_golem_statue) {
+    await runCase('prepare copper golem pose restart persistence', async () => {
+      await command('/sstest pose-restart-seed golems', 'SSTEST POSE RESTART SEEDED')
+      const state = await inspect('pose-restart')
+      assert.equal(state.poseRestartSigns.length, 4)
+      assert.ok(state.poseRestartSigns.every(entry =>
+        entry?.lines?.[0] === 'StorageSign' && entry?.lines?.[2] === '16'))
+      assert.deepEqual(state.poseRestartSigns.map(entry => [
+        entry.identifier, entry.pose, entry.amount, entry.contentsSimilar
+      ]), [
+        ['COPPER_GOLEM_STATUE', 'standing', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=sitting]', 'sitting', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=running]', 'running', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=star]', 'star', 16, true]
+      ])
+    })
+  }
+
   await runCase('storage index chunk load scan', async () => {
     await reset('index-chunk-load')
     let state = await inspect('index-chunk-load')
@@ -781,6 +1118,22 @@ async function runRestartCheck() {
     const state = await inspect('restart')
     assert.deepEqual(state.lines.slice(0, 3), ['StorageSign', 'STONE', '77'])
   })
+  if (bot.registry.itemsByName.copper_golem_statue) {
+    await runCase('copper golem pose storage persists across restart', async () => {
+      const state = await inspect('pose-restart')
+      assert.equal(state.poseRestartSigns.length, 4)
+      assert.ok(state.poseRestartSigns.every(entry =>
+        entry?.lines?.[0] === 'StorageSign' && entry?.lines?.[2] === '16'))
+      assert.deepEqual(state.poseRestartSigns.map(entry => [
+        entry.identifier, entry.pose, entry.amount, entry.contentsSimilar
+      ]), [
+        ['COPPER_GOLEM_STATUE', 'standing', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=sitting]', 'sitting', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=running]', 'running', 16, true],
+        ['COPPER_GOLEM_STATUE[copper_golem_pose=star]', 'star', 16, true]
+      ])
+    })
+  }
   await runCase('storage index persists across restart', async () => {
     await command('/sstest admin true', 'SSTEST ADMIN true')
     bot.chat('/storagesignsearch item STONE')

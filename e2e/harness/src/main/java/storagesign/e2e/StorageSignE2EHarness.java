@@ -23,6 +23,7 @@ import org.bukkit.block.data.Directional;
 import org.bukkit.block.sign.Side;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
@@ -44,6 +45,8 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.meta.BannerMeta;
+import org.bukkit.inventory.meta.BlockDataMeta;
+import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.OminousBottleMeta;
 import org.bukkit.permissions.PermissionAttachment;
@@ -60,6 +63,9 @@ public final class StorageSignE2EHarness extends JavaPlugin {
     private boolean lastBreakCancelled;
     private boolean lastBreakDrops;
     private List<String> lastEditLines = List.of();
+    private ItemStack expectedSlabInput;
+    private ItemStack expectedGolemInput;
+    private ItemStack expectedStatefulInput;
 
     @Override
     public void onEnable() {
@@ -78,6 +84,28 @@ public final class StorageSignE2EHarness extends JavaPlugin {
                     player.sendMessage("SSTEST READY " + scenario);
                 }
                 case "inspect" -> player.sendMessage("SSTEST " + snapshot(player, scenario));
+                case "golem-input" -> {
+                    if (expectedGolemInput == null) throw new IllegalStateException("No golem fixture");
+                    String[] fixtureParts = scenario.split("-", 2);
+                    expectedGolemInput = golemDrop(player.getWorld(), expectedGolemInput.getType(), fixtureParts[0]);
+                    if (fixtureParts.length == 2) {
+                        ItemMeta meta = expectedGolemInput.getItemMeta();
+                        if ("name".equals(fixtureParts[1])) meta.setDisplayName("Named golem");
+                        else if ("pdc".equals(fixtureParts[1])) meta.getPersistentDataContainer().set(
+                            new NamespacedKey("test", "golem"), PersistentDataType.STRING, "unique-golem");
+                        else throw new IllegalArgumentException("Unknown golem metadata: " + fixtureParts[1]);
+                        expectedGolemInput.setItemMeta(meta);
+                    }
+                    expectedGolemInput.setAmount(16);
+                    player.getInventory().clear();
+                    player.getInventory().setItem(0, expectedGolemInput.clone());
+                    player.getInventory().setHeldItemSlot(0);
+                    player.sendMessage("SSTEST GOLEM INPUT " + scenario);
+                }
+                case "pose-restart-seed" -> {
+                    seedPoseRestartSigns(player.getWorld());
+                    player.sendMessage("SSTEST POSE RESTART SEEDED");
+                }
                 case "drop" -> {
                     player.getWorld().dropItem(
                         player.getLocation().clone().add(0, 0.25, 0),
@@ -173,6 +201,116 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         lastBreakCancelled = false;
         lastBreakDrops = true;
         lastEditLines = List.of();
+        expectedSlabInput = null;
+        expectedGolemInput = null;
+        expectedStatefulInput = null;
+
+        if (scenario.startsWith("golem-")
+            && !scenario.startsWith("golem-pose-divide-")
+            && !scenario.startsWith("golem-import-sitting-")) {
+            String[] parts = scenario.substring("golem-".length()).split("~", 2);
+            Material material = Material.matchMaterial(parts[0]);
+            if (material == null || !material.name().endsWith("COPPER_GOLEM_STATUE")) {
+                throw new IllegalArgumentException("Unsupported golem statue: " + parts[0]);
+            }
+            createStorageSign(world, 0, BASE_Y, 0, "", 0);
+            // Use the actual server loot result, including any block-entity metadata.
+            boolean poseScenario = parts.length == 2 && parts[1].startsWith("pose-");
+            String metadata = null;
+            String pose = null;
+            if (poseScenario) {
+                String[] poseParts = parts[1].substring("pose-".length()).split("-", 2);
+                pose = poseParts[0];
+                if (poseParts.length == 2) metadata = poseParts[1];
+            }
+            ItemStack input = golemDrop(world, material, poseScenario ? pose : null);
+            input.setAmount(16);
+            if (metadata != null || (parts.length == 2 && !poseScenario)) {
+                ItemMeta meta = input.getItemMeta();
+                String metadataKind = metadata != null ? metadata : parts[1];
+                if ("name".equals(metadataKind)) meta.setDisplayName("Named golem");
+                else if ("pdc".equals(metadataKind)) meta.getPersistentDataContainer().set(
+                    new NamespacedKey("test", "golem"), PersistentDataType.STRING, "unique-golem");
+                else throw new IllegalArgumentException("Unknown golem metadata: " + parts[1]);
+                input.setItemMeta(meta);
+            }
+            expectedGolemInput = input.clone();
+            player.getInventory().setItem(0, input);
+            player.getInventory().setHeldItemSlot(0);
+            player.setGameMode(GameMode.SURVIVAL);
+            return;
+        }
+
+        if (scenario.startsWith("golem-pose-divide-")) {
+            String pose = scenario.substring("golem-pose-divide-".length());
+            String identifier = pose.equals("standing") ? "COPPER_GOLEM_STATUE"
+                : "COPPER_GOLEM_STATUE[copper_golem_pose=" + pose + "]";
+            createStorageSign(world, 0, BASE_Y, 0, identifier, 100);
+            Sign sign = (Sign) world.getBlockAt(0, BASE_Y, 0).getState();
+            writeProductStorageSign(readProductStorageSign(sign), sign);
+            giveEmptyStorageSigns(player, 2);
+            return;
+        }
+
+        if (scenario.startsWith("golem-import-sitting-")) {
+            createStorageSign(world, 0, BASE_Y, 0,
+                "COPPER_GOLEM_STATUE[copper_golem_pose=sitting]", 16);
+            Material statueMaterial = Material.matchMaterial("COPPER_GOLEM_STATUE");
+            if (statueMaterial == null) throw new IllegalStateException("Copper golem statue is unavailable");
+            expectedGolemInput = golemDrop(world, statueMaterial, "sitting");
+            expectedGolemInput.setAmount(16);
+            player.getInventory().setItem(0, expectedGolemInput.clone());
+            player.setGameMode(GameMode.SURVIVAL);
+            return;
+        }
+
+        if (scenario.startsWith("honey-")) {
+            String[] parts = scenario.substring("honey-".length()).split("~", -1);
+            Material material = Material.matchMaterial(parts[0]);
+            if (parts.length != 2 || (material != Material.BEEHIVE && material != Material.BEE_NEST)) {
+                throw new IllegalArgumentException("Unsupported honey fixture: " + scenario);
+            }
+            int level = Integer.parseInt(parts[1]);
+            if (level < 0 || level > 5) throw new IllegalArgumentException("Invalid honey level");
+            createStorageSign(world, 0, BASE_Y, 0, "", 0);
+            Block hive = world.getBlockAt(5, BASE_Y, 0);
+            hive.setType(material);
+            try {
+                hive.setBlockData(Bukkit.createBlockData(material.getKey() + "[honey_level=" + level + "]"));
+                ItemStack tool = new ItemStack(Material.DIAMOND_AXE);
+                tool.addUnsafeEnchantment(Enchantment.SILK_TOUCH, 1);
+                ItemStack input = hive.getDrops(tool).stream()
+                    .filter(item -> item.getType() == material).findFirst().orElseThrow().clone();
+                input.setAmount(16);
+                expectedStatefulInput = input.clone();
+                player.getInventory().setItem(0, input);
+                player.getInventory().setHeldItemSlot(0);
+                player.setGameMode(GameMode.SURVIVAL);
+            } finally {
+                hive.setType(Material.AIR);
+            }
+            return;
+        }
+
+        if (scenario.startsWith("stateful-stairs")) {
+            createStorageSign(world, 0, BASE_Y, 0, "", 0);
+            ItemStack stairs = new ItemStack(Material.OAK_STAIRS, 16);
+            ItemMeta meta = stairs.getItemMeta();
+            if (!(meta instanceof BlockDataMeta blockMeta)) {
+                throw new IllegalStateException("Oak stairs item has no block-data metadata");
+            }
+            blockMeta.setBlockData(Bukkit.createBlockData(
+                "minecraft:oak_stairs[facing=east,half=top]"));
+            if (scenario.endsWith("-pdc")) {
+                meta.getPersistentDataContainer().set(new NamespacedKey("test", "stairs"),
+                    PersistentDataType.STRING, "custom-stateful-item");
+            }
+            stairs.setItemMeta(meta);
+            expectedStatefulInput = stairs.clone();
+            player.getInventory().setItem(0, stairs);
+            player.setGameMode(GameMode.SURVIVAL);
+            return;
+        }
 
         switch (scenario) {
             case "client", "long-identifier", "special-potion", "special-banner" ->
@@ -369,6 +507,22 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         front.setLine(2, Integer.toString(amount));
         front.setLine(3, summary(amount));
         sign.update(true, false);
+    }
+
+    private static void seedPoseRestartSigns(World world) {
+        List<String> poses = List.of("standing", "sitting", "running", "star");
+        for (int index = 0; index < poses.size(); index++) {
+            String pose = poses.get(index);
+            String identifier = pose.equals("standing") ? "COPPER_GOLEM_STATUE"
+                : "COPPER_GOLEM_STATUE[copper_golem_pose=" + pose + "]";
+            createStorageSign(world, 48 + index, BASE_Y, 48, identifier, 16);
+            Sign sign = (Sign) world.getBlockAt(48 + index, BASE_Y, 48).getState();
+            Object stored = readProductStorageSign(sign);
+            if (stored == null || productSignBoolean(stored, "isUnregistered")) {
+                throw new IllegalStateException("Could not create restart StorageSign for " + identifier);
+            }
+            writeProductStorageSign(stored, sign);
+        }
     }
 
     private static void createLegacyStorageSign(World world, int x, int y, int z,
@@ -620,10 +774,36 @@ public final class StorageSignE2EHarness extends JavaPlugin {
         ItemStack chestBanner = bannerChestItem(world);
         ItemStack inspectedBanner = playerBanner != null ? playerBanner : chestBanner;
         String heldLore = heldLore(player);
+        String poseStorageLore = "";
+        if (scenario.startsWith("golem-pose-divide-")) {
+            String pose = scenario.substring("golem-pose-divide-".length());
+            String identifier = pose.equals("standing") ? "COPPER_GOLEM_STATUE"
+                : "COPPER_GOLEM_STATUE[copper_golem_pose=" + pose + "]";
+            poseStorageLore = identifier + " 33";
+        }
         PotionSignSnapshot potionSign = potionSignSnapshot(world, scenario);
         ItemStack ominousBottle = find(player.getInventory().getContents(), Material.OMINOUS_BOTTLE);
         return "{\"scenario\":\"" + escape(scenario) + "\","
             + "\"lines\":" + jsonArray(lines) + ","
+            + "\"signKey\":\"" + escape(storageIdentifier(world)) + "\","
+            + "\"poseRestartSigns\":" + poseRestartSnapshot(world) + ","
+            + "\"stoneSlabs\":" + slabSnapshot(player, Material.STONE_SLAB) + ","
+            + "\"smoothStoneSlabs\":" + slabSnapshot(player, Material.SMOOTH_STONE_SLAB) + ","
+            + "\"slabInputPreserved\":" + slabInputPreserved(player) + ","
+            + "\"golemItems\":" + (expectedGolemInput == null ? "null"
+                : slabSnapshot(player, expectedGolemInput.getType())) + ","
+            + "\"golemInputPreserved\":" + (expectedGolemInput != null
+                && player.getInventory().getItemInMainHand().equals(expectedGolemInput)) + ","
+            + "\"golemHeldSimilar\":" + (expectedGolemInput != null
+                && expectedGolemInput.isSimilar(player.getInventory().getItemInMainHand())) + ","
+            + "\"golemSimilarCount\":" + golemSimilarCount(player) + ","
+            + "\"statefulInputPreserved\":" + (expectedStatefulInput != null
+                && expectedStatefulInput.equals(player.getInventory().getItemInMainHand())) + ","
+            + "\"statefulInputData\":\"" + escape(blockDataString(expectedStatefulInput)) + "\","
+            + "\"statefulSimilarCount\":" + statefulSimilarCount(player) + ","
+            + "\"golemInputPose\":\"" + golemPose(expectedGolemInput) + "\","
+            + "\"golemHeldPose\":\"" + golemPose(player.getInventory().getItemInMainHand()) + "\","
+            + "\"golemPoseCounts\":" + golemPoseCounts(player) + ","
             + "\"indexedSigns\":" + indexedSigns + ","
             + "\"playerStone\":" + playerStone + ","
             + "\"playerSigns\":" + playerSigns + ","
@@ -631,6 +811,8 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"playerEmptyStorageSigns\":" + playerEmptyStorageSigns + ","
             + "\"playerRegisteredStorageSigns\":" + playerRegisteredStorageSigns + ","
             + "\"playerReducedStorageSigns\":" + playerReducedStorageSigns + ","
+            + "\"playerPoseStorageSigns\":" + (poseStorageLore.isEmpty() ? 0
+                : countStorageSignsWithLore(player.getInventory().getContents(), poseStorageLore)) + ","
             + "\"droppedStone\":" + droppedStone + ","
             + "\"droppedStorageSigns\":" + droppedStorageSigns(world) + ","
             + "\"droppedEmptyStorageSigns\":"
@@ -665,6 +847,177 @@ public final class StorageSignE2EHarness extends JavaPlugin {
             + "\"potionSignLines\":" + jsonArray(potionSign.lines()) + ","
             + "\"potionSignKey\":\"" + escape(potionSign.key()) + "\","
             + "\"potionSignDisplayWidth\":" + potionSign.displayWidth() + "}";
+    }
+
+    private static String storageIdentifier(World world) {
+        if (!(world.getBlockAt(0, BASE_Y, 0).getState() instanceof Sign sign)) return "";
+        String identifier = sign.getPersistentDataContainer().get(
+            new NamespacedKey("storagesign", "storage_identifier"), PersistentDataType.STRING);
+        return identifier == null ? "" : identifier;
+    }
+
+    private static String poseRestartSnapshot(World world) {
+        List<String> entries = new ArrayList<>();
+        List<String> poses = List.of("standing", "sitting", "running", "star");
+        for (int index = 0; index < 4; index++) {
+            Block block = world.getBlockAt(48 + index, BASE_Y, 48);
+            if (!(block.getState() instanceof Sign sign)) {
+                entries.add("null");
+                continue;
+            }
+            Object restored = readProductStorageSign(sign);
+            boolean valid = restored != null && !productSignBoolean(restored, "isUnregistered");
+            ItemStack restoredContents = valid ? productSignContents(restored) : null;
+            String pose = poses.get(index);
+            ItemStack expected = restoredContents == null
+                || !((Material) productSignValue(restored, "getMaterial")).name()
+                    .endsWith("COPPER_GOLEM_STATUE") ? null
+                : golemDrop(world, (Material) productSignValue(restored, "getMaterial"), pose);
+            List<String> lines = List.of(sign.getSide(Side.FRONT).getLines());
+            entries.add("{\"identifier\":\"" + escape(valid ? (String) productSignValue(restored, "getIdentifier") : "")
+                + "\",\"amount\":" + (valid ? productSignValue(restored, "getAmount") : -1)
+                + ",\"pose\":\"" + golemPose(restoredContents) + "\",\"contentsSimilar\":"
+                + (restoredContents != null && expected != null && expected.isSimilar(restoredContents))
+                + ",\"lines\":" + jsonArray(lines) + "}");
+        }
+        return "[" + String.join(",", entries) + "]";
+    }
+
+    private static Object readProductStorageSign(Sign sign) {
+        Plugin plugin = Bukkit.getPluginManager().getPlugin("StorageSign-Refactored");
+        if (plugin == null) throw new IllegalStateException("StorageSign plugin is missing");
+        try {
+            Class<?> api = plugin.getClass().getClassLoader().loadClass("storagesign.StorageSign");
+            return api.getMethod("fromSign", Sign.class).invoke(null, sign);
+        } catch (ReflectiveOperationException | LinkageError e) {
+            throw new IllegalStateException("Failed to read StorageSign model", e);
+        }
+    }
+
+    private static Object productSignValue(Object model, String method) {
+        try {
+            return model.getClass().getMethod(method).invoke(model);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to read StorageSign " + method, e);
+        }
+    }
+
+    private static boolean productSignBoolean(Object model, String method) {
+        return (boolean) productSignValue(model, method);
+    }
+
+    private static ItemStack productSignContents(Object model) {
+        try {
+            return (ItemStack) model.getClass().getMethod("getContents", int.class).invoke(model, 1);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to restore StorageSign contents", e);
+        }
+    }
+
+    private static void writeProductStorageSign(Object model, Sign sign) {
+        try {
+            model.getClass().getMethod("applyToSign", Sign.class).invoke(model, sign);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to persist StorageSign model", e);
+        }
+    }
+
+    private static ItemStack golemDrop(World world, Material material, String pose) {
+        Block statue = world.getBlockAt(5, BASE_Y, 0);
+        statue.setType(material);
+        try {
+            if (pose != null) {
+                if (!List.of("standing", "sitting", "running", "star").contains(pose)) {
+                    throw new IllegalArgumentException("Unknown golem pose: " + pose);
+                }
+                statue.setBlockData(Bukkit.createBlockData(material.getKey()
+                    + "[copper_golem_pose=" + pose + "]"));
+            }
+            return statue.getDrops(new ItemStack(Material.DIAMOND_PICKAXE)).stream()
+                .filter(item -> item.getType() == material).findFirst().orElseThrow().clone();
+        } finally {
+            statue.setType(Material.AIR);
+        }
+    }
+
+    private static String golemPose(ItemStack item) {
+        if (item == null || !item.getType().name().endsWith("COPPER_GOLEM_STATUE")) return "";
+        if (item.getItemMeta() instanceof BlockDataMeta meta && meta.hasBlockData()) {
+            String data = meta.getBlockData(item.getType()).getAsString();
+            for (String pose : List.of("standing", "sitting", "running", "star")) {
+                if (data.contains("copper_golem_pose=" + pose)) return pose;
+            }
+        }
+        return "standing";
+    }
+
+    private static String blockDataString(ItemStack item) {
+        if (item == null || !(item.getItemMeta() instanceof BlockDataMeta meta) || !meta.hasBlockData()) return "";
+        return meta.getBlockData(item.getType()).getAsString();
+    }
+
+    private int statefulSimilarCount(Player player) {
+        if (expectedStatefulInput == null) return 0;
+        int inventoryCount = 0;
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && expectedStatefulInput.isSimilar(item)) inventoryCount += item.getAmount();
+        }
+        return inventoryCount + player.getWorld().getEntitiesByClass(Item.class).stream()
+            .map(Item::getItemStack).filter(expectedStatefulInput::isSimilar)
+            .mapToInt(ItemStack::getAmount).sum();
+    }
+
+    private String golemPoseCounts(Player player) {
+        if (expectedGolemInput == null) return "null";
+        List<ItemStack> stacks = new ArrayList<>();
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && item.getType() == expectedGolemInput.getType()) stacks.add(item);
+        }
+        player.getWorld().getEntitiesByClass(Item.class).stream().map(Item::getItemStack)
+            .filter(item -> item.getType() == expectedGolemInput.getType()).forEach(stacks::add);
+        List<String> counts = new ArrayList<>();
+        for (String pose : List.of("standing", "sitting", "running", "star")) {
+            int amount = stacks.stream().filter(item -> pose.equals(golemPose(item)))
+                .mapToInt(ItemStack::getAmount).sum();
+            counts.add("\"" + pose + "\":" + amount);
+        }
+        return "{" + String.join(",", counts) + "}";
+    }
+
+    private int golemSimilarCount(Player player) {
+        if (expectedGolemInput == null) return 0;
+        int inventoryCount = 0;
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && expectedGolemInput.isSimilar(item)) inventoryCount += item.getAmount();
+        }
+        return inventoryCount + player.getWorld().getEntitiesByClass(Item.class).stream()
+            .map(Item::getItemStack).filter(expectedGolemInput::isSimilar)
+            .mapToInt(ItemStack::getAmount).sum();
+    }
+
+    private static String slabSnapshot(Player player, Material material) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && item.getType() == material) stacks.add(item);
+        }
+        int inInventory = stacks.stream().mapToInt(ItemStack::getAmount).sum();
+        List<ItemStack> drops = player.getWorld().getEntitiesByClass(Item.class).stream()
+            .map(Item::getItemStack).filter(item -> item.getType() == material).toList();
+        stacks.addAll(drops);
+        ItemStack plain = new ItemStack(material);
+        int plainCount = stacks.stream().filter(plain::isSimilar).mapToInt(ItemStack::getAmount).sum();
+        int damagedCount = stacks.stream()
+            .filter(item -> item.getItemMeta() instanceof Damageable meta && meta.getDamage() != 0)
+            .mapToInt(ItemStack::getAmount).sum();
+        return "{\"player\":" + inInventory
+            + ",\"dropped\":" + drops.stream().mapToInt(ItemStack::getAmount).sum()
+            + ",\"plain\":" + plainCount + ",\"damaged\":" + damagedCount + "}";
+    }
+
+    private boolean slabInputPreserved(Player player) {
+        ItemStack held = player.getInventory().getItemInMainHand();
+        return expectedSlabInput != null && held.getAmount() == expectedSlabInput.getAmount()
+            && held.isSimilar(expectedSlabInput);
     }
 
     private static void preparePotionUpgradeSign(Player player) {

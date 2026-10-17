@@ -76,6 +76,14 @@ final class StorageSignIdentifierCodec {
     static StorageSign parseIdentifier(String identifier, int amount) {
         if (identifier == null || identifier.isBlank()) return null;
 
+        // Stateful identifiers are exact material names, independent of legacy aliases.
+        if (identifier.indexOf('[') >= 0 || identifier.indexOf(']') >= 0) {
+            String canonical = BlockPropertyCodec.parse(identifier);
+            if (canonical == null) return null;
+            Material material = Material.getMaterial(canonical.substring(0, canonical.indexOf('[')));
+            return new StorageSign(material, (short) 0, amount, null, null, false, canonical);
+        }
+
         Material signMat = LegacyNameRegistry.NAME_TO_MATERIAL.get(identifier);
         if (signMat != null) {
             return new StorageSign(signMat, StorageSign.DAMAGE_SS_ITEM, amount, null, null, false);
@@ -155,6 +163,8 @@ final class StorageSignIdentifierCodec {
 
     static String getIdentifier(StorageSign sign) {
         if (sign.isUnregistered()) return StorageSign.EMPTY_MARKER;
+
+        if (sign.getBlockDataIdentifier() != null) return sign.getBlockDataIdentifier();
 
         String signName = LegacyNameRegistry.MATERIAL_TO_NAME.get(sign.getMaterial());
         if (signName != null && sign.getDamage() == StorageSign.DAMAGE_SS_ITEM) return signName;

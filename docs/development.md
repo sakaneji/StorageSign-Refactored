@@ -57,6 +57,14 @@ Bukkit event を発火した場合は `observation=mixed-client-and-synthetic` �
 
 `StorageSign` は看板ブロックとインベントリアイテムの両方を表すデータモデルです。数量と登録状態は入出庫に応じて更新されます。
 
+ブロック状態を持つアイテムは、明示されたプロパティだけを辞書順に並べた
+`MATERIAL[key=value,...]` を完全識別子として扱います。変更可能なBlockDataや
+ItemStack全体は保存しません。`BlockDataMeta#getBlockData` は既定値を補うため、
+元アイテムの明示プロパティ抽出には `ItemMeta.serialize()` の `BlockStateTag` だけを
+限定利用し、この形式依存は専用ヘルパーへ閉じ込めます。未知の形式を受け取った場合は
+拒否し、復元後のItemStack全体の一致も確認します。新しいブロック状態の追加に
+素材別分岐を要求せず、名前・PDC・ブロックエンティティの保存へ共通化を広げません。
+
 看板ブロックの 4 行は次の通りです。
 
 ```text

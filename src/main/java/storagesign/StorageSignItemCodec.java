@@ -47,6 +47,10 @@ final class StorageSignItemCodec {
     static ItemStack getContents(StorageSign sign, int requestedAmount) {
         if (sign.isUnregistered() || sign.getMaterial() == null || sign.getMaterial() == Material.AIR) return null;
 
+        if (sign.getBlockDataIdentifier() != null) {
+            return BlockPropertyCodec.toItemStack(sign.getBlockDataIdentifier(), requestedAmount);
+        }
+
         if (sign.getMaterial() == Material.END_PORTAL) {
             if (sign.getDamage() == StorageSign.DAMAGE_SS_ITEM) {
                 String markerName = StorageSignIdentifierCodec.resolveVirtualIdentifier(sign.getMaterial(), sign.getDamage());
@@ -120,6 +124,19 @@ final class StorageSignItemCodec {
     static boolean isSimilar(StorageSign sign, ItemStack item, ItemStack cachedReference) {
         if (item == null || item.getType() == Material.AIR) return false;
 
+        ItemMeta incomingMeta = item.getItemMeta();
+        if (sign.getBlockDataIdentifier() != null || BlockPropertyCodec.hasBlockData(incomingMeta)) {
+            if (sign.getBlockDataIdentifier() == null || !BlockPropertyCodec.hasBlockData(incomingMeta)
+                || hasUnsafeBlockEntityContents(item.getType(), incomingMeta)
+                || incomingMeta.hasDisplayName() || incomingMeta.hasLore()
+                || incomingMeta.hasEnchants() || !incomingMeta.getItemFlags().isEmpty()
+                || !incomingMeta.getPersistentDataContainer().isEmpty()
+                || !sign.getBlockDataIdentifier().equals(
+                    BlockPropertyCodec.fromItemMeta(item.getType(), incomingMeta))) return false;
+            if (cachedReference == null) cachedReference = getContents(sign, 1);
+            return cachedReference != null && cachedReference.isSimilar(item);
+        }
+
         if (sign.getMaterial() == Material.END_PORTAL && sign.getDamage() == StorageSign.DAMAGE_SS_ITEM) {
             ItemMeta markerMeta = item.getItemMeta();
             String markerName = StorageSignIdentifierCodec.resolveVirtualIdentifier(
@@ -186,6 +203,15 @@ final class StorageSignItemCodec {
         Material mat = item.getType();
         ItemMeta meta = item.getItemMeta();
 
+        if (hasUnsafeBlockEntityContents(mat, meta)) return null;
+
+        if (BlockPropertyCodec.hasBlockData(meta)) {
+            String canonical = BlockPropertyCodec.fromItemMeta(mat, meta);
+            if (canonical == null) return null;
+            return ifExactlyRestorable(item,
+                new StorageSign(mat, (short) 0, 0, null, null, false, canonical));
+        }
+
         if (StorageSign.isStorageSign(item) && MaterialRegistry.SIGN_MATERIALS.contains(mat)) {
             return new StorageSign(mat, StorageSign.DAMAGE_SS_ITEM, 0, null, null, false);
         }
@@ -239,21 +265,6 @@ final class StorageSignItemCodec {
             return ifExactlyRestorable(item, new StorageSign(mat, encoded, 0, null, null, false));
         }
 
-        if (MaterialRegistry.SHULKER_BOX_MATERIALS.contains(mat)) {
-            if (!(meta instanceof BlockStateMeta blockMeta)
-                || !(blockMeta.getBlockState() instanceof ShulkerBox shulker)
-                || !shulker.getInventory().isEmpty()) {
-                return null;
-            }
-        }
-
-        if (MaterialRegistry.BLOCK_ENTITY_DATA_MATERIALS.contains(mat)
-            && meta instanceof BlockStateMeta blockMeta
-            && blockMeta.getBlockState() instanceof Beehive beehive
-            && beehive.getEntityCount() > 0) {
-            return null;
-        }
-
         if (meta instanceof Damageable damageable) {
             int itemDamage = damageable.getDamage();
             if (itemDamage < 0 || itemDamage > Short.MAX_VALUE) return null;
@@ -266,7 +277,9 @@ final class StorageSignItemCodec {
         ItemMeta originalMeta = original.getItemMeta();
         if (originalMeta != null
             && (originalMeta.hasDisplayName() || originalMeta.hasLore()
-                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty())) {
+                || originalMeta.hasEnchants() || !originalMeta.getItemFlags().isEmpty()
+                || (candidate.getBlockDataIdentifier() != null
+                    && !originalMeta.getPersistentDataContainer().isEmpty()))) {
             return null;
         }
         ItemStack restored = candidate.getContents(1);
@@ -274,6 +287,18 @@ final class StorageSignItemCodec {
         ItemStack one = original.clone();
         one.setAmount(1);
         return restored.isSimilar(one) ? candidate : null;
+    }
+
+    private static boolean hasUnsafeBlockEntityContents(Material material, ItemMeta meta) {
+        if (MaterialRegistry.SHULKER_BOX_MATERIALS.contains(material)) {
+            return !(meta instanceof BlockStateMeta blockMeta)
+                || !(blockMeta.getBlockState() instanceof ShulkerBox shulker)
+                || !shulker.getInventory().isEmpty();
+        }
+        return MaterialRegistry.BLOCK_ENTITY_DATA_MATERIALS.contains(material)
+            && meta instanceof BlockStateMeta blockMeta
+            && blockMeta.getBlockState() instanceof Beehive beehive
+            && beehive.getEntityCount() > 0;
     }
 
     static ItemStack createLegacyMarkerItem(int amount, String markerName) {
